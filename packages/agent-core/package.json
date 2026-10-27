@@ -10,10 +10,18 @@
     ".": "./src/index.ts"
   },
   "scripts": {
+    "dev": "tsx src/cli.ts",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run"
   },
   "dependencies": {
-    "@atelier/shared": "workspace:*"
+    "@ai-sdk/openai-compatible": "^3.0.79",
+    "@ai-sdk/provider": "^4.0.34",
+    "@atelier/shared": "workspace:*",
+    "ai": "^7.0.154",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "tsx": "^4.23.15"
   }
 }

@@ -1,0 +1,6 @@
+# Dossier de démonstration : seuls les fichiers d'exemple sont suivis,
+# ce que l'agent y produit reste local.
+*
+!.gitignore
+!notes-reunion.md
+!ventes-2026.csv
