@@ -1,0 +1,10 @@
+node_modules
+dist
+out
+coverage
+pnpm-lock.yaml
+apps/desktop/resources
+.agentsroom
+.claude
+docs/BRIEF.md
+docs/PROMPTS-AGENTSROOM.md

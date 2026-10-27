@@ -1,0 +1,69 @@
+# Reverse proxy d'Atelier devant Ollama.
+# - TLS automatique (Let's Encrypt) pour {$ATELIER_DOMAIN}
+# - Authentification : header `Authorization: Bearer {$ATELIER_API_TOKEN}` obligatoire
+# - Rate limiting par token/IP
+# - Aucun log de corps de requête (les prompts ne sont jamais journalisés)
+{
+	email {$ACME_EMAIL}
+	order rate_limit before basic_auth
+	servers {
+		# Les réponses en streaming peuvent durer longtemps.
+		timeouts {
+			read_body 2m
+			idle 10m
+		}
+	}
+}
+
+{$ATELIER_DOMAIN} {
+	# Journal d'accès minimal : pas de headers (token) ni de corps.
+	log {
+		output stdout
+		format filter {
+			wrap json
+			fields {
+				request>headers delete
+				request>uri query {
+					delete key
+				}
+			}
+		}
+	}
+
+	# Healthcheck public, sans information sensible.
+	handle /healthz {
+		respond "ok" 200
+	}
+
+	@unauthorized not header Authorization "Bearer {$ATELIER_API_TOKEN}"
+	handle @unauthorized {
+		header WWW-Authenticate `Bearer realm="atelier"`
+		respond `{"error":"unauthorized"}` 401
+	}
+
+	# Seules les routes utiles à l'app sont exposées (pas de pull/push/delete/create).
+	@allowed {
+		path /v1/* /api/tags /api/show /api/version /api/ps
+	}
+	handle @allowed {
+		rate_limit {
+			zone per_client {
+				key {http.request.header.Authorization}{http.request.remote.host}
+				events {$ATELIER_RATE_LIMIT}
+				window 1m
+			}
+		}
+		reverse_proxy ollama:11434 {
+			# Streaming SSE : pas de mise en tampon.
+			flush_interval -1
+			header_up -Authorization
+			transport http {
+				response_header_timeout 10m
+			}
+		}
+	}
+
+	handle {
+		respond `{"error":"not_found"}` 404
+	}
+}

@@ -1,0 +1,19 @@
+{
+  "name": "@atelier/sandbox",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pilotage de la VM Lima (cycle de vie, exec, mounts, réseau).",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@atelier/shared": "workspace:*"
+  }
+}

@@ -1,0 +1,74 @@
+# Serveur LLM d'Atelier : Ollama (GPU NVIDIA) derrière Caddy (TLS + Bearer token + rate limiting).
+# Déploiement : cp .env.example .env && éditer && docker compose up -d
+# Ollama n'est JAMAIS publié sur l'hôte : seul Caddy (443/80) est exposé.
+name: atelier-llm
+
+services:
+  ollama:
+    image: ollama/ollama:${OLLAMA_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    # Pas de section `ports` : 11434 n'est joignable que depuis le réseau interne.
+    expose:
+      - '11434'
+    volumes:
+      - ollama-models:/root/.ollama
+      - ./Modelfile:/modelfiles/atelier.Modelfile:ro
+    environment:
+      OLLAMA_HOST: 0.0.0.0:11434
+      # Contexte par défaut (l'endpoint /v1 ignore num_ctx) — voir docs/SERVER.md.
+      OLLAMA_CONTEXT_LENGTH: ${OLLAMA_CONTEXT_LENGTH:-32768}
+      # Requêtes simultanées par modèle chargé.
+      OLLAMA_NUM_PARALLEL: ${OLLAMA_NUM_PARALLEL:-2}
+      # Nombre de modèles gardés en mémoire simultanément.
+      OLLAMA_MAX_LOADED_MODELS: ${OLLAMA_MAX_LOADED_MODELS:-1}
+      # -1 : modèle gardé chaud indéfiniment.
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:--1}
+      # File d'attente maximale avant refus (503).
+      OLLAMA_MAX_QUEUE: ${OLLAMA_MAX_QUEUE:-128}
+      # Flash attention + cache KV quantifié : moins de VRAM pour un long contexte.
+      OLLAMA_FLASH_ATTENTION: ${OLLAMA_FLASH_ATTENTION:-1}
+      OLLAMA_KV_CACHE_TYPE: ${OLLAMA_KV_CACHE_TYPE:-q8_0}
+      # Pas de prompts dans les logs (confidentialité).
+      OLLAMA_DEBUG: '0'
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ['CMD', 'ollama', 'list']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  caddy:
+    image: atelier-caddy:local
+    # Le rate limiting nécessite le module mholt/caddy-ratelimit : image construite localement.
+    build:
+      context: .
+      dockerfile: Dockerfile.caddy
+    restart: unless-stopped
+    depends_on:
+      ollama:
+        condition: service_healthy
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    environment:
+      ATELIER_DOMAIN: ${ATELIER_DOMAIN:?Définir ATELIER_DOMAIN dans .env}
+      ATELIER_API_TOKEN: ${ATELIER_API_TOKEN:?Définir ATELIER_API_TOKEN dans .env}
+      ATELIER_RATE_LIMIT: ${ATELIER_RATE_LIMIT:-120}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  ollama-models:
+  caddy-data:
+  caddy-config:

@@ -1,0 +1,19 @@
+{
+  "name": "@atelier/web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "web_search (providers SearXNG/Ollama/Brave) et web_fetch.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@atelier/shared": "workspace:*"
+  }
+}

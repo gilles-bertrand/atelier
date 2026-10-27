@@ -1,0 +1,10 @@
+# Modèle « atelier » : qwen3.5 avec un contexte de 32k.
+# L'endpoint OpenAI-compatible (/v1) ignore num_ctx : on le fixe ici, côté serveur.
+# Création : docker compose exec ollama ollama create atelier -f /modelfiles/atelier.Modelfile
+# Changer la base (9b, 27b, 35b, 122b) selon la VRAM disponible (voir docs/SERVER.md).
+FROM qwen3.5:35b
+
+PARAMETER num_ctx 32768
+PARAMETER temperature 0.6
+PARAMETER top_p 0.95
+PARAMETER top_k 20

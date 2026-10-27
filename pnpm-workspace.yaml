@@ -1,0 +1,10 @@
+packages:
+  - apps/*
+  - packages/*
+
+# pnpm 11 : seuls ces paquets peuvent exécuter leurs scripts d'installation.
+allowBuilds:
+  electron: true
+  esbuild: true
+  better-sqlite3: true
+  electron-winstaller: false

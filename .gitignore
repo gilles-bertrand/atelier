@@ -1,0 +1,31 @@
+.mcp.json
+.agentsroom/handoff-transcript-*.txt
+.agentsroom/handoff-summary-*.md
+.agentsroom/fork-context-*.txt
+.agentsroom/transfer-context-*.txt
+
+# Dépendances et builds
+node_modules/
+dist/
+out/
+coverage/
+*.tsbuildinfo
+.vite/
+
+# Ressources téléchargées (Lima embarqué, cf. scripts/fetch-lima.ts)
+apps/desktop/resources/lima/
+
+# Secrets et environnement
+.env
+.env.*
+!.env.example
+server/.env
+
+# Données locales de l'agent dans un dossier de travail
+.atelier/
+
+# macOS / éditeurs
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
