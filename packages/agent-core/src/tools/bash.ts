@@ -55,8 +55,21 @@ export function isWhitelistedCommand(command: string): boolean {
     const program = words[0];
     if (program === undefined || !BASH_WHITELIST.has(program)) return false;
     // Options d'écriture connues de commandes par ailleurs inoffensives.
-    return !words.some((w) => w === '-o' || w.startsWith('--output'));
+    if (words.some((w) => w === '-o' || w.startsWith('--output'))) return false;
+    // Lecture hors du dossier de travail ou des skills : on demande toujours.
+    return !words.slice(1).some(leavesWorkspace);
   });
+}
+
+/** Vrai si un argument désigne un chemin hors de `/workspace` et `/skills`. */
+function leavesWorkspace(word: string): boolean {
+  const arg = word.replace(/^['"]|['"]$/g, '').replace(/^-[^=]*=/, '');
+  if (arg.startsWith('~')) return true;
+  if (arg.split('/').includes('..')) return true;
+  if (arg.startsWith('/')) {
+    return !/^\/(workspace|skills)(\/|$)/.test(arg);
+  }
+  return false;
 }
 
 function formatResult(result: SandboxExecResult): string {

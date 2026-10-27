@@ -99,7 +99,15 @@ export async function askPermission(
     ...(description.detail !== undefined ? { detail: description.detail } : {}),
     scopeKey: description.scopeKey ?? toolName,
   };
-  return context.requestPermission(request, context.abortSignal);
+  try {
+    return await context.requestPermission(request, context.abortSignal);
+  } catch (error) {
+    // Annulation du tour : on la laisse remonter.
+    if (context.abortSignal.aborted) throw error;
+    // Gestionnaire en échec (modale fermée, fenêtre détruite…) : refus par défaut.
+    // Une erreur d'outil inciterait le modèle à réessayer, voire à contourner via bash.
+    return 'deny';
+  }
 }
 
 /** Sortie d'outil enrichie d'un drapeau de refus (interne à agent-core). */
@@ -113,8 +121,9 @@ export function deniedOutput(title: string): ExecutedToolOutput {
     ok: false,
     denied: true,
     content:
-      `L'utilisateur a refusé l'action « ${title} ». Ne la retente pas telle quelle : ` +
-      `explique ce que tu voulais faire, propose une alternative ou demande comment procéder.`,
+      `L'utilisateur a refusé l'action « ${title} ». Ne la retente pas, ni telle quelle ni par ` +
+      `un autre moyen (autre outil, commande bash) : explique ce que tu voulais faire et ` +
+      `demande à l'utilisateur comment il souhaite procéder.`,
   };
 }
 

@@ -12,7 +12,7 @@
  */
 import { existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
-import { createInterface, type Interface } from 'node:readline/promises';
+import { createInterface, type Interface } from 'node:readline';
 import { parseArgs, styleText } from 'node:util';
 import {
   DEFAULT_MODEL,
@@ -146,19 +146,58 @@ function createRenderer(): (event: AgentEvent) => void {
   };
 }
 
-function interactivePermissions(rl: Interface): PermissionHandler {
+/**
+ * File de lignes au-dessus de readline : fonctionne aussi avec une entrée
+ * redirigée (les lignes arrivées avant la question ne sont pas perdues).
+ */
+class LineQueue {
+  readonly #lines: string[] = [];
+  readonly #waiters: ((line: string | null) => void)[] = [];
+  #closed = false;
+
+  constructor(rl: Interface) {
+    rl.on('line', (line) => {
+      const waiter = this.#waiters.shift();
+      if (waiter) waiter(line);
+      else this.#lines.push(line);
+    });
+    rl.on('close', () => {
+      this.#closed = true;
+      for (const waiter of this.#waiters.splice(0)) waiter(null);
+    });
+  }
+
+  /** Affiche `prompt` et attend la ligne suivante (`null` si l'entrée est fermée ou annulée). */
+  next(prompt: string, signal?: AbortSignal): Promise<string | null> {
+    process.stdout.write(prompt);
+    const queued = this.#lines.shift();
+    if (queued !== undefined) return Promise.resolve(queued);
+    if (this.#closed || signal?.aborted) return Promise.resolve(null);
+    return new Promise((resolve) => {
+      const waiter = (line: string | null): void => {
+        signal?.removeEventListener('abort', onAbort);
+        resolve(line);
+      };
+      const onAbort = (): void => {
+        const i = this.#waiters.indexOf(waiter);
+        if (i >= 0) this.#waiters.splice(i, 1);
+        resolve(null);
+      };
+      signal?.addEventListener('abort', onAbort, { once: true });
+      this.#waiters.push(waiter);
+    });
+  }
+}
+
+function interactivePermissions(lines: LineQueue): PermissionHandler {
   return async (request, signal) => {
     process.stdout.write(`\n${yellow('🔐 Permission demandée :')} ${request.title}\n`);
-    if (request.detail !== undefined)
+    if (request.detail !== undefined) {
       process.stdout.write(dim(`${request.detail.slice(0, 1_500)}\n`));
-    const answer = (
-      await rl.question(
-        'Autoriser ? [o]ui une fois / [s]ession / [N]on : ',
-        signal ? { signal } : {},
-      )
-    )
-      .trim()
-      .toLowerCase();
+    }
+    const line = await lines.next('Autoriser ? [o]ui une fois / [s]ession / [N]on : ', signal);
+    const answer = (line ?? '').trim().toLowerCase();
+    if (line !== null && !process.stdin.isTTY) process.stdout.write(`${line}\n`);
     const decision: PermissionDecision =
       answer === 'o' || answer === 'oui' || answer === 'y'
         ? 'allow_once'
@@ -207,10 +246,15 @@ async function main(): Promise<number> {
     ...(numCtx !== undefined ? { override: numCtx } : {}),
   });
 
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+    terminal: process.stdin.isTTY,
+  });
+  const lines = new LineQueue(rl);
   const ask: PermissionHandler = values.yes
     ? () => Promise.resolve('allow_once')
-    : interactivePermissions(rl);
+    : interactivePermissions(lines);
   const registry = createDefaultRegistry();
   if (!values.bash) registry.unregister('bash');
   const agent = new Agent({
@@ -223,6 +267,13 @@ async function main(): Promise<number> {
     serverUrl: baseUrl,
     ...(values.bash ? { sandbox: new LocalSandbox(workspace) } : {}),
     ...(log ? { log } : {}),
+    // Pas de VM en démo : /workspace n'existe pas, bash tourne dans le dossier.
+    ...(values.bash
+      ? {
+          extraInstructions:
+            "Mode démonstration : la commande bash s'exécute directement dans le dossier de travail (répertoire courant). Le chemin /workspace n'existe pas : utilise des chemins relatifs.",
+        }
+      : {}),
   });
   const session = new AgentSession(agent, `cli-${Date.now()}`);
   const render = createRenderer();
@@ -256,12 +307,8 @@ async function main(): Promise<number> {
       return 0;
     }
     for (;;) {
-      let line: string;
-      try {
-        line = await rl.question(`\n${green('›')} `);
-      } catch {
-        break; // Ctrl+D / fermeture
-      }
+      const line = await lines.next(`\n${green('›')} `);
+      if (line === null) break; // Ctrl+D / fermeture
       const input = line.trim();
       if (input === '') continue;
       if (input === '/quit' || input === '/exit') break;

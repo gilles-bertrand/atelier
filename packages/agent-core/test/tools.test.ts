@@ -184,6 +184,19 @@ describe('permissions', () => {
     });
   });
 
+  it('un gestionnaire de permission en échec vaut refus (pas une erreur d’outil)', async () => {
+    await withTempDir(async (ws) => {
+      const out = await executeTool(writeFileTool, { path: 'x.txt', content: 'x' }, 'c1', {
+        sessionId: 's',
+        workspace: ws,
+        abortSignal: new AbortController().signal,
+        requestPermission: () => Promise.reject(new Error('fenêtre fermée')),
+      });
+      expect(out).toMatchObject({ ok: false, denied: true });
+      expect(out.content).toMatch(/ni par un autre moyen/);
+    });
+  });
+
   it('withSessionMemory mémorise allow_session par scopeKey', async () => {
     const inner = permissions('allow_session');
     const handler = withSessionMemory(inner);
@@ -216,6 +229,12 @@ describe('bash', () => {
     expect(isWhitelistedCommand('ls || rm x')).toBe(false);
     expect(isWhitelistedCommand('sort -o out.txt in.txt')).toBe(false);
     expect(isWhitelistedCommand('')).toBe(false);
+    // Lecture hors du dossier : permission requise même pour une commande de lecture.
+    expect(isWhitelistedCommand('cat /etc/passwd')).toBe(false);
+    expect(isWhitelistedCommand('ls ../..')).toBe(false);
+    expect(isWhitelistedCommand('head ~/.ssh/id_rsa')).toBe(false);
+    expect(isWhitelistedCommand('cat /workspace/a.txt /skills/x/SKILL.md')).toBe(true);
+    expect(isWhitelistedCommand('grep -r foo docs/')).toBe(true);
   });
 
   it('exécute via la Sandbox, demande la permission hors liste blanche', async () => {
