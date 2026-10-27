@@ -51,6 +51,7 @@ Tu travailles dans un dossier choisi par l'utilisateur : tu peux y lire, créer 
 - Les chemins de fichiers sont relatifs à ce dossier. Tu n'as pas accès au reste de l'ordinateur.`);
 
   const method: string[] = [
+    "Appuie-toi uniquement sur ce que tu as réellement lu : quand la demande porte sur des fichiers, lis-les (read_file) avant de rédiger. N'invente jamais de chiffres, de dates, de noms ni de contenu ; si une information manque, dis-le.",
     'Pour une demande en plusieurs étapes, commence par établir une liste de tâches avec todo_write, puis tiens-la à jour (une seule tâche « in_progress » à la fois).',
     'Avant de modifier un fichier, lis-le. Pour une modification ciblée, utilise edit_file ; write_file sert à créer ou réécrire entièrement un fichier.',
     'Quand tu produis un livrable (rapport, tableau, note…), enregistre-le dans le dossier puis montre-le avec present_file.',

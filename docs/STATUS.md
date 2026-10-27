@@ -6,14 +6,14 @@ _Dernière mise à jour : 2026-10-27, Lead._
 
 ## État par jalon
 
-| Jalon                                                       | État          | Responsable(s)                |
-| ----------------------------------------------------------- | ------------- | ----------------------------- |
-| M0 : squelette monorepo + `packages/shared` + `server/`     | ✅ fait       | Lead                          |
-| M1 : boucle AI SDK en CLI, outils fichiers, bash local, web | ⏳ à démarrer | Core, MCP & Web               |
-| M2 : sandbox Lima + permissions                             | ⏳ à démarrer | Sandbox                       |
-| M3 : app Electron fonctionnelle                             | ⏳ à démarrer | UI                            |
-| M4 : skills + MCP + SearXNG + documents                     | ⏳ à démarrer | Sandbox, MCP & Web, Documents |
-| M5 : historique, compaction, réglages, packaging signé      | ⏳            | UI, Core, Lead                |
+| Jalon                                                       | État                                                   | Responsable(s)                |
+| ----------------------------------------------------------- | ------------------------------------------------------ | ----------------------------- |
+| M0 : squelette monorepo + `packages/shared` + `server/`     | ✅ fait                                                | Lead                          |
+| M1 : boucle AI SDK en CLI, outils fichiers, bash local, web | 🟡 Core livré (PR `feat/core-agent-loop`), web à venir | Core, MCP & Web               |
+| M2 : sandbox Lima + permissions                             | ⏳ à démarrer                                          | Sandbox                       |
+| M3 : app Electron fonctionnelle                             | ⏳ à démarrer                                          | UI                            |
+| M4 : skills + MCP + SearXNG + documents                     | ⏳ à démarrer                                          | Sandbox, MCP & Web, Documents |
+| M5 : historique, compaction, réglages, packaging signé      | ⏳                                                     | UI, Core, Lead                |
 
 ## Ce que contient le squelette
 
@@ -43,7 +43,10 @@ _Dernière mise à jour : 2026-10-27, Lead._
 
 _Format : date, agent, type proposé, raison, packages impactés._
 
-- (aucune)
+- **2026-10-27, Core : `ToolOutput.denied?: boolean`.** `ToolResultEvent` porte `denied`, mais `ToolOutput` ne permet pas à un outil de le signaler. En attendant : type local `ExecutedToolOutput` dans agent-core. Impact : agent-core, mcp-bridge, web (outils à permission).
+- **2026-10-27, Core : `ToolDefinition.describePermission?(input): { kind, title, detail?, scopeKey? }`.** Les outils `permission: 'always'` sont protégés génériquement par agent-core, mais seul l'outil connaît un bon libellé français (« Créer l'issue X sur GitHub »). En attendant : `PermissionDescriber` injectable dans `AgentOptions.describePermission` (libellés natifs + repli générique `Utiliser l'outil …`, `kind: 'mcp_write'` pour `mcp__*`). Impact : agent-core, mcp-bridge, web.
+- **2026-10-27, Core : event `tool_display` `{ toolCallId, display }`.** `ToolExecutionContext.emitDisplay` n'a aucun event correspondant : l'affichage n'arrive qu'avec `tool_result`. Utile pour une carte affichée pendant un outil long. En attendant : `emitDisplay` non branché par la boucle. Impact : agent-core, UI.
+- **2026-10-27, Core : event `llm_retry` `{ attempt, delayMs, reason }`** (ou un `ServerStatus` poussé) pour afficher « Reconnexion au serveur… » pendant les nouvelles tentatives réseau. En attendant : rappel `onRetry` côté provider (journal). Impact : agent-core, UI.
 
 ## Points ouverts / risques
 
@@ -51,6 +54,35 @@ _Format : date, agent, type proposé, raison, packages impactés._
 - Repli vLLM : `/api/tags` et `/api/show` n'existent pas dans vLLM, d'où un repli sur `/v1/models` à prévoir (Core + UI), voir `docs/SERVER.md` §5.
 - Signature et notarisation : nécessitent un certificat « Developer ID Application » et une clé API App Store Connect (`CSC_LINK`, `APPLE_API_KEY*`).
 
+## Notes de Core (agent-core)
+
+- **AI SDK v7, renommages à connaître** : `system` → `instructions`, `fullStream` → `stream`, `experimental_repairToolCall` → `repairToolCall`, `stepCountIs` (alias de `isStepCount`), `result.response.messages` → `result.responseMessages`, mock `MockLanguageModelV4` (`ai/test`, chunks V4 : `usage.inputTokens.total`, `finishReason.unified`).
+- **API** : `createLlmModels` + `fetchContextWindow` + `new Agent({...})` + `AgentSession.send(input, emit, signal)` ; détails dans `packages/agent-core/README.md`. `runTurn` ne lève jamais : erreurs → event `error`.
+- **Chemins** : `resolveWorkspacePath(workspace, path)` (export d'agent-core) pour `packages/documents` ; gère le dossier de travail derrière un symlink (`/var` → `/private/var` sur macOS) et refuse tout symlink sortant.
+- **Thinking off** : `reasoning_effort: "none"` (Ollama) + `chat_template_kwargs.enable_thinking: false` (vLLM). Le raisonnement est retiré de l'historique, y compris entre deux étapes d'un même tour (`prepareStep`).
+- **Contexte** : `/api/show` → `num_ctx` du Modelfile ; sans `num_ctx`, hypothèse 32 768 (bornée par le max du modèle) car `OLLAMA_CONTEXT_LENGTH` n'est pas lisible à distance : d'où l'intérêt du Modelfile `atelier`. Repli vLLM : `/v1/models` (`max_model_len`).
+- **`LocalSandbox`** (M1) exécute `bash` sur l'hôte **sans isolation** : CLI de démo uniquement, à remplacer par `packages/sandbox` dans l'app.
+
 ## Comportements du modèle observés
 
-_(à compléter par Core / QA : qwen3.5:35b, qwen3.5:9b)_
+_Validation manuelle Core, 2026-10-27 : Ollama 0.40.11 local (Apple Silicon), CLI `agent-core`, 5 scénarios (synthèse multi-fichiers, édition ciblée, refus de permission, tentative de sortie du dossier, plan en 3 livrables) + compaction forcée (`--num-ctx 3500`). Modèles : `qwen3.5:35b` et `qwen3.5:9b`, thinking on/off ; `qwen3.6:35b-a3b` en complément._
+
+**Ce qui marche bien (35b et 9b)**
+
+- Tool calling natif fiable via `/v1` : aucun appel écrit en texte, aucune réparation nécessaire sur ces scénarios (le repli et `repairToolCall` restent couverts par les tests).
+- `edit_file` : `old_str` unique du premier coup (ligne entière recopiée). Refus de permission respecté : le modèle s'arrête et propose des alternatives. Sortie du dossier : refus de `read_file`, pas d'insistance.
+- `todo_write` bien utilisé sur les demandes en plusieurs livrables (une tâche `in_progress` à la fois) ; `present_file` en fin de tâche.
+- Thinking : le raisonnement arrive dans `delta.reasoning` (Ollama) → `reasoning_delta` ; `reasoning_effort: "none"` le coupe bien (0 raisonnement émis).
+- Compaction : déclenchée à 78 % ; après résumé, le modèle retrouve encore les faits clés (présents, client Dupont SA).
+- Latences (Mac local) : 9b ≈ 4-15 s par scénario simple, 35b ≈ 3-22 s ; plan en 3 livrables : 25-40 s.
+
+**Comportements problématiques**
+
+1. **Données inventées (35b, thinking on)** : sur « 3 livrables, organise-toi », le modèle a rédigé les fichiers sans lire `notes-reunion.md` ni le CSV (gammes et dates inventées). Corrigé par une consigne explicite du prompt système (« lis les fichiers avant de rédiger, n'invente jamais de chiffres… ») : 2 exécutions sur 2 correctes ensuite. **À surveiller en QA.**
+2. **Arithmétique sans thinking (9b)** : total T3 faux (67 923 € au lieu de 67 921 €) alors que les sous-totaux sont justes. Avec thinking : juste. → Recommandation UI : thinking activé par défaut, ou inciter au calcul via `bash`/Python dès que la VM est là.
+3. **Appel d'outil vide** (35b) : `write_file {}` une fois, rejeté par la validation Zod puis corrigé par le modèle à l'étape suivante (coût : une étape).
+4. **Contournement d'un échec** (`qwen3.6`, avant correctif) : quand `write_file` échouait (gestionnaire de permission en erreur), le modèle a tenté 15 fois, dont `bash cat > fichier`, et après le refus d'un chemin hors dossier il a sondé `../../..` et `find /private/tmp` via bash. Corrigé côté Core : erreur du gestionnaire = refus, message de refus « ni par un autre moyen », liste blanche bash fermée aux chemins hors `/workspace`. **Ne jamais livrer `LocalSandbox` dans l'app** : seule la VM borne réellement `bash`.
+5. **Raisonnement en anglais** par moments (35b, qwen3.6) alors que la réponse est en français : sans gravité (affiché à part), mais visible dans l'UI.
+6. **Petites fautes en français** sur le 9b (« d' vous », « Échéation », « décissions ») et noms de fichiers parfois accentués à tort dans la réponse (« synthèse.md » pour `synthese.md`). Le 35b est nettement plus propre.
+7. **Détours bizarres** : écrire `tableau_ventes.mdtmp` puis `mv` via bash ; `todo_write {"todos": []}` en fin de tâche (vide la liste affichée). Sans conséquence, mais l'UI devrait garder la dernière liste non vide visible.
+8. **Coût fixe du contexte** : prompt système + 9 définitions d'outils ≈ 2 300 tokens avant le premier message. Avec MCP, prévoir `tool_search` (activation paresseuse) comme prévu au brief.
