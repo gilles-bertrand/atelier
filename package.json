@@ -18,7 +18,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "pnpm -r --parallel typecheck",
-    "dist:mac": "pnpm --filter @atelier/desktop dist"
+    "dist:mac": "pnpm fetch:lima && pnpm --filter @atelier/desktop dist",
+    "fetch:lima": "node --experimental-strip-types scripts/fetch-lima.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
