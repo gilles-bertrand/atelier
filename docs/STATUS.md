@@ -25,6 +25,12 @@ _Dernière mise à jour : 2026-10-27, Lead._
 - `server/` : `docker-compose.yml` (Ollama GPU NVIDIA + Caddy), `Caddyfile` (TLS, Bearer, rate limit, liste blanche des routes), `Modelfile` `atelier`, `.env.example`, `healthcheck.sh`. Documentation : `docs/SERVER.md`.
 - CI GitHub Actions (`macos-14`) : format, lint, typecheck, test, build.
 
+## Dépôt et CI
+
+- Dépôt **public** : https://github.com/gilles-bertrand/atelier (public pour bénéficier des runners macOS gratuits).
+- CI verte sur `main` (macos-14 : format, lint, typecheck, test, build).
+- Ne committez jamais de secret ni de config locale (`.env`, `.mcp.json`, `.agentsroom/`).
+
 ## Notes du Lead pour les agents
 
 - **AI SDK v7** (et non v5) : `tool({ description, inputSchema, execute })` et `streamText` sont inchangés ; le mock de test est `MockLanguageModelV4` (`ai/test`).
@@ -43,7 +49,6 @@ _Format : date, agent, type proposé, raison, packages impactés._
 
 - `Caddyfile` validé syntaxiquement à la main seulement (pas de daemon Docker en local) : à valider au premier déploiement (`docker compose up -d && ./healthcheck.sh`).
 - Repli vLLM : `/api/tags` et `/api/show` n'existent pas dans vLLM, d'où un repli sur `/v1/models` à prévoir (Core + UI), voir `docs/SERVER.md` §5.
-- Le dépôt n'a pas encore de remote GitHub : la CI et les PR démarrent dès que le remote est créé.
 - Signature et notarisation : nécessitent un certificat « Developer ID Application » et une clé API App Store Connect (`CSC_LINK`, `APPLE_API_KEY*`).
 
 ## Comportements du modèle observés
