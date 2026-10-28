@@ -6,14 +6,14 @@ _Dernière mise à jour : 2026-10-28, Lead._
 
 ## État par jalon
 
-| Jalon                                                       | État                                                                                         | Responsable(s)                |
-| ----------------------------------------------------------- | -------------------------------------------------------------------------------------------- | ----------------------------- |
-| M0 : squelette monorepo + `packages/shared` + `server/`     | ✅ fait                                                                                      | Lead                          |
-| M1 : boucle AI SDK en CLI, outils fichiers, bash local, web | 🟡 Core livré (PR `feat/core-agent-loop`), web livré (PR `feat/web-search-fetch`)            | Core, MCP & Web               |
-| M2 : sandbox Lima + permissions                             | 🟡 sandbox livrée (PR `feat/sandbox-lima`), permissions : Core                               | Sandbox, Core                 |
-| M3 : app Electron fonctionnelle                             | 🟡 process main branché (PR `feat/ui-shell`), écrans à venir                                 | UI                            |
-| M4 : skills + MCP + SearXNG + documents                     | 🟡 skills + SearXNG dans la VM livrés ; MCP livré (PR `feat/mcp-bridge`) ; documents à faire | Sandbox, MCP & Web, Documents |
-| M5 : historique, compaction, réglages, packaging signé      | ⏳                                                                                           | UI, Core, Lead                |
+| Jalon                                                       | État                                                                                                                       | Responsable(s)                |
+| ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| M0 : squelette monorepo + `packages/shared` + `server/`     | ✅ fait                                                                                                                    | Lead                          |
+| M1 : boucle AI SDK en CLI, outils fichiers, bash local, web | 🟡 Core livré (PR `feat/core-agent-loop`), web livré (PR `feat/web-search-fetch`)                                          | Core, MCP & Web               |
+| M2 : sandbox Lima + permissions                             | 🟡 sandbox livrée (PR `feat/sandbox-lima`), permissions : Core                                                             | Sandbox, Core                 |
+| M3 : app Electron fonctionnelle                             | 🟡 process main branché (PR `feat/ui-shell`), écrans à venir                                                               | UI                            |
+| M4 : skills + MCP + SearXNG + documents                     | 🟡 skills + SearXNG dans la VM livrés ; MCP livré (PR `feat/mcp-bridge`) ; documents livré (PR `feat/documents-read-file`) | Sandbox, MCP & Web, Documents |
+| M5 : historique, compaction, réglages, packaging signé      | ⏳                                                                                                                         | UI, Core, Lead                |
 
 ## Ce que contient le squelette
 
@@ -76,7 +76,21 @@ _Dernière mise à jour : 2026-10-28, Lead._
 - **Bundle** : `jsdom`, `undici` et les autres dépendances des packages sont externes au main (dépendances de `@atelier/desktop`). `electron-builder.yml` : `packages/skills/examples` → `Contents/Resources/skills-examples`. Historique en mémoire pour l'instant (`SessionStore`) : SQLite au lot 5.
 - **Bascule sur la fabrique de Core** (PR `feat/ui-core-runtime`, après #15/#16) : `AgentRuntimeHost` remplace l'assemblage local : `createAgentRuntime` avec getters `sandbox` / `skills` / `extraInstructions`, `lazyTools: () => mcp.definitions()`, `tool_search` en `sessionTools`. Runtime recréé quand l'URL, le modèle, `numCtx`, le thinking ou le token changent ; chaque session agent porte la génération de son runtime et est recréée **entre deux tours** avec son historique. `refreshContextWindow()` est appelé quand le serveur repasse de hors ligne à joignable. `llm:test-connection` / `llm:list-models` / sonde : `testConnection`, `listModels`, `checkServerHealth` d'agent-core (seuil « lent » 2 s). L'historique modèle (`TurnResult.messages`) est persisté à côté des messages affichés (`SessionStore.saveModelHistory`), repli `chatMessagesToModelMessages`. `lastInputTokens` (#19) transmis à la recréation : la compaction n'est pas perdue.
 - Limite connue : la VM ne monte qu'un dossier à la fois ; deux tours simultanés dans deux dossiers différents se gêneraient (le second remonte la VM). À traiter dans l'UI (un seul tour actif à la fois, ou file d'attente).
+- **Onboarding** (PR `feat/ui-onboarding`) : 4 étapes accessibles (focus sur le titre de chaque étape, `aria-current="step"`, erreurs annoncées) : serveur (URL validée avec `checkServerUrl`, token chiffré, « Tester la connexion » : latence, version, modèles, contexte), modèle (modèles du serveur, recommandé en tête, embeddings écartés, contexte du modèle et alerte sous 32 768, réflexion approfondie), confidentialité (hôte du serveur nommé, accord horodaté `privacyAcceptedAt`), environnement (préparation de la VM avec progression, poursuite en arrière-plan, repli « sans l'environnement » avec message clair). Vérifié dans Electron contre un Ollama local. Fondations du renderer : `AppStateProvider` (réglages, secrets, `llm:status`, `sandbox:status` / `progress`), `call()` / `IpcError`, messages d'erreur français par code, indicateur `ServerStatusBadge`. Tests de composants : Vitest + Testing Library (jsdom par fichier, fausse API preload).
 - Petit correctif dans `packages/web/src/fetch/extract.ts` (cast `as never` de la copie passée à Readability) : sous `lib.dom` (chargée par les types Electron), le type `DomNode` local n'était pas accepté.
+
+## Documents (agent Documents, `feat/documents-read-file`)
+
+- **`@atelier/documents`** : `createDocumentTools({ vision })` → `read_file` (remplace le provisoire d'agent-core via `createDefaultRegistry([...createDocumentTools({ vision }), …])`) + `look_at`. Détails : `packages/documents/README.md`.
+- **`read_file`** : type par magic bytes (`file-type`) puis extension. Texte numéroté (offset/limit, 2000 lignes, UTF-8/UTF-16/latin-1) ; PDF par page via unpdf (`--- page N ---`, total, `pages` 20 max) ; page sans texte → `pdftoppm` **dans la VM** puis modèle vision ; images (png, jpg, webp, gif, heic) réduites à 1568 px puis vision ; docx (mammoth → markdown) ; xlsx (exceljs, 200 lignes/feuille) ; binaire inconnu refusé avec le type détecté.
+- **`look_at({ path, question, page? })`** : image ou page PDF rendue → modèle vision → réponse texte.
+- **Vision** : `createVisionAnalyzer({ model })`, `generateText` isolé (sans historique), seul le texte revient. Validé en réel sur `qwen3.5:9b` local (ticket PNG, facture scannée, look_at) : `ATELIER_DOCUMENTS_IT=1`.
+- **Cache** `<dossier>/.atelier/cache/` (SHA-256 fichier + paramètres + id du modèle vision) ; **pièces jointes** `importAttachment(hostPath, workspace)` → `.atelier/uploads/<nom>`.
+- **Validé sur la vraie VM Lima** (`ATELIER_SANDBOX_IT=1`, instance `atelier-it`) : `pdftoppm` rend la page, qwen3.5:9b la transcrit, `look_at` répond. ⚠️ Piège virtiofs (pour tous) : un fichier supprimé côté hôte ne peut plus être recréé sous le même nom par la VM (cache d'entrées de l'invité) ; d'où un nom unique par rendu.
+- poppler-utils est déjà dans le provisioning de la VM (`lima/provision/10-packages.sh`) : rien à demander à Sandbox.
+- **sharp 0.35** : binaires précompilés (`@img/sharp-darwin-arm64`), plus de script d'installation → **aucune entrée `allowBuilds` nécessaire**.
+- Pour **UI / Lead** : externaliser `sharp`, `unpdf`, `exceljs`, `mammoth`, `heic-convert`, `file-type` du bundle main ; `asarUnpack` pour `@img/sharp-*`. Réglage « modèle vision séparé » : `createVisionAnalyzer({ model: createLlmModels({ …, model: visionModel }).model })`, sinon `models.fastModel`. Glisser-déposer : `importAttachment` puis mention du chemin relatif dans le message.
+- Pour **Core** : `glob`/`list_dir`/`grep` pourraient ignorer `.atelier/` (cache et rendus) ; `documents` dépend d'`agent-core` (chemins) : agent-core ne doit donc pas importer `documents` (c'est l'app qui compose le registre).
 
 ## Demandes d'évolution de `packages/shared`
 
