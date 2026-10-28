@@ -254,7 +254,7 @@ describe('LimaSandbox.setWorkspace', () => {
     ['un chemin relatif', 'projet'],
   ])('refuse %s', async (_label, dir) => {
     const { sandbox } = setup();
-    await expectAtelierError(sandbox.setWorkspace(dir), 'tool/path_outside_workspace');
+    await expectAtelierError(sandbox.setWorkspace(dir), 'sandbox/invalid_workspace');
   });
 
   it('refuse les données de Lima et le dossier des skills', async () => {
@@ -263,13 +263,13 @@ describe('LimaSandbox.setWorkspace', () => {
     await mkdir(join(skillsDir, 'xlsx'), { recursive: true });
     await expectAtelierError(
       sandbox.setWorkspace(join(limaHome, 'atelier')),
-      'tool/path_outside_workspace',
+      'sandbox/invalid_workspace',
     );
     await expectAtelierError(
       sandbox.setWorkspace(join(skillsDir, 'xlsx')),
-      'tool/path_outside_workspace',
+      'sandbox/invalid_workspace',
     );
-    await expectAtelierError(sandbox.setWorkspace(root), 'tool/path_outside_workspace');
+    await expectAtelierError(sandbox.setWorkspace(root), 'sandbox/invalid_workspace');
   });
 
   it('refuse un dossier inexistant', async () => {

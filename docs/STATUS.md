@@ -64,7 +64,7 @@ _Format : date, agent, type proposé, raison, packages impactés._
 
   ✅ **2026-10-28, adoptées par Core** (PR `feat/core-shared-adoption`) : types locaux retirés, libellés natifs portés par les outils, `tool_display` et `llm_retry` émis par la boucle (`llm_retry` rattaché au bon tour via `AsyncLocalStorage`, même avec plusieurs sessions sur un provider partagé).
 
-- ✅ **2026-10-28, acceptée par le Lead (PR #7, mergée)** → Sandbox remplace `tool/path_outside_workspace` dans `assertMountableWorkspace`. 2026-10-27, Sandbox : code `sandbox/invalid_workspace` dans `ATELIER_ERROR_CODES`. Raison : `setWorkspace` refuse la racine, le `$HOME` complet, `LIMA_HOME` et le dossier des skills ; il utilise en attendant `tool/path_outside_workspace`, sémantiquement approximatif. Impact : `sandbox`, UI (traduction du message).
+- ✅ **2026-10-28, acceptée par le Lead (PR #7, mergée)** → Sandbox remplace `tool/path_outside_workspace` dans `assertMountableWorkspace`. ✅ Fait (PR `feat/sandbox-invalid-workspace`). 2026-10-27, Sandbox : code `sandbox/invalid_workspace` dans `ATELIER_ERROR_CODES`. Raison : `setWorkspace` refuse la racine, le `$HOME` complet, `LIMA_HOME` et le dossier des skills ; il utilise en attendant `tool/path_outside_workspace`, sémantiquement approximatif. Impact : `sandbox`, UI (traduction du message).
 
 ## Points ouverts / risques
 
