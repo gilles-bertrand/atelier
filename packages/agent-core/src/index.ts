@@ -2,15 +2,12 @@
  * @atelier/agent-core — boucle agentique (AI SDK), outils natifs, permissions,
  * compaction. Voir docs/BRIEF.md §1 et §2.
  */
-import { InMemoryToolRegistry, type AnyToolDefinition, type ToolRegistry } from '@atelier/shared';
-import { bashTool } from './tools/bash.js';
-import { createNativeTools } from './tools/native.js';
 
 export const PACKAGE_NAME = '@atelier/agent-core';
 
 // Boucle
 export { Agent, AgentSession, MAX_STEPS } from './loop/agent.js';
-export type { AgentOptions, RunTurnOptions, TurnResult } from './loop/agent.js';
+export type { AgentOptions, RunTurnOptions, SendOptions, TurnResult } from './loop/agent.js';
 export {
   compactMessages,
   findCompactionSplit,
@@ -38,6 +35,24 @@ export type {
   ContextWindowOptions,
   ContextWindowSource,
 } from './llm/context-window.js';
+export {
+  assertServerUrl,
+  checkServerHealth,
+  fetchServerVersion,
+  listModels,
+  parseOllamaTags,
+  parseOpenAiModels,
+  SERVER_CHECK_TIMEOUT_MS,
+  SLOW_SERVER_MS,
+  testConnection,
+} from './llm/server.js';
+export type {
+  ConnectionTestOptions,
+  HealthCheckOptions,
+  ModelList,
+  ServerFlavor,
+  ServerQueryOptions,
+} from './llm/server.js';
 export { backoffDelay, createRetryingFetch, withRetryListener } from './llm/retry-fetch.js';
 export type { FetchFunction, RetryInfo, RetryOptions } from './llm/retry-fetch.js';
 export { isNetworkError, toLlmError } from './llm/errors.js';
@@ -77,15 +92,13 @@ export { globToRegExp } from './tools/fs-utils.js';
 export { DEFAULT_MAX_OUTPUT_BYTES, truncateOutput } from './tools/text.js';
 export { LocalSandbox } from './local-sandbox.js';
 
-/**
- * Registre par défaut : outils natifs + bash, plus les outils fournis
- * (documents, web, MCP…). Un outil fourni remplace l'outil natif de même nom
- * (ex. `read_file` de `packages/documents`).
- */
-export function createDefaultRegistry(extra: readonly AnyToolDefinition[] = []): ToolRegistry {
-  const overridden = new Set(extra.map((t) => t.name));
-  const natives = [...createNativeTools(), bashTool as AnyToolDefinition].filter(
-    (t) => !overridden.has(t.name),
-  );
-  return new InMemoryToolRegistry([...natives, ...extra]);
-}
+// Registre et fabrique pour le process main
+export { createDefaultRegistry } from './default-registry.js';
+export { createAgentRuntime } from './runtime.js';
+export type {
+  AgentRuntime,
+  AgentRuntimeLlmOptions,
+  AgentRuntimeOptions,
+  CreateSessionOptions,
+  RuntimeContextSource,
+} from './runtime.js';

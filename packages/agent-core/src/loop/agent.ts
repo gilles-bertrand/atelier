@@ -7,12 +7,15 @@ import {
   streamText,
   type LanguageModel,
   type ModelMessage,
+  type ToolSet,
   type UserContent,
 } from 'ai';
 import {
   AtelierError,
+  InMemoryToolRegistry,
   serializeError,
   type AgentEvent,
+  type AnyToolDefinition,
   type AgentEventSink,
   type DoneReason,
   type PermissionHandler,
@@ -27,7 +30,7 @@ import {
 import { toLlmError } from '../llm/errors.js';
 import { buildSystemPrompt } from '../prompt/system-prompt.js';
 import type { PermissionDescriber } from '../tools/permission.js';
-import { isToolOutput, toAiSdkTools } from '../tools/registry.js';
+import { isToolOutput, toAiSdkTools, type ToolRuntime } from '../tools/registry.js';
 import { withRetryListener, type RetryInfo } from '../llm/retry-fetch.js';
 import { compactMessages, shouldCompact } from './compaction.js';
 import { hasReasoning, stripReasoning } from './history.js';
@@ -44,22 +47,33 @@ export interface AgentOptions {
   fastModel?: LanguageModel;
   /** Registre d'outils (natifs, documents, web, MCP). */
   registry: ToolRegistry;
+  /**
+   * Outils activables en cours de tour (chargement paresseux, ex. outils MCP via
+   * `tool_search`). Ils sont déclarés à l'AI SDK en début de tour mais restent
+   * inactifs (`activeTools`) tant qu'ils ne sont pas dans le registre ; un outil
+   * enregistré pendant le tour devient appelable dès l'étape suivante.
+   * L'application passe en pratique `() => mcp.definitions()`.
+   */
+  lazyTools?: () => readonly AnyToolDefinition[];
   /** Dossier de travail autorisé (absolu). */
   workspace: string;
   /** Gestionnaire de permissions (modale côté app). */
   requestPermission: PermissionHandler;
-  /** VM d'exécution, si prête. */
-  sandbox?: Sandbox;
+  /**
+   * VM d'exécution, si prête. Un getter est relu au début de chaque tour (la VM
+   * peut devenir prête après la création de la session) : `undefined` = pas de VM.
+   */
+  sandbox?: Sandbox | (() => Sandbox | undefined);
   /** Fenêtre de contexte réelle (lue via `/api/show`). */
   contextWindow: number;
   /** Étapes max par tour (défaut {@link MAX_STEPS}). */
   maxSteps?: number;
-  /** Skills listés dans le prompt système. */
-  skills?: readonly SkillInfo[];
+  /** Skills listés dans le prompt système (getter relu à chaque tour). */
+  skills?: readonly SkillInfo[] | (() => readonly SkillInfo[]);
   /** Prompt système complet (remplace celui construit par défaut). */
   instructions?: string;
-  /** Consignes additionnelles ajoutées au prompt par défaut. */
-  extraInstructions?: string;
+  /** Consignes additionnelles ajoutées au prompt par défaut (getter relu à chaque tour). */
+  extraInstructions?: string | (() => string | undefined);
   /** Libellés des demandes de permission. */
   describePermission?: PermissionDescriber;
   /** URL du serveur (messages d'erreur). */
@@ -73,6 +87,12 @@ export interface AgentOptions {
 }
 
 /** Paramètres d'un tour. */
+/** Options de {@link AgentSession.send}. */
+export interface SendOptions {
+  /** Identifiant du tour (défaut : `<sessionId>-<n>`). */
+  turnId?: string;
+}
+
 export interface RunTurnOptions {
   sessionId: string;
   turnId: string;
@@ -117,17 +137,26 @@ export class Agent {
     return this.#options;
   }
 
+  /** VM disponible maintenant (résout le getter éventuel). */
+  currentSandbox(): Sandbox | undefined {
+    const { sandbox } = this.#options;
+    return typeof sandbox === 'function' ? sandbox() : sandbox;
+  }
+
   /** Prompt système effectif. */
-  systemPrompt(): string {
+  systemPrompt(sandbox: Sandbox | undefined = this.currentSandbox()): string {
     const o = this.#options;
     if (o.instructions !== undefined) return o.instructions;
+    const skills = typeof o.skills === 'function' ? o.skills() : o.skills;
+    const extra =
+      typeof o.extraInstructions === 'function' ? o.extraInstructions() : o.extraInstructions;
     return buildSystemPrompt({
       workspace: o.workspace,
       now: o.now?.() ?? new Date(),
       toolNames: o.registry.list().map((t) => t.name),
-      sandboxAvailable: o.sandbox !== undefined,
-      ...(o.skills ? { skills: o.skills } : {}),
-      ...(o.extraInstructions !== undefined ? { extra: o.extraInstructions } : {}),
+      sandboxAvailable: sandbox !== undefined,
+      ...(skills ? { skills } : {}),
+      ...(extra !== undefined && extra !== '' ? { extra } : {}),
     });
   }
 
@@ -185,7 +214,8 @@ export class Agent {
           base = (await compact(base)) ?? base;
         }
 
-        const tools = toAiSdkTools(o.registry, {
+        const sandbox = this.currentSandbox();
+        const runtime: ToolRuntime = {
           sessionId: turn.sessionId,
           workspace: o.workspace,
           abortSignal: signal,
@@ -193,15 +223,28 @@ export class Agent {
           emitDisplay: (toolCallId, display) => {
             emit({ type: 'tool_display', toolCallId, display });
           },
-          ...(o.sandbox ? { sandbox: o.sandbox } : {}),
+          ...(sandbox ? { sandbox } : {}),
           ...(o.describePermission ? { describePermission: o.describePermission } : {}),
-        });
+        };
+        const tools: ToolSet = toAiSdkTools(o.registry, runtime);
+        const lazy = o.lazyTools
+          ? lazyToolSet(o.lazyTools(), o.registry, tools, runtime)
+          : undefined;
+        if (lazy) Object.assign(tools, lazy);
+        // Outils déclarés à l'AI SDK et effectivement actifs : ceux du registre, recalculés
+        // à chaque étape (le registre peut grandir pendant le tour via `tool_search`).
+        const activeTools = (): string[] =>
+          o.registry
+            .list()
+            .map((t) => t.name)
+            .filter((name) => name in tools);
 
         const result = streamText({
           model: o.model,
-          instructions: this.systemPrompt(),
+          instructions: this.systemPrompt(sandbox),
           messages: base,
           tools,
+          ...(lazy ? { activeTools: activeTools() } : {}),
           stopWhen: stepCountIs(o.maxSteps ?? MAX_STEPS),
           abortSignal: signal,
           // Les nouvelles tentatives réseau sont gérées par le fetch du provider.
@@ -226,11 +269,12 @@ export class Agent {
               next = stripReasoning(next);
               changed = true;
             }
-            if (!changed) return undefined;
+            const active = lazy ? { activeTools: activeTools() } : {};
+            if (!changed) return lazy ? active : undefined;
             // Les messages renvoyés remplacent l'historique pour les étapes suivantes.
             base = next;
             responseOffset = responseMessages.length;
-            return { messages: next };
+            return { messages: next, ...active };
           },
         });
 
@@ -401,11 +445,14 @@ export class AgentSession {
     input: UserContent,
     emit: AgentEventSink,
     abortSignal?: AbortSignal,
+    options: SendOptions = {},
   ): Promise<TurnResult> {
     this.#turn += 1;
     const result = await this.agent.runTurn({
       sessionId: this.sessionId,
-      turnId: `${this.sessionId}-${this.#turn}`,
+      // Défaut : compteur local, qui repart à 1 si la session est recréée ; l'app
+      // fournit un identifiant unique (renvoyé par `agent:send`).
+      turnId: options.turnId ?? `${this.sessionId}-${this.#turn}`,
       history: this.#history,
       input,
       emit,
@@ -416,4 +463,40 @@ export class AgentSession {
     if (result.usage) this.#lastInputTokens = result.usage.inputTokens;
     return result;
   }
+}
+
+/**
+ * Outils paresseux absents du registre, convertis pour l'AI SDK. L'exécution
+ * revérifie l'activation : un outil inactif appelé quand même (modèle qui devine
+ * un nom) est refusé sans être exécuté.
+ */
+function lazyToolSet(
+  definitions: readonly AnyToolDefinition[],
+  registry: ToolRegistry,
+  existing: ToolSet,
+  runtime: ToolRuntime,
+): ToolSet | undefined {
+  const dormant = new InMemoryToolRegistry();
+  for (const definition of definitions) {
+    if (definition.name in existing || dormant.has(definition.name)) continue;
+    dormant.register(definition);
+  }
+  if (dormant.list().length === 0) return undefined;
+  const set = toAiSdkTools(dormant, runtime);
+  for (const [name, aiTool] of Object.entries(set)) {
+    const execute = aiTool.execute;
+    if (!execute) continue;
+    aiTool.execute = (input, options) => {
+      if (!registry.has(name)) {
+        return {
+          ok: false,
+          content: `L'outil ${name} n'est pas activé : appelle d'abord tool_search pour l'activer.`,
+        };
+      }
+      // Garde placée avant l'adaptateur (et donc avant toute demande de permission).
+      const result: unknown = execute(input, options);
+      return result;
+    };
+  }
+  return set;
 }
