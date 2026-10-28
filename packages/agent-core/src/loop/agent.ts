@@ -27,7 +27,8 @@ import {
 import { toLlmError } from '../llm/errors.js';
 import { buildSystemPrompt } from '../prompt/system-prompt.js';
 import type { PermissionDescriber } from '../tools/permission.js';
-import { isExecutedToolOutput, toAiSdkTools } from '../tools/registry.js';
+import { isToolOutput, toAiSdkTools } from '../tools/registry.js';
+import { withRetryListener, type RetryInfo } from '../llm/retry-fetch.js';
 import { compactMessages, shouldCompact } from './compaction.js';
 import { hasReasoning, stripReasoning } from './history.js';
 import { createToolCallRepair } from './repair.js';
@@ -173,175 +174,190 @@ export class Agent {
       return result.messages;
     };
 
-    try {
-      // Compaction préalable, sur la base de la consommation du tour précédent.
-      if (shouldCompact(turn.lastInputTokens, o.contextWindow)) {
-        base = (await compact(base)) ?? base;
-      }
+    // Les nouvelles tentatives réseau de ce tour deviennent des events `llm_retry`.
+    const onRetry = (info: RetryInfo): void => {
+      emit({ type: 'llm_retry', ...info });
+    };
+    return withRetryListener(onRetry, async (): Promise<TurnResult> => {
+      try {
+        // Compaction préalable, sur la base de la consommation du tour précédent.
+        if (shouldCompact(turn.lastInputTokens, o.contextWindow)) {
+          base = (await compact(base)) ?? base;
+        }
 
-      const tools = toAiSdkTools(o.registry, {
-        sessionId: turn.sessionId,
-        workspace: o.workspace,
-        abortSignal: signal,
-        requestPermission: this.#permissionRelay(emit),
-        ...(o.sandbox ? { sandbox: o.sandbox } : {}),
-        ...(o.describePermission ? { describePermission: o.describePermission } : {}),
-      });
+        const tools = toAiSdkTools(o.registry, {
+          sessionId: turn.sessionId,
+          workspace: o.workspace,
+          abortSignal: signal,
+          requestPermission: this.#permissionRelay(emit),
+          emitDisplay: (toolCallId, display) => {
+            emit({ type: 'tool_display', toolCallId, display });
+          },
+          ...(o.sandbox ? { sandbox: o.sandbox } : {}),
+          ...(o.describePermission ? { describePermission: o.describePermission } : {}),
+        });
 
-      const result = streamText({
-        model: o.model,
-        instructions: this.systemPrompt(),
-        messages: base,
-        tools,
-        stopWhen: stepCountIs(o.maxSteps ?? MAX_STEPS),
-        abortSignal: signal,
-        // Les nouvelles tentatives réseau sont gérées par le fetch du provider.
-        maxRetries: 0,
-        // Une seule permission à la fois dans l'UI : exécution séquentielle.
-        toolCallConcurrency: 1,
-        repairToolCall: createToolCallRepair((info) => {
-          o.log?.('repair', info);
-        }),
-        prepareStep: async ({ messages, steps: done, responseMessages }) => {
-          let next = messages;
-          let changed = false;
-          const last = done.at(-1);
-          if (last && shouldCompact(last.usage.inputTokens, o.contextWindow)) {
-            const compacted = await compact(next);
-            if (compacted) {
-              next = compacted;
+        const result = streamText({
+          model: o.model,
+          instructions: this.systemPrompt(),
+          messages: base,
+          tools,
+          stopWhen: stepCountIs(o.maxSteps ?? MAX_STEPS),
+          abortSignal: signal,
+          // Les nouvelles tentatives réseau sont gérées par le fetch du provider.
+          maxRetries: 0,
+          // Une seule permission à la fois dans l'UI : exécution séquentielle.
+          toolCallConcurrency: 1,
+          repairToolCall: createToolCallRepair((info) => {
+            o.log?.('repair', info);
+          }),
+          prepareStep: async ({ messages, steps: done, responseMessages }) => {
+            let next = messages;
+            let changed = false;
+            const last = done.at(-1);
+            if (last && shouldCompact(last.usage.inputTokens, o.contextWindow)) {
+              const compacted = await compact(next);
+              if (compacted) {
+                next = compacted;
+                changed = true;
+              }
+            }
+            if (hasReasoning(next)) {
+              next = stripReasoning(next);
               changed = true;
             }
-          }
-          if (hasReasoning(next)) {
-            next = stripReasoning(next);
-            changed = true;
-          }
-          if (!changed) return undefined;
-          // Les messages renvoyés remplacent l'historique pour les étapes suivantes.
-          base = next;
-          responseOffset = responseMessages.length;
-          return { messages: next };
-        },
-      });
+            if (!changed) return undefined;
+            // Les messages renvoyés remplacent l'historique pour les étapes suivantes.
+            base = next;
+            responseOffset = responseMessages.length;
+            return { messages: next };
+          },
+        });
 
-      let finishReason: string | undefined;
-      let streamError: unknown;
-      let aborted = false;
-      // `stream` est le nom v7 de `fullStream` (déprécié).
-      for await (const part of result.stream) {
-        switch (part.type) {
-          case 'text-delta':
-            if (part.text !== '') emit({ type: 'text_delta', delta: part.text });
-            break;
-          case 'reasoning-delta':
-            if (part.text !== '') emit({ type: 'reasoning_delta', delta: part.text });
-            break;
-          case 'tool-call':
-            emit({
-              type: 'tool_start',
-              toolCallId: part.toolCallId,
-              toolName: part.toolName,
-              input: part.input,
-            });
-            break;
-          case 'tool-result': {
-            const output: unknown = part.output;
-            if (isExecutedToolOutput(output)) {
+        let finishReason: string | undefined;
+        let streamError: unknown;
+        let aborted = false;
+        // `stream` est le nom v7 de `fullStream` (déprécié).
+        for await (const part of result.stream) {
+          switch (part.type) {
+            case 'text-delta':
+              if (part.text !== '') emit({ type: 'text_delta', delta: part.text });
+              break;
+            case 'reasoning-delta':
+              if (part.text !== '') emit({ type: 'reasoning_delta', delta: part.text });
+              break;
+            case 'tool-call':
               emit({
-                type: 'tool_result',
+                type: 'tool_start',
                 toolCallId: part.toolCallId,
                 toolName: part.toolName,
-                ok: output.ok,
-                ...(output.denied ? { denied: true } : {}),
-                output: output.content,
-                ...(output.display ? { display: output.display } : {}),
+                input: part.input,
               });
-              if (output.display?.type === 'todos') {
-                emit({ type: 'todo_update', todos: output.display.todos });
-              } else if (output.display?.type === 'web_results') {
-                for (const r of output.display.results) sources.set(r.url, r);
-              } else if (output.display?.type === 'web_page') {
-                const { url, title } = output.display;
-                if (!sources.has(url)) sources.set(url, { url, title: title ?? url, snippet: '' });
+              break;
+            case 'tool-result': {
+              const output: unknown = part.output;
+              if (isToolOutput(output)) {
+                emit({
+                  type: 'tool_result',
+                  toolCallId: part.toolCallId,
+                  toolName: part.toolName,
+                  ok: output.ok,
+                  ...(output.denied ? { denied: true } : {}),
+                  output: output.content,
+                  ...(output.display ? { display: output.display } : {}),
+                });
+                if (output.display?.type === 'todos') {
+                  emit({ type: 'todo_update', todos: output.display.todos });
+                } else if (output.display?.type === 'web_results') {
+                  for (const r of output.display.results) sources.set(r.url, r);
+                } else if (output.display?.type === 'web_page') {
+                  const { url, title } = output.display;
+                  if (!sources.has(url))
+                    sources.set(url, { url, title: title ?? url, snippet: '' });
+                }
+              } else {
+                emit({
+                  type: 'tool_result',
+                  toolCallId: part.toolCallId,
+                  toolName: part.toolName,
+                  ok: true,
+                  output: typeof output === 'string' ? output : JSON.stringify(output),
+                });
               }
-            } else {
+              break;
+            }
+            case 'tool-error':
               emit({
                 type: 'tool_result',
                 toolCallId: part.toolCallId,
                 toolName: part.toolName,
-                ok: true,
-                output: typeof output === 'string' ? output : JSON.stringify(output),
+                ok: false,
+                output: describeToolError(part.error),
               });
-            }
-            break;
+              break;
+            case 'finish-step':
+              steps += 1;
+              if (part.usage.inputTokens !== undefined) lastInputTokens = part.usage.inputTokens;
+              outputTokens += part.usage.outputTokens ?? 0;
+              break;
+            case 'finish':
+              finishReason = part.finishReason;
+              break;
+            case 'abort':
+              aborted = true;
+              break;
+            case 'error':
+              streamError = part.error;
+              break;
+            default:
+              break;
           }
-          case 'tool-error':
-            emit({
-              type: 'tool_result',
-              toolCallId: part.toolCallId,
-              toolName: part.toolName,
-              ok: false,
-              output: describeToolError(part.error),
-            });
-            break;
-          case 'finish-step':
-            steps += 1;
-            if (part.usage.inputTokens !== undefined) lastInputTokens = part.usage.inputTokens;
-            outputTokens += part.usage.outputTokens ?? 0;
-            break;
-          case 'finish':
-            finishReason = part.finishReason;
-            break;
-          case 'abort':
-            aborted = true;
-            break;
-          case 'error':
-            streamError = part.error;
-            break;
-          default:
-            break;
         }
-      }
 
-      if (sources.size > 0) emit({ type: 'sources', sources: [...sources.values()] });
+        if (sources.size > 0) emit({ type: 'sources', sources: [...sources.values()] });
 
-      const responseMessages = await Promise.resolve(result.responseMessages).catch(
-        () => [] as ModelMessage[],
-      );
-      const messages = stripReasoning([...base, ...responseMessages.slice(responseOffset)]);
+        const responseMessages = await Promise.resolve(result.responseMessages).catch(
+          () => [] as ModelMessage[],
+        );
+        const messages = stripReasoning([...base, ...responseMessages.slice(responseOffset)]);
 
-      if (aborted || signal.aborted) {
-        emit({ type: 'done', reason: 'aborted', usage: usage() });
-        return { messages, usage: usage(), reason: 'aborted' };
+        if (aborted || signal.aborted) {
+          emit({ type: 'done', reason: 'aborted', usage: usage() });
+          return { messages, usage: usage(), reason: 'aborted' };
+        }
+        if (streamError !== undefined) {
+          const error = toLlmError(streamError, o.serverUrl).toJSON();
+          emit({ type: 'error', error });
+          return { messages, usage: usage(), reason: 'error', error };
+        }
+        const reason: DoneReason =
+          finishReason === 'length'
+            ? 'length'
+            : finishReason === 'tool-calls' && steps >= (o.maxSteps ?? MAX_STEPS)
+              ? 'max_steps'
+              : 'stop';
+        emit({ type: 'done', reason, usage: usage() });
+        return { messages, usage: usage(), reason };
+      } catch (error) {
+        if (signal.aborted) {
+          emit({ type: 'done', reason: 'aborted', usage: usage() });
+          return { messages: stripReasoning(base), usage: usage(), reason: 'aborted' };
+        }
+        const serialized =
+          error instanceof AtelierError
+            ? error.toJSON()
+            : serializeError(toLlmError(error, o.serverUrl));
+        emit({ type: 'error', error: serialized });
+        return {
+          messages: stripReasoning(base),
+          usage: usage(),
+          reason: 'error',
+          error: serialized,
+        };
+      } finally {
+        turn.abortSignal?.removeEventListener('abort', onAbort);
       }
-      if (streamError !== undefined) {
-        const error = toLlmError(streamError, o.serverUrl).toJSON();
-        emit({ type: 'error', error });
-        return { messages, usage: usage(), reason: 'error', error };
-      }
-      const reason: DoneReason =
-        finishReason === 'length'
-          ? 'length'
-          : finishReason === 'tool-calls' && steps >= (o.maxSteps ?? MAX_STEPS)
-            ? 'max_steps'
-            : 'stop';
-      emit({ type: 'done', reason, usage: usage() });
-      return { messages, usage: usage(), reason };
-    } catch (error) {
-      if (signal.aborted) {
-        emit({ type: 'done', reason: 'aborted', usage: usage() });
-        return { messages: stripReasoning(base), usage: usage(), reason: 'aborted' };
-      }
-      const serialized =
-        error instanceof AtelierError
-          ? error.toJSON()
-          : serializeError(toLlmError(error, o.serverUrl));
-      emit({ type: 'error', error: serialized });
-      return { messages: stripReasoning(base), usage: usage(), reason: 'error', error: serialized };
-    } finally {
-      turn.abortSignal?.removeEventListener('abort', onAbort);
-    }
+    });
   }
 
   /** Relaie chaque demande de permission en event, puis attend la décision. */

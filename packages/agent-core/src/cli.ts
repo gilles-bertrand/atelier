@@ -117,6 +117,17 @@ function createRenderer(): (event: AgentEvent) => void {
           process.stdout.write(`  ${box} ${t.title}\n`);
         }
         break;
+      case 'tool_display':
+        // L'affichage final arrive avec tool_result ; rien à afficher en terminal.
+        break;
+      case 'llm_retry':
+        switchTo('none');
+        process.stdout.write(
+          yellow(
+            `↻ Reconnexion au serveur… (${event.attempt}/${event.maxAttempts ?? '?'}, ${event.reason}, dans ${Math.round(event.delayMs / 100) / 10} s)\n`,
+          ),
+        );
+        break;
       case 'permission_request':
         switchTo('none');
         break;
@@ -142,6 +153,11 @@ function createRenderer(): (event: AgentEvent) => void {
         switchTo('none');
         process.stdout.write(red(`Erreur [${event.error.code}] ${event.error.message}\n`));
         break;
+      default: {
+        // Un nouvel AgentEvent non géré fait échouer la compilation ici.
+        const unhandled: never = event;
+        return unhandled;
+      }
     }
   };
 }
@@ -234,7 +250,7 @@ async function main(): Promise<number> {
     retry: log
       ? {
           onRetry: (i) => {
-            log('retry', i);
+            log('retry', { ...i });
           },
         }
       : {},

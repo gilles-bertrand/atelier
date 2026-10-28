@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { AtelierError, defineTool, type AnyToolDefinition, type ToolOutput } from '@atelier/shared';
 import { resolveWorkspacePath } from '../paths.js';
 import { countOccurrences, truncateOutput } from './text.js';
+import { preview } from './permission.js';
 import { fileCard, globToRegExp, looksBinary, walkFiles } from './fs-utils.js';
 
 /** Convertit les erreurs métier attendues en sortie `ok: false` lisible par le modèle. */
@@ -96,6 +97,12 @@ export const writeFileTool = defineTool({
   }),
   permission: 'always',
   source: 'native',
+  describePermission: (input) => ({
+    kind: 'file_write',
+    title: `Écrire le fichier ${input.path}`,
+    detail: preview(input.content),
+    scopeKey: 'write_file',
+  }),
   execute: (input, context) =>
     guarded(async () => {
       const resolved = await resolveWorkspacePath(context.workspace, input.path);
@@ -127,6 +134,12 @@ export const editFileTool = defineTool({
   }),
   permission: 'always',
   source: 'native',
+  describePermission: (input) => ({
+    kind: 'file_write',
+    title: `Modifier le fichier ${input.path}`,
+    detail: preview(`- ${input.old_str}\n+ ${input.new_str}`),
+    scopeKey: 'edit_file',
+  }),
   execute: (input, context) =>
     guarded(async () => {
       const resolved = await resolveWorkspacePath(context.workspace, input.path);

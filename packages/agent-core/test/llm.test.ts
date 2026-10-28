@@ -40,12 +40,12 @@ describe('createRetryingFetch', () => {
     const f = createRetryingFetch({
       fetch: inner,
       sleep: noSleep,
-      onRetry: (i) => retries.push(i.attempt),
+      onRetry: (i) => retries.push(`${i.attempt}/${i.maxAttempts} ${i.reason}`),
     });
     const res = await f('https://x/v1');
     expect(res.status).toBe(200);
     expect(inner).toHaveBeenCalledTimes(3);
-    expect(retries).toEqual([1, 2]);
+    expect(retries).toEqual(['1/3 ECONNREFUSED', '2/3 ECONNRESET']);
   });
 
   it('réessaie 503 mais pas 401, et abandonne après N tentatives', async () => {
@@ -324,11 +324,66 @@ describe('createLlmModels (provider OpenAI-compatible réel, fetch simulé)', ()
         serverUrl: 'https://llm.example.com',
       }).runTurn({ sessionId: 's', turnId: 't', history: [], input: 'x', emit });
       expect(down).toHaveBeenCalledTimes(3);
+      // Chaque nouvelle tentative est annoncée à l'UI, rattachée au tour.
+      const retries = events.filter((e) => e.type === 'llm_retry');
+      expect(retries.map((e) => [e.attempt, e.maxAttempts, e.reason, e.turnId])).toEqual([
+        [1, 2, 'ECONNREFUSED', 't'],
+        [2, 2, 'ECONNREFUSED', 't'],
+      ]);
       expect(result.reason).toBe('error');
       expect(events.at(-1)).toMatchObject({
         type: 'error',
         error: { code: 'llm/unreachable', retryable: true },
       });
+    });
+  });
+
+  it('llm_retry : deux tours concurrents sur le même provider ne se mélangent pas', async () => {
+    await withTempDir(async (ws) => {
+      // Échoue une fois par requête, puis répond.
+      let calls = 0;
+      const flaky = (): Promise<Response> => {
+        calls += 1;
+        return calls <= 2
+          ? Promise.reject(netError('ECONNRESET'))
+          : Promise.resolve(
+              sse([
+                chunk({ content: 'ok' }, 'stop', {
+                  prompt_tokens: 1,
+                  completion_tokens: 1,
+                  total_tokens: 2,
+                }),
+              ]),
+            );
+      };
+      const { model } = createLlmModels({
+        baseUrl: 'https://llm.example.com',
+        model: 'm',
+        fetch: flaky,
+        retry: { retries: 3, baseDelayMs: 1 },
+      });
+      const agent = new Agent({
+        model,
+        registry: createDefaultRegistry(),
+        workspace: ws,
+        requestPermission: permissions(),
+        contextWindow: 32768,
+      });
+      const a = collect();
+      const b = collect();
+      await Promise.all([
+        agent.runTurn({ sessionId: 'A', turnId: 'a1', history: [], input: 'x', emit: a.emit }),
+        agent.runTurn({ sessionId: 'B', turnId: 'b1', history: [], input: 'y', emit: b.emit }),
+      ]);
+      const retriesA = a.events.filter((e) => e.type === 'llm_retry');
+      const retriesB = b.events.filter((e) => e.type === 'llm_retry');
+      // Chaque tour a eu sa propre reconnexion, et ne voit que la sienne.
+      expect(retriesA).toHaveLength(1);
+      expect(retriesB).toHaveLength(1);
+      expect(retriesA.every((e) => e.sessionId === 'A')).toBe(true);
+      expect(retriesB.every((e) => e.sessionId === 'B')).toBe(true);
+      expect(a.events.at(-1)).toMatchObject({ type: 'done' });
+      expect(b.events.at(-1)).toMatchObject({ type: 'done' });
     });
   });
 

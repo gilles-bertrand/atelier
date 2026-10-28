@@ -197,6 +197,52 @@ describe('permissions', () => {
     });
   });
 
+  it('libellé de permission : outil, puis application, puis repli générique', async () => {
+    await withTempDir(async (ws) => {
+      const base = {
+        sessionId: 's',
+        workspace: ws,
+        abortSignal: new AbortController().signal,
+      };
+      const app = (name: string) =>
+        name === 'mcp__github__create_issue'
+          ? { kind: 'mcp_write' as const, title: 'Libellé application', scopeKey: 'gh' }
+          : undefined;
+      const perms = permissions('deny');
+      // 1. L'outil fournit son libellé : il l'emporte sur celui de l'application.
+      await executeTool(writeFileTool, { path: 'a.md', content: 'x' }, 'c1', {
+        ...base,
+        requestPermission: perms,
+        describePermission: () => ({ kind: 'other', title: 'Ne doit pas servir' }),
+      });
+      // 2. Outil sans libellé : celui de l'application.
+      const mcp = {
+        name: 'mcp__github__create_issue',
+        description: 'x',
+        inputSchema: writeFileTool.inputSchema,
+        permission: 'always' as const,
+        source: 'mcp' as const,
+        execute: () => Promise.resolve({ ok: true, content: 'créée' }),
+      };
+      await executeTool(mcp, { title: 'Bug' }, 'c2', {
+        ...base,
+        requestPermission: perms,
+        describePermission: app,
+      });
+      // 3. Ni l'un ni l'autre : repli générique.
+      await executeTool({ ...mcp, name: 'mcp__drive__delete' }, { id: 1 }, 'c3', {
+        ...base,
+        requestPermission: perms,
+        describePermission: app,
+      });
+      expect(perms.requests.map((r) => [r.title, r.kind, r.scopeKey])).toEqual([
+        ['Écrire le fichier a.md', 'file_write', 'write_file'],
+        ['Libellé application', 'mcp_write', 'gh'],
+        ["Utiliser l'outil mcp__drive__delete", 'mcp_write', 'mcp__drive__delete'],
+      ]);
+    });
+  });
+
   it('withSessionMemory mémorise allow_session par scopeKey', async () => {
     const inner = permissions('allow_session');
     const handler = withSessionMemory(inner);

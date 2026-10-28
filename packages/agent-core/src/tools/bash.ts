@@ -3,8 +3,13 @@
  * Permission demandée sauf pour les commandes de la liste blanche (lecture seule).
  */
 import { z } from 'zod';
-import { defineTool, isAllowed, type SandboxExecResult } from '@atelier/shared';
-import { askPermission, defaultDescribePermission, deniedOutput } from './permission.js';
+import {
+  defineTool,
+  isAllowed,
+  type PermissionDescription,
+  type SandboxExecResult,
+} from '@atelier/shared';
+import { askPermission, deniedOutput } from './permission.js';
 import { DEFAULT_MAX_OUTPUT_BYTES, truncateOutput } from './text.js';
 
 /** Délai par défaut d'une commande (brief §2). */
@@ -82,6 +87,15 @@ function formatResult(result: SandboxExecResult): string {
   return truncateOutput(parts.join('\n'), DEFAULT_MAX_OUTPUT_BYTES + 512).text;
 }
 
+function describeBash(input: { command: string }): PermissionDescription {
+  return {
+    kind: 'command',
+    title: 'Exécuter une commande',
+    detail: input.command,
+    scopeKey: 'bash',
+  };
+}
+
 export const bashTool = defineTool({
   name: 'bash',
   description:
@@ -91,6 +105,7 @@ export const bashTool = defineTool({
   }),
   permission: 'conditional',
   source: 'native',
+  describePermission: describeBash,
   async execute(input, context) {
     if (!context.sandbox) {
       return {
@@ -100,7 +115,7 @@ export const bashTool = defineTool({
       };
     }
     if (!isWhitelistedCommand(input.command)) {
-      const description = defaultDescribePermission('bash', input);
+      const description = describeBash(input);
       const decision = await askPermission(context, 'bash', input, description);
       if (!isAllowed(decision)) return deniedOutput(description.title);
     }
