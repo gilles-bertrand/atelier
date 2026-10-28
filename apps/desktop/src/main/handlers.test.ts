@@ -76,7 +76,7 @@ describe('file:open', () => {
 describe('llm:test-connection : le token enregistré ne quitte pas son serveur', () => {
   const setup = () => {
     const seen: { url: string; authorization: string | null }[] = [];
-    const fetchSpy = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const fetchSpy = (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
       const url = input instanceof Request ? input.url : String(input);
       seen.push({ url, authorization: new Headers(init?.headers).get('authorization') });
       return Promise.resolve(
