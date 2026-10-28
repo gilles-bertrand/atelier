@@ -4,6 +4,7 @@
  */
 import { useState } from 'react';
 import type { SessionSummary } from '@atelier/shared';
+import { HistoryBanner } from '@renderer/components/status/HistoryBanner';
 import { Alert } from '@renderer/components/ui/primitives';
 import { call, toSerializedError } from '@renderer/lib/api';
 import { errorMessage } from '@renderer/lib/error-messages';
@@ -52,39 +53,42 @@ function WorkspaceViews() {
   };
 
   return (
-    <>
-      {settingsOpen ? (
-        <Settings
-          onClose={() => {
-            setSettingsOpen(false);
-          }}
-        />
-      ) : current ? (
-        <ChatView
-          key={current.id}
-          session={current}
-          onBack={() => {
-            setCurrent(undefined);
-          }}
-          onNewConversation={() => void newConversation(current.workspace)}
-          onOpenSettings={openSettings}
-        />
-      ) : (
-        <Home
-          onOpen={setCurrent}
-          onOpenSettings={openSettings}
-          onDeleted={(sessionId) => {
-            actions.forget(sessionId);
-          }}
-        />
-      )}
+    <div className="flex h-full flex-col">
+      <HistoryBanner />
+      <div className="min-h-0 flex-1">
+        {settingsOpen ? (
+          <Settings
+            onClose={() => {
+              setSettingsOpen(false);
+            }}
+          />
+        ) : current ? (
+          <ChatView
+            key={current.id}
+            session={current}
+            onBack={() => {
+              setCurrent(undefined);
+            }}
+            onNewConversation={() => void newConversation(current.workspace)}
+            onOpenSettings={openSettings}
+          />
+        ) : (
+          <Home
+            onOpen={setCurrent}
+            onOpenSettings={openSettings}
+            onDeleted={(sessionId) => {
+              actions.forget(sessionId);
+            }}
+          />
+        )}
+      </div>
       {error ? (
         <div className="fixed bottom-4 left-1/2 w-full max-w-md -translate-x-1/2">
           <Alert tone="error">{error}</Alert>
         </div>
       ) : null}
       <PendingPermission current={current} />
-    </>
+    </div>
   );
 }
 

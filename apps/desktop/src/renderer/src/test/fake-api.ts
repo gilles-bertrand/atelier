@@ -69,6 +69,7 @@ export function installFakeApi(handlers: FakeHandlers = {}): FakeApi {
     'llm:status': () => ({ health: 'unknown', checkedAt: '2026-10-28T10:00:00.000Z' }),
     'sandbox:status': () => ({ state: 'absent', networkEnabled: false }),
     'session:list': () => [],
+    'app:health': () => ({ historyPersistent: true }),
   };
   const all: FakeHandlers = { ...base, ...handlers };
   // Un `settings:get` fourni par le test devient l'état de départ de `settings:update`.
