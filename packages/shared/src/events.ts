@@ -58,6 +58,17 @@ export interface ToolResultEvent extends AgentEventBase {
   display?: ToolDisplay;
 }
 
+/**
+ * Affichage riche publié PENDANT l'exécution d'un outil (via
+ * `ToolExecutionContext.emitDisplay`). Remplace l'affichage courant du bloc de
+ * l'outil `toolCallId` ; le `display` de `tool_result` fait foi à la fin.
+ */
+export interface ToolDisplayEvent extends AgentEventBase {
+  type: 'tool_display';
+  toolCallId: string;
+  display: ToolDisplay;
+}
+
 /** Nouvelle liste de tâches (après `todo_write`). */
 export interface TodoUpdateEvent extends AgentEventBase {
   type: 'todo_update';
@@ -74,6 +85,23 @@ export interface PermissionRequestEvent extends AgentEventBase {
 export interface SourcesEvent extends AgentEventBase {
   type: 'sources';
   sources: WebSearchResult[];
+}
+
+/**
+ * Nouvelle tentative d'appel au serveur LLM après une erreur réseau ou HTTP
+ * transitoire (429, 502, 503, 504…). L'UI affiche « Reconnexion au serveur… »
+ * dans le chat concerné ; l'indicateur global (`ServerStatus`) n'est pas modifié.
+ */
+export interface LlmRetryEvent extends AgentEventBase {
+  type: 'llm_retry';
+  /** Numéro de la nouvelle tentative (1 = premier réessai). */
+  attempt: number;
+  /** Nombre maximal de tentatives, si connu (pour « 2/4 »). */
+  maxAttempts?: number;
+  /** Délai avant la tentative, en millisecondes. */
+  delayMs: number;
+  /** Cause technique courte (ex. `HTTP 503`, `ECONNRESET`). */
+  reason: string;
 }
 
 /** L'historique a été compacté (résumé des anciens messages). */
@@ -106,9 +134,11 @@ export type AgentEvent =
   | ReasoningDeltaEvent
   | ToolStartEvent
   | ToolResultEvent
+  | ToolDisplayEvent
   | TodoUpdateEvent
   | PermissionRequestEvent
   | SourcesEvent
+  | LlmRetryEvent
   | CompactionEvent
   | DoneEvent
   | ErrorEvent;
