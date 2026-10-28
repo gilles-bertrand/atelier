@@ -2,16 +2,16 @@ import { mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { app, BrowserWindow, dialog, safeStorage, session, shell } from 'electron';
+import { checkServerHealth } from '@atelier/agent-core';
 import { loadMcpConfig, McpManager } from '@atelier/mcp-bridge';
 import { LimaSandbox } from '@atelier/sandbox';
 import { installExampleSkills } from '@atelier/skills';
 import { broadcast } from './broadcast.js';
 import { createHandlers } from './handlers.js';
 import { registerIpcHandlers } from './ipc.js';
-import { probeServer } from './llm/server-api.js';
 import { ServerMonitor } from './llm/server-monitor.js';
 import { limaPreflight, resolveAppPaths } from './paths.js';
-import { AgentFactory } from './runtime/agent-factory.js';
+import { AgentRuntimeHost } from './runtime/agent-runtime.js';
 import { ChatManager } from './runtime/chat-manager.js';
 import { PermissionBroker } from './runtime/permission-broker.js';
 import { SandboxManager } from './runtime/sandbox-manager.js';
@@ -145,9 +145,18 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
       const { baseUrl } = settings.get().llm;
       return baseUrl === '' ? undefined : { baseUrl, token: secrets.get('llm_token') };
     },
-    probe: (target, signal) => probeServer(target, fetch, { signal }),
-    onChange: (status) => {
+    probe: (target, signal) =>
+      checkServerHealth({
+        baseUrl: target.baseUrl,
+        signal,
+        ...(target.token ? { token: target.token } : {}),
+      }),
+    onChange: (status, previous) => {
       broadcast('llm:status', status);
+      // Serveur revenu : la fenêtre de contexte devinée au démarrage est relue.
+      if (status.health !== 'offline' && previous.health === 'offline') {
+        void agents.refreshIfFallback();
+      }
     },
   });
 
@@ -180,7 +189,7 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
     log,
   });
 
-  const factory = new AgentFactory({
+  const agents = new AgentRuntimeHost({
     settings: () => settings.get(),
     secret: (id) => secrets.get(id),
     sandbox,
@@ -194,13 +203,12 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
   const chats = new ChatManager({
     store: new InMemorySessionStore(),
     permissions,
-    createRegistry: () => factory.createRegistry(),
-    createRunner: (context) => factory.createTurnRunner(context),
+    agents,
     emit: (event) => {
       broadcast('agent:event', event);
     },
     onLlmError: () => {
-      monitor.reportFailure();
+      void monitor.check();
     },
   });
 
@@ -208,9 +216,10 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
     if (
       next.llm.baseUrl !== previous.llm.baseUrl ||
       next.llm.model !== previous.llm.model ||
-      next.llm.numCtx !== previous.llm.numCtx
+      next.llm.numCtx !== previous.llm.numCtx ||
+      next.llm.thinking !== previous.llm.thinking
     ) {
-      factory.invalidate();
+      agents.invalidate();
       void monitor.check();
     }
     if (next.mcpConfigPath !== previous.mcpConfigPath) void reloadMcp();
@@ -227,6 +236,11 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
       sandbox,
       mcp,
       home,
+      onSecretChanged: (id) => {
+        if (id !== 'llm_token') return;
+        agents.invalidate();
+        void monitor.check();
+      },
       shell: {
         chooseDirectory: async () => {
           const window = BrowserWindow.getFocusedWindow();

@@ -6,10 +6,10 @@ import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, extname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { parseMcpConfigText, type McpManager } from '@atelier/mcp-bridge';
+import { listModels, testConnection, type FetchFunction } from '@atelier/agent-core';
 import { loadSkills } from '@atelier/skills';
-import { AtelierError } from '@atelier/shared';
+import { AtelierError, type SecretId } from '@atelier/shared';
 import type { IpcHandlers } from './ipc.js';
-import { listModels, testConnection } from './llm/server-api.js';
 import type { ServerMonitor } from './llm/server-monitor.js';
 import type { ChatManager } from './runtime/chat-manager.js';
 import { importAttachments } from './runtime/attachments.js';
@@ -34,7 +34,38 @@ export interface HandlerServices {
   sandbox: SandboxManager;
   mcp: McpManager;
   shell: DesktopShell;
+  /** Un secret a changé (le token LLM impose un nouveau runtime). */
+  onSecretChanged?: (id: SecretId) => void;
   home?: string;
+  /** `fetch` des appels de diagnostic (tests). */
+  fetch?: FetchFunction;
+}
+
+/** Origine normalisée d'une URL (`https://hote:port`), ou `undefined` si invalide. */
+export function urlOrigin(raw: string): string | undefined {
+  try {
+    return new URL(raw.trim()).origin;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Token à envoyer pour « Tester la connexion ». Le token enregistré ne part que
+ * vers l'origine du serveur enregistré : sinon, un renderer compromis pourrait
+ * le faire envoyer à un serveur de son choix (`baseUrl` vient du renderer).
+ */
+export function tokenForConnectionTest(options: {
+  requestedUrl: string;
+  providedToken: string | undefined;
+  savedUrl: string;
+  savedToken: string | undefined;
+}): string | undefined {
+  const provided = options.providedToken?.trim();
+  if (provided) return provided;
+  const requested = urlOrigin(options.requestedUrl);
+  if (requested === undefined || requested !== urlOrigin(options.savedUrl)) return undefined;
+  return options.savedToken;
 }
 
 /** Contenu proposé quand `mcp.json` n'existe pas encore. */
@@ -123,16 +154,36 @@ export function createHandlers(s: HandlerServices): IpcHandlers {
     'settings:update': (patch) => s.settings.update(patch),
     'secrets:set': async ({ id, value }) => {
       await s.secrets.set(id, value);
-      if (id === 'llm_token') void s.monitor.check();
+      s.onSecretChanged?.(id);
       return undefined;
     },
     'secrets:presence': () => s.secrets.presence(),
 
     // --- Serveur LLM
-    'llm:test-connection': ({ baseUrl, token, model }) =>
-      testConnection({ baseUrl, token: token ?? s.secrets.get('llm_token'), model }),
-    'llm:list-models': () =>
-      listModels({ baseUrl: s.settings.get().llm.baseUrl, token: s.secrets.get('llm_token') }),
+    'llm:test-connection': ({ baseUrl, token, model }) => {
+      const { numCtx, baseUrl: savedUrl } = s.settings.get().llm;
+      const effective = tokenForConnectionTest({
+        requestedUrl: baseUrl,
+        providedToken: token,
+        savedUrl,
+        savedToken: s.secrets.get('llm_token'),
+      });
+      return testConnection({
+        baseUrl,
+        ...(s.fetch ? { fetch: s.fetch } : {}),
+        ...(effective ? { token: effective } : {}),
+        ...(model ? { model } : {}),
+        ...(numCtx !== undefined ? { numCtx } : {}),
+      });
+    },
+    'llm:list-models': async () => {
+      const token = s.secrets.get('llm_token');
+      const { models } = await listModels({
+        baseUrl: s.settings.get().llm.baseUrl,
+        ...(token ? { token } : {}),
+      });
+      return models;
+    },
     'llm:status': () => s.monitor.status(),
 
     // --- Dossiers et sessions

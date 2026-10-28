@@ -6,6 +6,7 @@
  * l'historique persistant et la reprise de session.
  */
 import { AtelierError, type ChatMessage, type SessionSummary } from '@atelier/shared';
+import type { ModelMessage } from 'ai';
 
 export interface SessionStore {
   list(limit?: number): SessionSummary[];
@@ -20,6 +21,12 @@ export interface SessionStore {
   messages(sessionId: string): ChatMessage[];
   /** Ajoute ou remplace (même `id`) un message. */
   saveMessage(message: ChatMessage): void;
+  /**
+   * Historique modèle persisté (`TurnResult.messages` : compaction et paires
+   * outil/résultat fidèles), ou `undefined` s'il n'a jamais été enregistré.
+   */
+  modelHistory(sessionId: string): readonly ModelMessage[] | undefined;
+  saveModelHistory(sessionId: string, messages: readonly ModelMessage[]): void;
   close?(): void;
 }
 
@@ -33,6 +40,7 @@ export function sessionNotFound(sessionId: string): AtelierError {
 export class InMemorySessionStore implements SessionStore {
   readonly #sessions = new Map<string, SessionSummary>();
   readonly #messages = new Map<string, ChatMessage[]>();
+  readonly #modelHistory = new Map<string, readonly ModelMessage[]>();
 
   list(limit = 50): SessionSummary[] {
     return [...this.#sessions.values()]
@@ -64,6 +72,16 @@ export class InMemorySessionStore implements SessionStore {
   delete(sessionId: string): void {
     this.#sessions.delete(sessionId);
     this.#messages.delete(sessionId);
+    this.#modelHistory.delete(sessionId);
+  }
+
+  modelHistory(sessionId: string): readonly ModelMessage[] | undefined {
+    return this.#modelHistory.get(sessionId);
+  }
+
+  saveModelHistory(sessionId: string, messages: readonly ModelMessage[]): void {
+    if (!this.#sessions.has(sessionId)) throw sessionNotFound(sessionId);
+    this.#modelHistory.set(sessionId, [...messages]);
   }
 
   messages(sessionId: string): ChatMessage[] {
