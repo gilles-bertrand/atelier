@@ -1,36 +1,78 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-  <!-- Icône d'Atelier : un chevalet (le « A » de l'atelier) et une étincelle (l'agent).
+  <!-- Icône d'Atelier : un petit sage vert aux longues oreilles (personnage original)
+       dans un ciel étoilé, et une étincelle (l'agent).
        Grille macOS : carré arrondi de 824 px centré, marge de 100 px pour l'ombre.
        Source de build/icon.png (1024 px), régénéré par le script « icon » de apps/desktop/package.json. -->
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#2E3150"/>
-      <stop offset="1" stop-color="#14151F"/>
+      <stop offset="0" stop-color="#1D2547"/>
+      <stop offset="1" stop-color="#0A0D1A"/>
     </linearGradient>
-    <!-- userSpaceOnUse : un trait horizontal ou vertical a une boîte englobante plate. -->
-    <linearGradient id="easel" gradientUnits="userSpaceOnUse" x1="0" y1="290" x2="0" y2="780">
-      <stop offset="0" stop-color="#FBF3E6"/>
-      <stop offset="1" stop-color="#E6D5BC"/>
+    <radialGradient id="glow" cx="512" cy="600" r="380" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7FD48A" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#7FD48A" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="skin" gradientUnits="userSpaceOnUse" x1="0" y1="400" x2="0" y2="760">
+      <stop offset="0" stop-color="#B5D98A"/>
+      <stop offset="1" stop-color="#6E9E52"/>
+    </linearGradient>
+    <linearGradient id="robe" gradientUnits="userSpaceOnUse" x1="0" y1="700" x2="0" y2="924">
+      <stop offset="0" stop-color="#C9B08A"/>
+      <stop offset="1" stop-color="#8A7354"/>
     </linearGradient>
     <linearGradient id="spark" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#FFD27A"/>
-      <stop offset="1" stop-color="#F08A4B"/>
+      <stop offset="0" stop-color="#FFE29A"/>
+      <stop offset="1" stop-color="#F59A4B"/>
     </linearGradient>
+    <clipPath id="tile">
+      <rect x="100" y="100" width="824" height="824" rx="186"/>
+    </clipPath>
     <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
       <feDropShadow dx="0" dy="12" stdDeviation="18" flood-color="#000" flood-opacity="0.35"/>
     </filter>
   </defs>
 
   <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#bg)" filter="url(#shadow)"/>
-  <rect x="101" y="101" width="822" height="822" rx="185" fill="none" stroke="#FFFFFF" stroke-opacity="0.08" stroke-width="2"/>
 
-  <g fill="none" stroke="url(#easel)" stroke-width="64" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M362 760 L492 300 L622 760"/>
-    <path d="M410 600 H574"/>
-    <path d="M492 600 V770" stroke-opacity="0.55"/>
+  <g clip-path="url(#tile)">
+    <rect x="100" y="100" width="824" height="824" fill="url(#glow)"/>
+    <g fill="#FFFFFF">
+      <circle cx="230" cy="250" r="5" fill-opacity="0.7"/>
+      <circle cx="330" cy="180" r="3" fill-opacity="0.5"/>
+      <circle cx="820" cy="560" r="4" fill-opacity="0.5"/>
+      <circle cx="200" cy="620" r="3" fill-opacity="0.45"/>
+      <circle cx="420" cy="240" r="3" fill-opacity="0.4"/>
+      <circle cx="860" cy="250" r="3" fill-opacity="0.5"/>
+    </g>
+
+    <!-- Robe -->
+    <path d="M300 924 C320 800 400 730 512 730 C624 730 704 800 724 924 Z" fill="url(#robe)"/>
+    <path d="M430 740 L512 830 L594 740" fill="none" stroke="#6F5B41" stroke-width="14" stroke-linejoin="round" stroke-opacity="0.6"/>
+
+    <!-- Oreilles -->
+    <path d="M370 500 C300 470 230 430 150 380 C200 470 270 560 365 600 Z" fill="url(#skin)"/>
+    <path d="M654 500 C724 470 794 430 874 380 C824 470 754 560 659 600 Z" fill="url(#skin)"/>
+    <path d="M352 520 C300 495 250 465 205 435 C240 490 290 545 350 572 Z" fill="#D59A8E" fill-opacity="0.55"/>
+    <path d="M672 520 C724 495 774 465 819 435 C784 490 734 545 674 572 Z" fill="#D59A8E" fill-opacity="0.55"/>
+
+    <!-- Tête -->
+    <path d="M512 400 C628 400 690 470 690 570 C690 680 610 750 512 750 C414 750 334 680 334 570 C334 470 396 400 512 400 Z" fill="url(#skin)"/>
+    <path d="M420 470 C460 450 564 450 604 470" fill="none" stroke="#5F8A46" stroke-width="10" stroke-linecap="round" stroke-opacity="0.5"/>
+
+    <!-- Yeux -->
+    <ellipse cx="445" cy="565" rx="44" ry="40" fill="#1B2416"/>
+    <ellipse cx="579" cy="565" rx="44" ry="40" fill="#1B2416"/>
+    <circle cx="460" cy="550" r="12" fill="#FFFFFF" fill-opacity="0.9"/>
+    <circle cx="594" cy="550" r="12" fill="#FFFFFF" fill-opacity="0.9"/>
+
+    <!-- Nez et sourire -->
+    <path d="M500 615 C506 630 518 630 524 615" fill="none" stroke="#5F8A46" stroke-width="9" stroke-linecap="round"/>
+    <path d="M470 668 C495 688 529 688 554 668" fill="none" stroke="#4E763A" stroke-width="11" stroke-linecap="round"/>
   </g>
 
+  <!-- Étincelle (l'agent) -->
   <path fill="url(#spark)"
-        d="M690 268 C700 330 718 348 780 358 C718 368 700 386 690 448 C680 386 662 368 600 358 C662 348 680 330 690 268 Z"/>
-  <circle cx="770" cy="470" r="18" fill="#FFD27A" fill-opacity="0.85"/>
+        d="M760 190 C768 240 782 254 832 262 C782 270 768 284 760 334 C752 284 738 270 688 262 C738 254 752 240 760 190 Z"/>
+
+  <rect x="101" y="101" width="822" height="822" rx="185" fill="none" stroke="#FFFFFF" stroke-opacity="0.08" stroke-width="2"/>
 </svg>
