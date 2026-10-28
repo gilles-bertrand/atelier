@@ -15,7 +15,8 @@ import { AgentRuntimeHost } from './runtime/agent-runtime.js';
 import { ChatManager } from './runtime/chat-manager.js';
 import { PermissionBroker } from './runtime/permission-broker.js';
 import { SandboxManager } from './runtime/sandbox-manager.js';
-import { InMemorySessionStore } from './runtime/session-store.js';
+import { InMemorySessionStore, type SessionStore } from './runtime/session-store.js';
+import { SqliteSessionStore } from './runtime/sqlite-store.js';
 import { SecretsStore } from './settings/secrets-store.js';
 import { SettingsStore } from './settings/settings-store.js';
 
@@ -202,9 +203,18 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
     },
   });
 
+  // Historique persistant ; si la base est inutilisable, l'app reste utilisable (en mémoire).
+  let store: SessionStore;
+  try {
+    store = await SqliteSessionStore.open(join(paths.userData, 'atelier.db'));
+  } catch (error) {
+    log('historique SQLite indisponible, conversations gardées en mémoire', error);
+    store = new InMemorySessionStore();
+  }
+
   const permissions = new PermissionBroker();
   const chats = new ChatManager({
-    store: new InMemorySessionStore(),
+    store,
     permissions,
     agents,
     emit: (event) => {
@@ -277,6 +287,7 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
       monitor.stop();
       await chats.stopAll();
       await Promise.allSettled([mcp.stop(), sandbox.stop()]);
+      store.close?.();
     },
   };
 }

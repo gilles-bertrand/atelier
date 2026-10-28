@@ -1,3 +1,6 @@
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { TurnResult } from '@atelier/agent-core';
 import type { AgentEvent, AgentEventSink } from '@atelier/shared';
@@ -9,7 +12,8 @@ import {
   type NewAgentSession,
 } from './chat-manager.js';
 import { PermissionBroker } from './permission-broker.js';
-import { InMemorySessionStore } from './session-store.js';
+import { InMemorySessionStore, type SessionStore } from './session-store.js';
+import { SqliteSessionStore } from './sqlite-store.js';
 
 type Mode = 'ok' | 'error' | 'hang';
 
@@ -71,7 +75,11 @@ class FakeAgentSession implements AgentSessionLike {
   }
 }
 
-function setup(mode: () => Mode, failCreate = false) {
+function setup(
+  mode: () => Mode,
+  failCreate = false,
+  store: SessionStore = new InMemorySessionStore(),
+) {
   const events: AgentEvent[] = [];
   const llmErrors: string[] = [];
   const sent: SentTurn[] = [];
@@ -90,7 +98,6 @@ function setup(mode: () => Mode, failCreate = false) {
       return Promise.resolve(new FakeAgentSession(options, mode, sent));
     },
   };
-  const store = new InMemorySessionStore();
   let n = 0;
   const chats = new ChatManager({
     store,
@@ -211,5 +218,26 @@ describe('ChatManager', () => {
       { type: 'error', error: { code: 'internal', message: 'pas de serveur' } },
     ]);
     expect(() => chats.retry(session.id)).not.toThrow();
+  });
+
+  it('reprend une conversation après redémarrage avec l’historique modèle persisté', async () => {
+    const file = join(await mkdtemp(join(tmpdir(), 'atelier-resume-')), 'atelier.db');
+    const before = setup(() => 'ok', false, await SqliteSessionStore.open(file));
+    const session = before.chats.create('/w');
+    before.chats.send(session.id, 'Première question');
+    await before.wait(session.id);
+    before.store.close?.();
+
+    // « Redémarrage » : nouveau gestionnaire, même fichier.
+    const after = setup(() => 'ok', false, await SqliteSessionStore.open(file));
+    expect(after.chats.list().map((s) => s.title)).toEqual(['Première question']);
+    expect(after.chats.open(session.id).messages).toHaveLength(2);
+    after.chats.send(session.id, 'Suite');
+    await after.wait(session.id);
+    expect(after.created[0]?.history).toEqual([
+      { role: 'user', content: 'Première question' },
+      { role: 'assistant', content: 'Bonjour !' },
+    ]);
+    after.store.close?.();
   });
 });
