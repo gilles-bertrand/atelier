@@ -59,18 +59,21 @@ export interface AgentOptions {
   workspace: string;
   /** Gestionnaire de permissions (modale côté app). */
   requestPermission: PermissionHandler;
-  /** VM d'exécution, si prête. */
-  sandbox?: Sandbox;
+  /**
+   * VM d'exécution, si prête. Un getter est relu au début de chaque tour (la VM
+   * peut devenir prête après la création de la session) : `undefined` = pas de VM.
+   */
+  sandbox?: Sandbox | (() => Sandbox | undefined);
   /** Fenêtre de contexte réelle (lue via `/api/show`). */
   contextWindow: number;
   /** Étapes max par tour (défaut {@link MAX_STEPS}). */
   maxSteps?: number;
-  /** Skills listés dans le prompt système. */
-  skills?: readonly SkillInfo[];
+  /** Skills listés dans le prompt système (getter relu à chaque tour). */
+  skills?: readonly SkillInfo[] | (() => readonly SkillInfo[]);
   /** Prompt système complet (remplace celui construit par défaut). */
   instructions?: string;
-  /** Consignes additionnelles ajoutées au prompt par défaut. */
-  extraInstructions?: string;
+  /** Consignes additionnelles ajoutées au prompt par défaut (getter relu à chaque tour). */
+  extraInstructions?: string | (() => string | undefined);
   /** Libellés des demandes de permission. */
   describePermission?: PermissionDescriber;
   /** URL du serveur (messages d'erreur). */
@@ -84,6 +87,12 @@ export interface AgentOptions {
 }
 
 /** Paramètres d'un tour. */
+/** Options de {@link AgentSession.send}. */
+export interface SendOptions {
+  /** Identifiant du tour (défaut : `<sessionId>-<n>`). */
+  turnId?: string;
+}
+
 export interface RunTurnOptions {
   sessionId: string;
   turnId: string;
@@ -128,17 +137,26 @@ export class Agent {
     return this.#options;
   }
 
+  /** VM disponible maintenant (résout le getter éventuel). */
+  currentSandbox(): Sandbox | undefined {
+    const { sandbox } = this.#options;
+    return typeof sandbox === 'function' ? sandbox() : sandbox;
+  }
+
   /** Prompt système effectif. */
-  systemPrompt(): string {
+  systemPrompt(sandbox: Sandbox | undefined = this.currentSandbox()): string {
     const o = this.#options;
     if (o.instructions !== undefined) return o.instructions;
+    const skills = typeof o.skills === 'function' ? o.skills() : o.skills;
+    const extra =
+      typeof o.extraInstructions === 'function' ? o.extraInstructions() : o.extraInstructions;
     return buildSystemPrompt({
       workspace: o.workspace,
       now: o.now?.() ?? new Date(),
       toolNames: o.registry.list().map((t) => t.name),
-      sandboxAvailable: o.sandbox !== undefined,
-      ...(o.skills ? { skills: o.skills } : {}),
-      ...(o.extraInstructions !== undefined ? { extra: o.extraInstructions } : {}),
+      sandboxAvailable: sandbox !== undefined,
+      ...(skills ? { skills } : {}),
+      ...(extra !== undefined && extra !== '' ? { extra } : {}),
     });
   }
 
@@ -196,6 +214,7 @@ export class Agent {
           base = (await compact(base)) ?? base;
         }
 
+        const sandbox = this.currentSandbox();
         const runtime: ToolRuntime = {
           sessionId: turn.sessionId,
           workspace: o.workspace,
@@ -204,7 +223,7 @@ export class Agent {
           emitDisplay: (toolCallId, display) => {
             emit({ type: 'tool_display', toolCallId, display });
           },
-          ...(o.sandbox ? { sandbox: o.sandbox } : {}),
+          ...(sandbox ? { sandbox } : {}),
           ...(o.describePermission ? { describePermission: o.describePermission } : {}),
         };
         const tools: ToolSet = toAiSdkTools(o.registry, runtime);
@@ -222,7 +241,7 @@ export class Agent {
 
         const result = streamText({
           model: o.model,
-          instructions: this.systemPrompt(),
+          instructions: this.systemPrompt(sandbox),
           messages: base,
           tools,
           ...(lazy ? { activeTools: activeTools() } : {}),
@@ -426,11 +445,14 @@ export class AgentSession {
     input: UserContent,
     emit: AgentEventSink,
     abortSignal?: AbortSignal,
+    options: SendOptions = {},
   ): Promise<TurnResult> {
     this.#turn += 1;
     const result = await this.agent.runTurn({
       sessionId: this.sessionId,
-      turnId: `${this.sessionId}-${this.#turn}`,
+      // Défaut : compteur local, qui repart à 1 si la session est recréée ; l'app
+      // fournit un identifiant unique (renvoyé par `agent:send`).
+      turnId: options.turnId ?? `${this.sessionId}-${this.#turn}`,
       history: this.#history,
       input,
       emit,

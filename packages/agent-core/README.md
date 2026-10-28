@@ -16,7 +16,39 @@ pnpm --filter agent-core dev -- --dir ./demo -p "Résume notes-reunion.md" --yes
 
 `./demo` (relatif à `packages/agent-core`) contient deux fichiers d'exemple ; ce que l'agent y produit n'est pas suivi par git. ⚠️ En M1, `bash` tourne **sans isolation** sur la machine (`LocalSandbox`) : `--no-bash` pour le couper.
 
-## Intégration (process main)
+## Fabrique pour le process main (`createAgentRuntime`)
+
+La façon recommandée de brancher l'agent dans Electron. agent-core ne dépend pas de `web`, `mcp-bridge`, `skills` ni `sandbox` : l'app construit leurs instances et les passe.
+
+```ts
+import { createAgentRuntime } from '@atelier/agent-core';
+
+// Au démarrage, puis à chaque changement des Réglages LLM. Ne lève que pour une URL invalide :
+// serveur injoignable → contextWindowSource 'fallback' (32 768, ou numCtx), à rafraîchir plus tard.
+const runtime = await createAgentRuntime({
+  llm: { baseUrl, model, token, thinking, numCtx },
+  tools: [...createWebTools(webOptions), ...documentsTools], // remplacent un natif de même nom
+  sessionTools: (registry) => [toolSearchTool({ source: mcp, registry })], // registre de LA session
+  lazyTools: () => mcp.definitions(),
+  sandbox: () => (vmReady ? lima : undefined), // relu à chaque tour
+  skills: () => skills, // tableau ou getter
+  extraInstructions: () => mcpPromptSection(mcp),
+  log,
+});
+await runtime.refreshContextWindow(); // quand le serveur revient
+
+const session = runtime.createSession({
+  sessionId,
+  workspace,
+  requestPermission, // withSessionMemory appliqué par session
+  history, // TurnResult.messages persistés (repli : chatMessagesToModelMessages)
+});
+const turnId = randomUUID();
+const result = await session.send(text, emit, abort.signal, { turnId });
+persist(result.messages); // historique modèle fidèle (compaction, paires outil/résultat)
+```
+
+## Intégration manuelle (process main)
 
 ```ts
 import {
@@ -75,6 +107,7 @@ const result = await session.send(
 | `prompt/system-prompt.ts` | Prompt système généraliste (rôle, dossier, date, skills, sécurité, recherche web).                                                                                        |
 | `paths.ts`                | `resolveWorkspacePath` : vérification stricte des chemins, symlinks compris (réutilisé par `documents`).                                                                  |
 | `tools/*`                 | `read_file` (texte, M1), `write_file`, `edit_file`, `list_dir`, `glob`, `grep`, `todo_write`, `present_file`, `bash`, adaptateur registre → `tools` AI SDK.               |
+| `runtime.ts`              | `createAgentRuntime` : LLM + contexte une fois, puis `createSession` (registre par session, permissions mémorisées).                                                      |
 | `local-sandbox.ts`        | `Sandbox` temporaire via `child_process` (M1, sans isolation).                                                                                                            |
 
 ## Permissions
