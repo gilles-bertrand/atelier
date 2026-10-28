@@ -37,7 +37,10 @@ describe('onboarding', () => {
 
     // 1. Serveur
     const url = await screen.findByLabelText('Adresse du serveur');
-    expect(screen.getByRole('heading', { name: 'Connexion au serveur' })).toHaveFocus();
+    // Le focus est posé par un effet : on l'attend (CI chargée).
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Connexion au serveur' })).toHaveFocus();
+    });
     await user.type(url, 'https://llm.exemple.fr');
     await user.type(screen.getByLabelText('Jeton d’accès (token)'), 'secret-token');
     expect(screen.getByRole('button', { name: 'Continuer' })).toBeDisabled();

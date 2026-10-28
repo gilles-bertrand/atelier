@@ -162,7 +162,9 @@ describe('conversation', () => {
       },
     });
     const dialog = screen.getByRole('alertdialog', { name: 'Écrire le fichier recap.xlsx' });
-    expect(within(dialog).getByRole('button', { name: 'Refuser' })).toHaveFocus();
+    await waitFor(() => {
+      expect(within(dialog).getByRole('button', { name: 'Refuser' })).toHaveFocus();
+    });
     await user.click(within(dialog).getByRole('button', { name: 'Autoriser une fois' }));
     expect(api.callsTo('permission:respond')).toEqual([
       { requestId: 'p1', decision: 'allow_once' },
