@@ -5,6 +5,7 @@
 import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
+import { importAttachments } from '@atelier/documents';
 import { parseMcpConfigText, type McpManager } from '@atelier/mcp-bridge';
 import { listModels, testConnection, type FetchFunction } from '@atelier/agent-core';
 import { loadSkills } from '@atelier/skills';
@@ -12,7 +13,6 @@ import { AtelierError, type AppHealth, type SecretId } from '@atelier/shared';
 import type { IpcHandlers } from './ipc.js';
 import type { ServerMonitor } from './llm/server-monitor.js';
 import type { ChatManager } from './runtime/chat-manager.js';
-import { importAttachments } from './runtime/attachments.js';
 import { resolveOpenable } from './safe-open.js';
 import type { PermissionBroker } from './runtime/permission-broker.js';
 import type { SandboxManager } from './runtime/sandbox-manager.js';
@@ -184,7 +184,8 @@ export function createHandlers(s: HandlerServices): IpcHandlers {
     // --- Fichiers
     'attachment:import': ({ sessionId, hostPaths }) => {
       const { session } = s.chats.open(sessionId);
-      return importAttachments(session.workspace, hostPaths);
+      // Copie dans `.atelier/uploads/`, type détecté par signature (documents).
+      return importAttachments(hostPaths, session.workspace);
     },
     'file:open': async ({ absolutePath }) => {
       const message = await s.shell.openPath(
