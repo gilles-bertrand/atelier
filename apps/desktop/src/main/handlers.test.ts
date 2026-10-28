@@ -100,3 +100,27 @@ describe('llm:test-connection : le token enregistré ne quitte pas son serveur',
     ).toBeUndefined();
   });
 });
+
+describe('attachment:import', () => {
+  it('copie les fichiers dans .atelier/uploads avec le type détecté', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'atelier-ws-'));
+    const source = join(await mkdtemp(join(tmpdir(), 'atelier-src-')), 'facture.pdf');
+    await writeFile(source, '%PDF-1.4\n%test\n');
+    const s = {
+      chats: {
+        open: () => ({
+          session: { id: 's', title: '', workspace, createdAt: '', updatedAt: '' },
+          messages: [],
+        }),
+      },
+    } as unknown as HandlerServices;
+    const [attachment] =
+      (await createHandlers(s)['attachment:import']?.({ sessionId: 's', hostPaths: [source] })) ??
+      [];
+    expect(attachment).toMatchObject({
+      path: '.atelier/uploads/facture.pdf',
+      name: 'facture.pdf',
+      mimeType: 'application/pdf',
+    });
+  });
+});
