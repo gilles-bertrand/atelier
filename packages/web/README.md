@@ -33,7 +33,7 @@ const registry = createDefaultRegistry([...createWebTools({ provider, fallbacks 
 
 ## `web_fetch({ url })`
 
-- Permission `conditional` : demandée une fois par domaine (`scopeKey: web_fetch:<domaine>`, `www.` retiré, `kind: 'network'`). Un gestionnaire en échec vaut refus. Une redirection vers un autre domaine redemande la permission pour ce domaine (refus → `denied`).
+- Permission `conditional` : demandée une fois par domaine (`scopeKey: web_fetch:<domaine>`, `www.` retiré, `kind: 'network'`). Un gestionnaire en échec vaut refus. Une redirection vers un autre domaine redemande la permission pour ce domaine (refus → `denied`). Le délai de 20 s est suspendu pendant la modale (le bouton stop reste actif).
 - http(s) uniquement, pas d'identifiants dans l'URL.
 - Adresses refusées : loopback, privées (RFC 1918, ULA), lien local (dont `169.254.169.254`), CGNAT/Tailscale, multicast, réservées, documentation, y compris sous forme IPv6 (IPv4 mappée, NAT64, 6to4). Vérification avant la requête, à chaque redirection (5 au maximum, suivies à la main) et **à la connexion TCP** (lookup filtré du dispatcher undici : protège du DNS rebinding).
 - Délai 20 s, 5 Mo téléchargés au maximum, User-Agent `Atelier/0.1`.

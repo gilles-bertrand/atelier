@@ -74,6 +74,51 @@ export interface FetchedPage {
   markdown: string;
 }
 
+/**
+ * Délai global d'un téléchargement, suspendable (pendant une demande de
+ * permission). Basé sur `setTimeout` : compatible avec les faux timers des tests.
+ */
+export class PausableTimeout {
+  readonly #controller = new AbortController();
+  #remaining: number;
+  #startedAt = 0;
+  #timer: NodeJS.Timeout | undefined;
+
+  constructor(ms: number) {
+    this.#remaining = ms;
+    this.resume();
+  }
+
+  get signal(): AbortSignal {
+    return this.#controller.signal;
+  }
+
+  /** Suspend le décompte (sans effet si déjà expiré ou suspendu). */
+  pause(): void {
+    if (!this.#timer) return;
+    clearTimeout(this.#timer);
+    this.#timer = undefined;
+    this.#remaining = Math.max(0, this.#remaining - (Date.now() - this.#startedAt));
+  }
+
+  /** Reprend le décompte avec le temps restant. */
+  resume(): void {
+    if (this.#timer || this.#controller.signal.aborted) return;
+    this.#startedAt = Date.now();
+    this.#timer = setTimeout(() => {
+      this.#timer = undefined;
+      this.#controller.abort(new DOMException('Délai dépassé', 'TimeoutError'));
+    }, this.#remaining);
+    this.#timer.unref();
+  }
+
+  /** Arrête définitivement le décompte. */
+  clear(): void {
+    if (this.#timer) clearTimeout(this.#timer);
+    this.#timer = undefined;
+  }
+}
+
 let defaultFetch: FetchLike | undefined;
 
 /** `fetch` undici dont la connexion TCP refuse les adresses non publiques. */
@@ -168,8 +213,10 @@ export async function fetchPage(
   const fetchImpl = options.fetch ?? guardedFetch();
   const resolveHost = options.resolveHost ?? defaultResolveHost;
   const timeoutMs = options.timeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS;
-  const timeout = AbortSignal.timeout(timeoutMs);
-  const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
+  const timeout = new PausableTimeout(timeoutMs);
+  const signal = options.signal
+    ? AbortSignal.any([options.signal, timeout.signal])
+    : timeout.signal;
 
   let url = parseFetchableUrl(rawUrl);
   try {
@@ -201,10 +248,22 @@ export async function fetchPage(
           );
         }
         const next = parseFetchableUrl(new URL(location, url).href);
-        if (options.authorizeRedirect && !(await options.authorizeRedirect(next, url))) {
-          throw new AtelierError('web/fetch_failed', `Redirection vers ${next.href} refusée.`, {
-            details: { redirectDenied: true, url: next.href },
-          });
+        if (options.authorizeRedirect) {
+          // Le temps de réponse de l'utilisateur (modale) ne compte pas dans le délai ;
+          // l'annulation du tour (options.signal) reste active pendant la modale.
+          timeout.pause();
+          let allowed: boolean;
+          try {
+            allowed = await options.authorizeRedirect(next, url);
+          } finally {
+            timeout.resume();
+          }
+          options.signal?.throwIfAborted();
+          if (!allowed) {
+            throw new AtelierError('web/fetch_failed', `Redirection vers ${next.href} refusée.`, {
+              details: { redirectDenied: true, url: next.href },
+            });
+          }
         }
         url = next;
         continue;
@@ -232,6 +291,7 @@ export async function fetchPage(
         await readLimited(response, options.maxDownloadBytes ?? DEFAULT_MAX_DOWNLOAD_BYTES),
         contentType,
       );
+      timeout.clear();
       if (isHtml) {
         const page = extractHtml(body, url.href);
         return { url: url.href, contentType: type, ...page };
@@ -239,9 +299,10 @@ export async function fetchPage(
       return { url: url.href, contentType: type, markdown: body.trim() };
     }
   } catch (error) {
+    timeout.clear();
     if (isAtelierError(error)) throw error;
     if (options.signal?.aborted) throw error;
-    if (timeout.aborted) {
+    if (timeout.signal.aborted) {
       throw new AtelierError(
         'web/fetch_failed',
         `Délai dépassé (${Math.round(timeoutMs / 1000)} s).`,

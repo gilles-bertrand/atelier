@@ -23,6 +23,7 @@ export {
   DEFAULT_MAX_DOWNLOAD_BYTES,
   DEFAULT_USER_AGENT,
   MAX_REDIRECTS,
+  PausableTimeout,
   WEB_FETCH_MAX_OUTPUT_BYTES,
   describeWebFetch,
   fetchPage,
