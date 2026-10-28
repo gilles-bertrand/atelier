@@ -45,3 +45,25 @@ describe('mcpToolName', () => {
     expect(mcpToolName('git hub', 'create.issue')).toBe('mcp__git_hub__create_issue');
   });
 });
+
+describe('ToolDefinition.describePermission', () => {
+  it("reçoit l'entrée typée et produit un libellé", () => {
+    const createIssue = defineTool({
+      name: 'mcp__github__create_issue',
+      description: 'Crée une issue.',
+      inputSchema: z.object({ title: z.string() }),
+      permission: 'always',
+      source: 'mcp',
+      describePermission: ({ title }) => ({
+        kind: 'mcp_write',
+        title: `Créer l'issue « ${title} » sur GitHub`,
+      }),
+      execute: () => Promise.resolve({ ok: false, denied: true, content: 'Refusé.' }),
+    });
+    const registry = new InMemoryToolRegistry([createIssue]);
+    const tool = registry.get('mcp__github__create_issue');
+    expect(tool?.describePermission?.({ title: 'Bug login' }).title).toBe(
+      "Créer l'issue « Bug login » sur GitHub",
+    );
+  });
+});

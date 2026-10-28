@@ -7,7 +7,7 @@
  * `streamText` est faite par `agent-core` (qui injecte le contexte d'exécution).
  */
 import type { z } from 'zod';
-import type { PermissionHandler } from './permissions.js';
+import type { PermissionDescription, PermissionHandler } from './permissions.js';
 import type { Sandbox } from './sandbox.js';
 import type { ToolDisplay } from './messages.js';
 import { AtelierError } from './errors.js';
@@ -43,7 +43,9 @@ export interface ToolExecutionContext {
   sandbox?: Sandbox;
   /**
    * Publie un affichage riche dans le chat pendant l'exécution
-   * (ex. carte de fichier pour `present_file`).
+   * (ex. carte de fichier pour `present_file`, progression d'un outil long).
+   * `agent-core` le relaie en event `tool_display` ; l'affichage final reste
+   * celui de `ToolOutput.display`.
    */
   emitDisplay?: (display: ToolDisplay) => void;
 }
@@ -58,6 +60,11 @@ export interface ToolOutput {
   ok: boolean;
   /** Texte renvoyé au modèle (toujours présent, tronqué par l'outil si besoin). */
   content: string;
+  /**
+   * Vrai si l'utilisateur a refusé la permission (implique `ok: false`).
+   * Reporté tel quel dans `ToolResultEvent.denied` (statut « refusé » dans l'UI).
+   */
+  denied?: boolean;
   /** Affichage riche optionnel pour l'UI (jamais envoyé au modèle). */
   display?: ToolDisplay;
 }
@@ -89,6 +96,13 @@ export interface ToolDefinition<I = unknown> {
   permission: ToolPermission;
   /** Provenance de l'outil. */
   source: ToolSource;
+  /**
+   * Libellé de la demande de permission pour cette entrée, en français et lisible
+   * par un non-développeur (ex. « Créer l'issue “Bug login” sur GitHub »).
+   * Utilisé par `agent-core` pour les outils `permission: 'always'` ; sans lui,
+   * un libellé générique est produit. Doit être pur et rapide (pas d'I/O).
+   */
+  describePermission?(input: I): PermissionDescription;
   /**
    * Exécute l'outil. Ne doit lever que pour des erreurs inattendues : les cas
    * métier (refus, fichier introuvable…) renvoient `{ ok: false, content }`.

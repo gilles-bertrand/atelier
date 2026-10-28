@@ -2,7 +2,7 @@
 
 **Squelette prêt, les agents peuvent démarrer.**
 
-_Dernière mise à jour : 2026-10-27, Lead._
+_Dernière mise à jour : 2026-10-28, Lead._
 
 ## État par jalon
 
@@ -43,10 +43,13 @@ _Dernière mise à jour : 2026-10-27, Lead._
 
 _Format : date, agent, type proposé, raison, packages impactés._
 
-- **2026-10-27, Core : `ToolOutput.denied?: boolean`.** `ToolResultEvent` porte `denied`, mais `ToolOutput` ne permet pas à un outil de le signaler. En attendant : type local `ExecutedToolOutput` dans agent-core. Impact : agent-core, mcp-bridge, web (outils à permission).
-- **2026-10-27, Core : `ToolDefinition.describePermission?(input): { kind, title, detail?, scopeKey? }`.** Les outils `permission: 'always'` sont protégés génériquement par agent-core, mais seul l'outil connaît un bon libellé français (« Créer l'issue X sur GitHub »). En attendant : `PermissionDescriber` injectable dans `AgentOptions.describePermission` (libellés natifs + repli générique `Utiliser l'outil …`, `kind: 'mcp_write'` pour `mcp__*`). Impact : agent-core, mcp-bridge, web.
-- **2026-10-27, Core : event `tool_display` `{ toolCallId, display }`.** `ToolExecutionContext.emitDisplay` n'a aucun event correspondant : l'affichage n'arrive qu'avec `tool_result`. Utile pour une carte affichée pendant un outil long. En attendant : `emitDisplay` non branché par la boucle. Impact : agent-core, UI.
-- **2026-10-27, Core : event `llm_retry` `{ attempt, delayMs, reason }`** (ou un `ServerStatus` poussé) pour afficher « Reconnexion au serveur… » pendant les nouvelles tentatives réseau. En attendant : rappel `onRetry` côté provider (journal). Impact : agent-core, UI.
+- ✅ **2026-10-28, acceptées par Gilles et le Lead (PR `feat/lead-shared-tool-contract`)**, les 4 demandes de Core du 2026-10-27 :
+  1. `ToolOutput.denied?: boolean`, reporté dans `ToolResultEvent.denied`. → Core retire `ExecutedToolOutput`.
+  2. `ToolDefinition.describePermission?(input): PermissionDescription` (nouveau type partagé `PermissionDescription` = `kind`, `title`, `detail?`, `scopeKey?`). Priorité : `describePermission` de l'outil, puis le describer d'agent-core, puis le repli générique. → mcp-bridge et web fournissent leurs libellés.
+  3. Event `tool_display` `{ toolCallId, display }`, émis via `ToolExecutionContext.emitDisplay`. Le `display` de `tool_result` fait foi à la fin. → Core le branche, l'UI met à jour le bloc d'outil.
+  4. Event `llm_retry` `{ attempt, maxAttempts?, delayMs, reason }` : « Reconnexion au serveur… » dans le chat du tour, sans toucher à `ServerStatus`. → Core le branche sur `onRetry`, l'UI l'affiche.
+
+  ⚠️ `AgentEvent` gagne 2 membres : tout `switch` exhaustif sur `event.type` (UI, persistance) doit les traiter.
 
 ## Points ouverts / risques
 

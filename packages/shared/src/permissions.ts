@@ -38,6 +38,16 @@ export interface PermissionRequest {
 }
 
 /**
+ * Partie descriptive d'une {@link PermissionRequest}, celle que seul l'outil sait
+ * produire (le reste — `id`, `sessionId`, `toolCallId`, `toolName`, `input` —
+ * est complété par `agent-core`). Voir `ToolDefinition.describePermission`.
+ */
+export type PermissionDescription = Pick<
+  PermissionRequest,
+  'kind' | 'title' | 'detail' | 'scopeKey'
+>;
+
+/**
  * Gestionnaire de permissions injecté dans les outils.
  * Côté app, il ouvre la modale (event `permission_request`) et attend la réponse ;
  * en test ou en CLI, il peut répondre automatiquement.
