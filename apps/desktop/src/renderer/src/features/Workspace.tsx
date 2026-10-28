@@ -11,6 +11,7 @@ import { ChatProvider, useChat } from '@renderer/state/chat-store';
 import { ChatView } from './chat/ChatView';
 import { PermissionDialog } from './chat/PermissionDialog';
 import { Home } from './home/Home';
+import { Settings } from './settings/Settings';
 
 function PendingPermission({ current }: { current: SessionSummary | undefined }) {
   const { state, actions } = useChat();
@@ -37,6 +38,10 @@ function WorkspaceViews() {
   const { actions } = useChat();
   const [current, setCurrent] = useState<SessionSummary | undefined>();
   const [error, setError] = useState<string | undefined>();
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const openSettings = (): void => {
+    setSettingsOpen(true);
+  };
 
   const newConversation = async (workspace: string): Promise<void> => {
     try {
@@ -48,7 +53,13 @@ function WorkspaceViews() {
 
   return (
     <>
-      {current ? (
+      {settingsOpen ? (
+        <Settings
+          onClose={() => {
+            setSettingsOpen(false);
+          }}
+        />
+      ) : current ? (
         <ChatView
           key={current.id}
           session={current}
@@ -56,10 +67,12 @@ function WorkspaceViews() {
             setCurrent(undefined);
           }}
           onNewConversation={() => void newConversation(current.workspace)}
+          onOpenSettings={openSettings}
         />
       ) : (
         <Home
           onOpen={setCurrent}
+          onOpenSettings={openSettings}
           onDeleted={(sessionId) => {
             actions.forget(sessionId);
           }}

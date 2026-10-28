@@ -42,7 +42,7 @@ export function applySettingsPatch(current: AppSettings, patch: AppSettingsPatch
     ...(patch.privacyAcceptedAt !== undefined
       ? { privacyAcceptedAt: patch.privacyAcceptedAt }
       : {}),
-    llm: { ...current.llm, ...stripUndefined(patch.llm) },
+    llm: clearOptionalLlm({ ...current.llm, ...stripUndefined(patch.llm) }),
     sandbox: { ...current.sandbox, ...stripUndefined(patch.sandbox) },
     search: { ...current.search, ...stripUndefined(patch.search) },
   };
@@ -78,6 +78,20 @@ export function validateSettings(settings: AppSettings): void {
   if (settings.skillsDir.trim() === '' || settings.mcpConfigPath.trim() === '') {
     throw invalid('Les chemins des skills et de mcp.json sont obligatoires.');
   }
+}
+
+/**
+ * `visionModel: ''` et `numCtx: 0` dans un patch signifient « revenir à
+ * l'automatique » (modèle principal, contexte lu sur le serveur) : un patch ne
+ * peut pas transporter `undefined`.
+ */
+function clearOptionalLlm(llm: AppSettings['llm']): AppSettings['llm'] {
+  const { visionModel, numCtx, ...rest } = llm;
+  return {
+    ...rest,
+    ...(visionModel !== undefined && visionModel.trim() !== '' ? { visionModel } : {}),
+    ...(numCtx !== undefined && numCtx !== 0 ? { numCtx } : {}),
+  };
 }
 
 function invalid(message: string): AtelierError {

@@ -1,0 +1,86 @@
+/** Écran des Réglages : navigation par rubrique, une rubrique affichée à la fois. */
+import { useEffect, useRef, useState } from 'react';
+import { ArrowLeft } from 'lucide-react';
+import { ServerStatusBadge } from '@renderer/components/status/ServerStatusBadge';
+import { Button } from '@renderer/components/ui/button';
+import { cn } from '@renderer/lib/utils';
+import { useApp } from '@renderer/state/app-state';
+import { McpSettings, SkillsSettings } from './ExtensionsSettings';
+import { SandboxSettings } from './SandboxSettings';
+import { SearchSettings } from './SearchSettings';
+import { ServerSettings } from './ServerSettings';
+
+const SECTIONS = [
+  { id: 'server', label: 'Serveur et modèle' },
+  { id: 'sandbox', label: 'Machine isolée' },
+  { id: 'search', label: 'Recherche web' },
+  { id: 'skills', label: 'Skills' },
+  { id: 'mcp', label: 'Connecteurs' },
+] as const;
+
+type SectionId = (typeof SECTIONS)[number]['id'];
+
+export function Settings({ onClose }: { onClose: () => void }) {
+  const { state } = useApp();
+  const [section, setSection] = useState<SectionId>('server');
+  const heading = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    heading.current?.focus();
+  }, []);
+
+  return (
+    <div
+      className="flex h-full flex-col"
+      onKeyDown={(e) => {
+        if (e.key === 'Escape' && !(e.target instanceof HTMLTextAreaElement)) onClose();
+      }}
+    >
+      <header className="flex h-12 shrink-0 items-center gap-2 border-b pl-20 pr-4 [-webkit-app-region:drag]">
+        <div className="flex flex-1 items-center gap-2 [-webkit-app-region:no-drag]">
+          <Button variant="ghost" size="icon" aria-label="Fermer les réglages" onClick={onClose}>
+            <ArrowLeft className="size-4" aria-hidden />
+          </Button>
+          <h1 ref={heading} tabIndex={-1} className="text-sm font-medium outline-none">
+            Réglages
+          </h1>
+        </div>
+        <ServerStatusBadge status={state.server} className="[-webkit-app-region:no-drag]" />
+      </header>
+      <div className="flex min-h-0 flex-1">
+        <nav aria-label="Rubriques des réglages" className="w-56 shrink-0 border-r bg-muted/20 p-3">
+          <ul className="space-y-1">
+            {SECTIONS.map((s) => (
+              <li key={s.id}>
+                <button
+                  type="button"
+                  aria-current={section === s.id ? 'page' : undefined}
+                  onClick={() => {
+                    setSection(s.id);
+                  }}
+                  className={cn(
+                    'w-full rounded-md px-3 py-2 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                    section === s.id
+                      ? 'bg-accent font-medium'
+                      : 'text-muted-foreground hover:bg-accent/60',
+                  )}
+                >
+                  {s.label}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </nav>
+        <main className="flex-1 overflow-y-auto">
+          <div className="mx-auto w-full max-w-2xl space-y-6 px-6 py-6">
+            {section === 'server' ? <ServerSettings /> : null}
+            {section === 'sandbox' ? <SandboxSettings /> : null}
+            {section === 'search' ? <SearchSettings /> : null}
+            {section === 'skills' ? <SkillsSettings /> : null}
+            {section === 'mcp' ? <McpSettings /> : null}
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+}

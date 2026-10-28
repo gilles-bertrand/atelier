@@ -71,6 +71,18 @@ export function installFakeApi(handlers: FakeHandlers = {}): FakeApi {
     'session:list': () => [],
   };
   const all: FakeHandlers = { ...base, ...handlers };
+  // Un `settings:get` fourni par le test devient l'état de départ de `settings:update`.
+  const customGet = handlers['settings:get'];
+  if (customGet && !handlers['settings:update']) {
+    let seeded = false;
+    all['settings:get'] = async () => {
+      if (!seeded) {
+        settings = await customGet(undefined);
+        seeded = true;
+      }
+      return settings;
+    };
+  }
   const listeners = new Map<string, Set<(payload: unknown) => void>>();
   const calls: FakeApi['calls'] = [];
 
