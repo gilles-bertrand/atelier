@@ -88,7 +88,7 @@ _Format : date, agent, type proposé, raison, packages impactés._
 - **MCP `readOnlyHint`** : annotation déclarée par le serveur, non vérifiable ; on fait confiance aux serveurs installés par l'utilisateur (voir README du bridge).
 
 - `Caddyfile` validé syntaxiquement à la main seulement (pas de daemon Docker en local) : à valider au premier déploiement (`docker compose up -d && ./healthcheck.sh`).
-- Repli vLLM : `/api/tags` et `/api/show` n'existent pas dans vLLM, d'où un repli sur `/v1/models` à prévoir (Core + UI), voir `docs/SERVER.md` §5.
+- ✅ Repli vLLM côté Core (PR `feat/core-vllm-fallback`) : `listModels` / `testConnection` / `checkServerHealth` (agent-core) se rabattent sur `/v1/models` ; reste côté UI : brancher les canaux `llm:*` dessus.
 - Signature et notarisation : nécessitent un certificat « Developer ID Application » et une clé API App Store Connect (`CSC_LINK`, `APPLE_API_KEY*`).
 - Sandbox : le port hôte 8888 doit être libre (sinon Lima ne forwarde pas SearXNG ; à signaler dans les diagnostics). Le graphique Excel du skill `xlsx` est validé structurellement (schéma OOXML, xmllint, relecture exceljs) mais pas encore ouvert dans Excel : à faire par QA.
 - Sandbox : règle réseau en `reject` plutôt que `drop` (même blocage, échec immédiat au lieu d'un blocage de l'agent jusqu'au délai) ; le DNS et SearXNG sont aussi coupés pour `agent` quand le réseau est désactivé (pas d'exfiltration par requête DNS ou recherche).

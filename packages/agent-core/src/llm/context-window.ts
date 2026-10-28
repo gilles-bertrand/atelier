@@ -116,10 +116,19 @@ async function fetchVllmContextWindow(
   options: ContextWindowOptions,
   doFetch: FetchFunction,
 ): Promise<ContextWindowInfo> {
-  const response = await doFetch(`${openAiCompatibleBaseUrl(options.baseUrl)}/models`, {
-    headers: headers(options.token),
-    ...(options.signal ? { signal: options.signal } : {}),
-  });
+  const url = `${openAiCompatibleBaseUrl(options.baseUrl)}/models`;
+  let response: Response;
+  try {
+    response = await doFetch(url, {
+      headers: headers(options.token),
+      ...(options.signal ? { signal: options.signal } : {}),
+    });
+  } catch (error) {
+    throw toLlmError(error, url);
+  }
+  if (response.status === 401 || response.status === 403) {
+    throw new AtelierError('llm/unauthorized', `Jeton refusé par le serveur LLM (${url}).`);
+  }
   if (!response.ok) return { contextWindow: MIN_CONTEXT_WINDOW, source: 'assumed' };
   const body: unknown = await response.json();
   const data =
