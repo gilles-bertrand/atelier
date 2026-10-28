@@ -243,6 +243,41 @@ describe('permissions', () => {
     });
   });
 
+  it('un describePermission qui lève ou renvoie un libellé vide passe au niveau suivant', async () => {
+    await withTempDir(async (ws) => {
+      const perms = permissions('deny');
+      const broken = {
+        name: 'mcp__crm__update',
+        description: 'x',
+        inputSchema: writeFileTool.inputSchema,
+        permission: 'always' as const,
+        source: 'mcp' as const,
+        describePermission: (): never => {
+          throw new Error('bug du serveur MCP');
+        },
+        execute: () => Promise.resolve({ ok: true, content: 'fait' }),
+      };
+      const base = { sessionId: 's', workspace: ws, abortSignal: new AbortController().signal };
+      const out = await executeTool(broken, { id: 1 }, 'c1', { ...base, requestPermission: perms });
+      // L'appel n'échoue pas : la permission est demandée avec le libellé générique.
+      expect(out).toMatchObject({ ok: false, denied: true });
+      await executeTool(
+        { ...broken, describePermission: () => ({ kind: 'other' as const, title: '  ' }) },
+        { id: 2 },
+        'c2',
+        {
+          ...base,
+          requestPermission: perms,
+          describePermission: () => ({ kind: 'mcp_write', title: 'Mettre à jour le CRM' }),
+        },
+      );
+      expect(perms.requests.map((r) => r.title)).toEqual([
+        "Utiliser l'outil mcp__crm__update",
+        'Mettre à jour le CRM',
+      ]);
+    });
+  });
+
   it('withSessionMemory mémorise allow_session par scopeKey', async () => {
     const inner = permissions('allow_session');
     const handler = withSessionMemory(inner);
