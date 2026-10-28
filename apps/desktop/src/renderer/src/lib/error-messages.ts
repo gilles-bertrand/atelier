@@ -16,6 +16,9 @@ const MESSAGES: Record<AtelierErrorCode, string> = {
   'agent/max_steps':
     'L’assistant s’est arrêté après trop d’étapes. Reformulez ou découpez la demande.',
   'agent/invalid_tool_call': 'L’assistant a mal formulé une action. Réessayez.',
+  'agent/busy': 'L’assistant travaille déjà sur une demande. Attendez la fin ou arrêtez-la.',
+  'session/not_found': 'Cette conversation n’existe plus.',
+  'settings/invalid': 'Ce réglage n’est pas valide.',
   'tool/not_found': 'Action inconnue.',
   'tool/invalid_input': 'Paramètres d’action invalides.',
   'tool/path_outside_workspace': 'Ce fichier est en dehors du dossier de travail.',

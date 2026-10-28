@@ -17,7 +17,7 @@ import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { AtelierError } from '@atelier/shared';
+import { AtelierError, type McpConfigIssue } from '@atelier/shared';
 
 /** Serveur lancé localement (processus enfant, stdio). */
 export interface McpStdioServerConfig {
@@ -40,13 +40,8 @@ export interface McpHttpServerConfig {
 /** Configuration d'un serveur MCP. */
 export type McpServerConfig = McpStdioServerConfig | McpHttpServerConfig;
 
-/** Erreur de configuration propre à un serveur. */
-export interface McpConfigIssue {
-  /** Nom du serveur concerné. */
-  server: string;
-  /** Message en français. */
-  message: string;
-}
+/** Erreur de configuration propre à un serveur (type promu dans `@atelier/shared`). */
+export type { McpConfigIssue } from '@atelier/shared';
 
 /** Configuration lue et validée. */
 export interface McpConfig {

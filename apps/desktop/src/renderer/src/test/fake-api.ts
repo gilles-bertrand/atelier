@@ -96,8 +96,16 @@ export function installFakeApi(handlers: FakeHandlers = {}): FakeApi {
       listeners.set(channel, set);
       return () => set.delete(listener);
     },
+    // Comme le preload : les chemins hôte ne viennent jamais du renderer (ici, le nom du File).
+    importDroppedFiles: (sessionId: string, files: readonly File[]) =>
+      api.invoke('attachment:import' as IpcInvokeChannel, {
+        sessionId,
+        hostPaths: files.map((file) => `/fake/${file.name}`),
+      }),
     platform: { os: 'darwin', arch: 'arm64', appVersion: '0.0.0-test' },
-  } as unknown as AtelierApi;
+  } as unknown as AtelierApi & {
+    invoke: (channel: IpcInvokeChannel, request?: unknown) => Promise<IpcResult<unknown>>;
+  };
 
   Object.defineProperty(window, 'atelier', { value: api, configurable: true });
 

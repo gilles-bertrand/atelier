@@ -11,6 +11,7 @@ export * from './errors.js';
 export * from './events.js';
 export * from './ipc.js';
 export * from './llm.js';
+export * from './mcp.js';
 export * from './messages.js';
 export * from './permissions.js';
 export * from './sandbox.js';
