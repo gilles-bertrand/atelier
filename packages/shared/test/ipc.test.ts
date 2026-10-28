@@ -22,5 +22,6 @@ describe('canaux IPC', () => {
     expect(IPC_RENDERER_INVOKE_CHANNELS).toContain('mcp:status');
     expect(IPC_EVENT_CHANNELS).toContain('mcp:status');
     expect(IPC_RENDERER_INVOKE_CHANNELS).toContain('dialog:choose-directory');
+    expect(IPC_RENDERER_INVOKE_CHANNELS).toContain('app:health');
   });
 });

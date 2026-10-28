@@ -23,8 +23,22 @@ import type { SkillInfo } from './skills.js';
 /** Résultat d'un appel IPC : jamais d'exception qui traverse le pont, toujours un résultat typé. */
 export type IpcResult<T> = { ok: true; value: T } | { ok: false; error: SerializedAtelierError };
 
+/**
+ * État de santé de l'application, fixé au démarrage : signale les modes
+ * dégradés à l'utilisateur (bandeau). Extensible à d'autres dégradations.
+ */
+export interface AppHealth {
+  /** Faux si l'historique est tenu en mémoire (base SQLite inutilisable) : rien ne sera conservé. */
+  historyPersistent: boolean;
+  /** Raison technique de la dégradation de l'historique (diagnostic, pas pour l'affichage brut). */
+  historyError?: string;
+}
+
 /** Canaux renderer → main, avec requête et réponse typées. */
 export interface IpcInvokeContract {
+  // --- Application
+  'app:health': { request: undefined; response: AppHealth };
+
   // --- Réglages et secrets
   'settings:get': { request: undefined; response: AppSettings };
   'settings:update': { request: AppSettingsPatch; response: AppSettings };
@@ -121,6 +135,7 @@ export type IpcEventPayload<C extends IpcEventChannel> = IpcEventContract[C];
 
 /** Liste exhaustive des canaux d'invocation (le preload refuse tout autre canal). */
 export const IPC_INVOKE_CHANNELS = [
+  'app:health',
   'settings:get',
   'settings:update',
   'secrets:set',
