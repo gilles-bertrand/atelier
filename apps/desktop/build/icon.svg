@@ -1,28 +1,36 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-  <!-- Icône d'Atelier : un petit sage vert aux longues oreilles (personnage original)
-       dans un ciel étoilé, et une étincelle (l'agent).
+  <!-- Icône d'Atelier : un orbe de verre vert flanqué de deux lames effilées,
+       silhouette abstraite d'un sage aux longues oreilles.
        Grille macOS : carré arrondi de 824 px centré, marge de 100 px pour l'ombre.
        Source de build/icon.png (1024 px), régénéré par le script « icon » de apps/desktop/package.json. -->
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#1D2547"/>
-      <stop offset="1" stop-color="#0A0D1A"/>
+      <stop offset="0" stop-color="#1C2023"/>
+      <stop offset="1" stop-color="#0A0B0D"/>
     </linearGradient>
-    <radialGradient id="glow" cx="512" cy="600" r="380" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#7FD48A" stop-opacity="0.28"/>
-      <stop offset="1" stop-color="#7FD48A" stop-opacity="0"/>
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.10"/>
+      <stop offset="0.45" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="halo" cx="512" cy="540" r="330" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5BE38C" stop-opacity="0.30"/>
+      <stop offset="1" stop-color="#5BE38C" stop-opacity="0"/>
     </radialGradient>
-    <linearGradient id="skin" gradientUnits="userSpaceOnUse" x1="0" y1="400" x2="0" y2="760">
-      <stop offset="0" stop-color="#B5D98A"/>
-      <stop offset="1" stop-color="#6E9E52"/>
+    <linearGradient id="bladeL" gradientUnits="userSpaceOnUse" x1="410" y1="0" x2="170" y2="0">
+      <stop offset="0" stop-color="#8AF0A8"/>
+      <stop offset="1" stop-color="#2E9E62" stop-opacity="0.85"/>
     </linearGradient>
-    <linearGradient id="robe" gradientUnits="userSpaceOnUse" x1="0" y1="700" x2="0" y2="924">
-      <stop offset="0" stop-color="#C9B08A"/>
-      <stop offset="1" stop-color="#8A7354"/>
+    <linearGradient id="bladeR" gradientUnits="userSpaceOnUse" x1="614" y1="0" x2="854" y2="0">
+      <stop offset="0" stop-color="#8AF0A8"/>
+      <stop offset="1" stop-color="#2E9E62" stop-opacity="0.85"/>
     </linearGradient>
-    <linearGradient id="spark" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#FFE29A"/>
-      <stop offset="1" stop-color="#F59A4B"/>
+    <linearGradient id="orb" gradientUnits="userSpaceOnUse" x1="0" y1="412" x2="0" y2="668">
+      <stop offset="0" stop-color="#9EF5B8"/>
+      <stop offset="1" stop-color="#2C9A5E"/>
+    </linearGradient>
+    <linearGradient id="spec" gradientUnits="userSpaceOnUse" x1="0" y1="430" x2="0" y2="510">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.7"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
     </linearGradient>
     <clipPath id="tile">
       <rect x="100" y="100" width="824" height="824" rx="186"/>
@@ -35,44 +43,18 @@
   <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#bg)" filter="url(#shadow)"/>
 
   <g clip-path="url(#tile)">
-    <rect x="100" y="100" width="824" height="824" fill="url(#glow)"/>
-    <g fill="#FFFFFF">
-      <circle cx="230" cy="250" r="5" fill-opacity="0.7"/>
-      <circle cx="330" cy="180" r="3" fill-opacity="0.5"/>
-      <circle cx="820" cy="560" r="4" fill-opacity="0.5"/>
-      <circle cx="200" cy="620" r="3" fill-opacity="0.45"/>
-      <circle cx="420" cy="240" r="3" fill-opacity="0.4"/>
-      <circle cx="860" cy="250" r="3" fill-opacity="0.5"/>
-    </g>
+    <rect x="100" y="100" width="824" height="824" fill="url(#halo)"/>
 
-    <!-- Robe -->
-    <path d="M300 924 C320 800 400 730 512 730 C624 730 704 800 724 924 Z" fill="url(#robe)"/>
-    <path d="M430 740 L512 830 L594 740" fill="none" stroke="#6F5B41" stroke-width="14" stroke-linejoin="round" stroke-opacity="0.6"/>
+    <!-- Lames (oreilles) -->
+    <path d="M420 505 C340 470 260 430 168 392 C250 470 330 540 416 585 Z" fill="url(#bladeL)"/>
+    <path d="M604 505 C684 470 764 430 856 392 C774 470 694 540 608 585 Z" fill="url(#bladeR)"/>
 
-    <!-- Oreilles -->
-    <path d="M370 500 C300 470 230 430 150 380 C200 470 270 560 365 600 Z" fill="url(#skin)"/>
-    <path d="M654 500 C724 470 794 430 874 380 C824 470 754 560 659 600 Z" fill="url(#skin)"/>
-    <path d="M352 520 C300 495 250 465 205 435 C240 490 290 545 350 572 Z" fill="#D59A8E" fill-opacity="0.55"/>
-    <path d="M672 520 C724 495 774 465 819 435 C784 490 734 545 674 572 Z" fill="#D59A8E" fill-opacity="0.55"/>
+    <!-- Orbe -->
+    <circle cx="512" cy="540" r="128" fill="url(#orb)"/>
+    <path d="M408 500 A116 116 0 0 1 616 500" fill="none" stroke="url(#spec)" stroke-width="6" stroke-linecap="round"/>
 
-    <!-- Tête -->
-    <path d="M512 400 C628 400 690 470 690 570 C690 680 610 750 512 750 C414 750 334 680 334 570 C334 470 396 400 512 400 Z" fill="url(#skin)"/>
-    <path d="M420 470 C460 450 564 450 604 470" fill="none" stroke="#5F8A46" stroke-width="10" stroke-linecap="round" stroke-opacity="0.5"/>
-
-    <!-- Yeux -->
-    <ellipse cx="445" cy="565" rx="44" ry="40" fill="#1B2416"/>
-    <ellipse cx="579" cy="565" rx="44" ry="40" fill="#1B2416"/>
-    <circle cx="460" cy="550" r="12" fill="#FFFFFF" fill-opacity="0.9"/>
-    <circle cx="594" cy="550" r="12" fill="#FFFFFF" fill-opacity="0.9"/>
-
-    <!-- Nez et sourire -->
-    <path d="M500 615 C506 630 518 630 524 615" fill="none" stroke="#5F8A46" stroke-width="9" stroke-linecap="round"/>
-    <path d="M470 668 C495 688 529 688 554 668" fill="none" stroke="#4E763A" stroke-width="11" stroke-linecap="round"/>
+    <rect x="100" y="100" width="824" height="412" fill="url(#sheen)"/>
   </g>
 
-  <!-- Étincelle (l'agent) -->
-  <path fill="url(#spark)"
-        d="M760 190 C768 240 782 254 832 262 C782 270 768 284 760 334 C752 284 738 270 688 262 C738 254 752 240 760 190 Z"/>
-
-  <rect x="101" y="101" width="822" height="822" rx="185" fill="none" stroke="#FFFFFF" stroke-opacity="0.08" stroke-width="2"/>
+  <rect x="101" y="101" width="822" height="822" rx="185" fill="none" stroke="#FFFFFF" stroke-opacity="0.10" stroke-width="2"/>
 </svg>
