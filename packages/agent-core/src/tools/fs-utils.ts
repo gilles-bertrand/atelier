@@ -4,7 +4,15 @@ import path from 'node:path';
 import type { FileCard } from '@atelier/shared';
 
 /** Dossiers ignorés par défaut lors des parcours (bruit, volumineux). */
-export const IGNORED_DIRS = new Set(['.git', 'node_modules', '.DS_Store', '__pycache__', '.venv']);
+/** Dossiers jamais parcourus par glob / grep (`.atelier` : cache et rendus de `documents`). */
+export const IGNORED_DIRS = new Set([
+  '.git',
+  'node_modules',
+  '.DS_Store',
+  '__pycache__',
+  '.venv',
+  '.atelier',
+]);
 
 /** Fichier rencontré pendant un parcours. */
 export interface WalkEntry {

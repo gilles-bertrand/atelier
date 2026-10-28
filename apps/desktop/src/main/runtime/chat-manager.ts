@@ -35,6 +35,8 @@ import { sessionNotFound, type SessionStore } from './session-store.js';
 /** Ce que le gestionnaire utilise d'une `AgentSession` d'agent-core. */
 export interface AgentSessionLike {
   readonly history: readonly ModelMessage[];
+  /** `inputTokens` du dernier tour (déclenchement de la compaction après recréation). */
+  readonly lastInputTokens?: number | undefined;
   send(
     input: string,
     emit: AgentEventSink,
@@ -49,6 +51,8 @@ export interface NewAgentSession {
   workspace: string;
   requestPermission: PermissionHandler;
   history: readonly ModelMessage[];
+  /** Reprise d'une session recréée : la compaction reste déclenchée à temps. */
+  lastInputTokens?: number;
 }
 
 /** Fabrique de sessions agent (runtime courant). */
@@ -265,11 +269,14 @@ export class ChatManager {
     if (runtime.agent && runtime.agent.generation === generation && !resetHistory) {
       return runtime.agent.session;
     }
+    // Recréation après un changement de runtime : on garde la consommation du dernier tour.
+    const lastInputTokens = resetHistory ? undefined : runtime.agent?.session.lastInputTokens;
     const created = await this.#o.agents.createSession({
       sessionId: session.id,
       workspace: session.workspace,
       requestPermission: this.#o.permissions.handlerFor(session.id),
       history: resetHistory ?? this.#currentHistory(runtime, session.id),
+      ...(lastInputTokens !== undefined ? { lastInputTokens } : {}),
     });
     runtime.agent = { session: created, generation };
     return created;

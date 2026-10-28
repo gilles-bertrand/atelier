@@ -116,6 +116,9 @@ export class AgentRuntimeHost implements AgentSessionFactory {
       workspace: options.workspace,
       requestPermission: options.requestPermission,
       history: options.history,
+      ...(options.lastInputTokens !== undefined
+        ? { lastInputTokens: options.lastInputTokens }
+        : {}),
     });
   }
 

@@ -66,6 +66,11 @@ export interface CreateSessionOptions {
   requestPermission: PermissionHandler;
   /** Historique modèle persisté (`TurnResult.messages` des tours précédents). */
   history?: readonly ModelMessage[];
+  /**
+   * `inputTokens` du dernier tour (`session.lastInputTokens` de la session
+   * remplacée) : garde la compaction préalable quand on recrée une session.
+   */
+  lastInputTokens?: number;
 }
 
 /** Provenance de la fenêtre de contexte ; `fallback` = serveur injoignable au démarrage. */
@@ -143,7 +148,12 @@ export async function createAgentRuntime(options: AgentRuntimeOptions): Promise<
         : {}),
       ...(options.log ? { log: options.log } : {}),
     });
-    return new AgentSession(agent, session.sessionId, session.history ?? []);
+    return new AgentSession(
+      agent,
+      session.sessionId,
+      session.history ?? [],
+      session.lastInputTokens,
+    );
   };
 
   return {

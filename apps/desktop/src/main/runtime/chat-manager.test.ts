@@ -22,6 +22,7 @@ interface SentTurn {
 /** Session agent factice (même contrat que l'AgentSession d'agent-core). */
 class FakeAgentSession implements AgentSessionLike {
   history: readonly ModelMessage[];
+  lastInputTokens: number | undefined;
   constructor(
     readonly options: NewAgentSession,
     private readonly mode: () => Mode,
@@ -61,6 +62,7 @@ class FakeAgentSession implements AgentSessionLike {
     emit({ ...ev, type: 'text_delta', delta: 'Bonjour !' });
     emit({ ...ev, type: 'done', reason: 'stop' });
     this.history = [...withUser, { role: 'assistant', content: 'Bonjour !' }];
+    this.lastInputTokens = 100;
     return {
       messages: [...this.history],
       reason: 'stop',
@@ -141,6 +143,7 @@ describe('ChatManager', () => {
     expect(created).toHaveLength(2);
     // La nouvelle session reprend l'historique complet.
     expect(created[1]?.history).toHaveLength(4);
+    expect(created[1]?.lastInputTokens).toBe(100);
     expect(sent[2]?.history).toHaveLength(4);
   });
 

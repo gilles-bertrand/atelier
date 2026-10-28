@@ -165,4 +165,33 @@ describe('createAgentRuntime', () => {
       expect(perms.requests).toHaveLength(1);
     });
   });
+
+  it('session recréée : historique et lastInputTokens transmis', async () => {
+    await withTempDir(async (ws) => {
+      const model = scriptedModel([{ text: 'un', inputTokens: 7000 }]);
+      const runtime = await createAgentRuntime({
+        llm: { ...llm, numCtx: 8192 },
+        models: { model, fastModel: model },
+      });
+      const old = runtime.createSession({
+        sessionId: 's',
+        workspace: ws,
+        requestPermission: permissions(),
+      });
+      expect(old.lastInputTokens).toBeUndefined();
+      await old.send('Bonjour', collect().emit);
+      expect(old.lastInputTokens).toBe(7000);
+      expect(old.history.length).toBeGreaterThan(1);
+
+      const next = runtime.createSession({
+        sessionId: 's',
+        workspace: ws,
+        requestPermission: permissions(),
+        history: old.history,
+        ...(old.lastInputTokens !== undefined ? { lastInputTokens: old.lastInputTokens } : {}),
+      });
+      expect(next.history).toEqual(old.history);
+      expect(next.lastInputTokens).toBe(7000);
+    });
+  });
 });
