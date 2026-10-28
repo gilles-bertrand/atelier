@@ -23,6 +23,7 @@ import {
   type Sandbox,
   type SerializedAtelierError,
   type SkillInfo,
+  type TodoItem,
   type TokenUsage,
   type ToolRegistry,
   type WebSearchResult,
@@ -239,131 +240,163 @@ export class Agent {
             .map((t) => t.name)
             .filter((name) => name in tools);
 
-        const result = streamText({
-          model: o.model,
-          instructions: this.systemPrompt(sandbox),
-          messages: base,
-          tools,
-          ...(lazy ? { activeTools: activeTools() } : {}),
-          stopWhen: stepCountIs(o.maxSteps ?? MAX_STEPS),
-          abortSignal: signal,
-          // Les nouvelles tentatives réseau sont gérées par le fetch du provider.
-          maxRetries: 0,
-          // Une seule permission à la fois dans l'UI : exécution séquentielle.
-          toolCallConcurrency: 1,
-          repairToolCall: createToolCallRepair((info) => {
-            o.log?.('repair', info);
-          }),
-          prepareStep: async ({ messages, steps: done, responseMessages }) => {
-            let next = messages;
-            let changed = false;
-            const last = done.at(-1);
-            if (last && shouldCompact(last.usage.inputTokens, o.contextWindow)) {
-              const compacted = await compact(next);
-              if (compacted) {
-                next = compacted;
-                changed = true;
-              }
-            }
-            if (hasReasoning(next)) {
-              next = stripReasoning(next);
-              changed = true;
-            }
-            const active = lazy ? { activeTools: activeTools() } : {};
-            if (!changed) return lazy ? active : undefined;
-            // Les messages renvoyés remplacent l'historique pour les étapes suivantes.
-            base = next;
-            responseOffset = responseMessages.length;
-            return { messages: next, ...active };
-          },
-        });
-
+        const maxSteps = o.maxSteps ?? MAX_STEPS;
+        let todos: readonly TodoItem[] | undefined; // liste mise à jour pendant ce tour
+        let continuations = 0;
+        let lastText = '';
         let finishReason: string | undefined;
         let streamError: unknown;
         let aborted = false;
-        // `stream` est le nom v7 de `fullStream` (déprécié).
-        for await (const part of result.stream) {
-          switch (part.type) {
-            case 'text-delta':
-              if (part.text !== '') emit({ type: 'text_delta', delta: part.text });
-              break;
-            case 'reasoning-delta':
-              if (part.text !== '') emit({ type: 'reasoning_delta', delta: part.text });
-              break;
-            case 'tool-call':
-              emit({
-                type: 'tool_start',
-                toolCallId: part.toolCallId,
-                toolName: part.toolName,
-                input: part.input,
-              });
-              break;
-            case 'tool-result': {
-              const output: unknown = part.output;
-              if (isToolOutput(output)) {
-                emit({
-                  type: 'tool_result',
-                  toolCallId: part.toolCallId,
-                  toolName: part.toolName,
-                  ok: output.ok,
-                  ...(output.denied ? { denied: true } : {}),
-                  output: output.content,
-                  ...(output.display ? { display: output.display } : {}),
-                });
-                if (output.display?.type === 'todos') {
-                  emit({ type: 'todo_update', todos: output.display.todos });
-                } else if (output.display?.type === 'web_results') {
-                  for (const r of output.display.results) sources.set(r.url, r);
-                } else if (output.display?.type === 'web_page') {
-                  const { url, title } = output.display;
-                  if (!sources.has(url))
-                    sources.set(url, { url, title: title ?? url, snippet: '' });
+        let messages: ModelMessage[] = base;
+        for (;;) {
+          const result = streamText({
+            model: o.model,
+            instructions: this.systemPrompt(sandbox),
+            messages: base,
+            tools,
+            ...(lazy ? { activeTools: activeTools() } : {}),
+            stopWhen: stepCountIs(Math.max(1, maxSteps - steps)),
+            abortSignal: signal,
+            // Les nouvelles tentatives réseau sont gérées par le fetch du provider.
+            maxRetries: 0,
+            // Une seule permission à la fois dans l'UI : exécution séquentielle.
+            toolCallConcurrency: 1,
+            repairToolCall: createToolCallRepair((info) => {
+              o.log?.('repair', info);
+            }),
+            prepareStep: async ({ messages, steps: done, responseMessages }) => {
+              let next = messages;
+              let changed = false;
+              const last = done.at(-1);
+              if (last && shouldCompact(last.usage.inputTokens, o.contextWindow)) {
+                const compacted = await compact(next);
+                if (compacted) {
+                  next = compacted;
+                  changed = true;
                 }
-              } else {
+              }
+              if (hasReasoning(next)) {
+                next = stripReasoning(next);
+                changed = true;
+              }
+              const active = lazy ? { activeTools: activeTools() } : {};
+              if (!changed) return lazy ? active : undefined;
+              // Les messages renvoyés remplacent l'historique pour les étapes suivantes.
+              base = next;
+              responseOffset = responseMessages.length;
+              return { messages: next, ...active };
+            },
+          });
+
+          finishReason = undefined;
+          lastText = '';
+          // `stream` est le nom v7 de `fullStream` (déprécié).
+          for await (const part of result.stream) {
+            switch (part.type) {
+              case 'start-step':
+                lastText = '';
+                break;
+              case 'text-delta':
+                if (part.text !== '') emit({ type: 'text_delta', delta: part.text });
+                lastText += part.text;
+                break;
+              case 'reasoning-delta':
+                if (part.text !== '') emit({ type: 'reasoning_delta', delta: part.text });
+                break;
+              case 'tool-call':
+                emit({
+                  type: 'tool_start',
+                  toolCallId: part.toolCallId,
+                  toolName: part.toolName,
+                  input: part.input,
+                });
+                break;
+              case 'tool-result': {
+                const output: unknown = part.output;
+                if (isToolOutput(output)) {
+                  emit({
+                    type: 'tool_result',
+                    toolCallId: part.toolCallId,
+                    toolName: part.toolName,
+                    ok: output.ok,
+                    ...(output.denied ? { denied: true } : {}),
+                    output: output.content,
+                    ...(output.display ? { display: output.display } : {}),
+                  });
+                  if (output.display?.type === 'todos') {
+                    todos = output.display.todos;
+                    emit({ type: 'todo_update', todos: output.display.todos });
+                  } else if (output.display?.type === 'web_results') {
+                    for (const r of output.display.results) sources.set(r.url, r);
+                  } else if (output.display?.type === 'web_page') {
+                    const { url, title } = output.display;
+                    if (!sources.has(url))
+                      sources.set(url, { url, title: title ?? url, snippet: '' });
+                  }
+                } else {
+                  emit({
+                    type: 'tool_result',
+                    toolCallId: part.toolCallId,
+                    toolName: part.toolName,
+                    ok: true,
+                    output: typeof output === 'string' ? output : JSON.stringify(output),
+                  });
+                }
+                break;
+              }
+              case 'tool-error':
                 emit({
                   type: 'tool_result',
                   toolCallId: part.toolCallId,
                   toolName: part.toolName,
-                  ok: true,
-                  output: typeof output === 'string' ? output : JSON.stringify(output),
+                  ok: false,
+                  output: describeToolError(part.error),
                 });
-              }
-              break;
+                break;
+              case 'finish-step':
+                steps += 1;
+                if (part.usage.inputTokens !== undefined) lastInputTokens = part.usage.inputTokens;
+                outputTokens += part.usage.outputTokens ?? 0;
+                break;
+              case 'finish':
+                finishReason = part.finishReason;
+                break;
+              case 'abort':
+                aborted = true;
+                break;
+              case 'error':
+                streamError = part.error;
+                break;
+              default:
+                break;
             }
-            case 'tool-error':
-              emit({
-                type: 'tool_result',
-                toolCallId: part.toolCallId,
-                toolName: part.toolName,
-                ok: false,
-                output: describeToolError(part.error),
-              });
-              break;
-            case 'finish-step':
-              steps += 1;
-              if (part.usage.inputTokens !== undefined) lastInputTokens = part.usage.inputTokens;
-              outputTokens += part.usage.outputTokens ?? 0;
-              break;
-            case 'finish':
-              finishReason = part.finishReason;
-              break;
-            case 'abort':
-              aborted = true;
-              break;
-            case 'error':
-              streamError = part.error;
-              break;
-            default:
-              break;
           }
+
+          const responseMessages = await Promise.resolve(result.responseMessages).catch(
+            () => [] as ModelMessage[],
+          );
+          messages = stripReasoning([...base, ...responseMessages.slice(responseOffset)]);
+
+          if (aborted || signal.aborted || streamError !== undefined) break;
+          // Le modèle a rendu la main (« stop ») en laissant des tâches ouvertes : on le
+          // relance, au plus MAX_CONTINUATIONS fois, sauf s'il pose une question.
+          const open = openTodos(todos);
+          if (
+            finishReason !== 'stop' ||
+            !open.some((t) => t.status === 'pending') ||
+            continuations >= MAX_CONTINUATIONS ||
+            steps >= maxSteps ||
+            lastText.trim().endsWith('?')
+          ) {
+            break;
+          }
+          continuations += 1;
+          o.log?.('continuation', { attempt: continuations, open: open.length });
+          base = [...messages, { role: 'user', content: continuationPrompt(open) }];
+          responseOffset = 0;
         }
 
         if (sources.size > 0) emit({ type: 'sources', sources: [...sources.values()] });
-
-        const responseMessages = await Promise.resolve(result.responseMessages).catch(
-          () => [] as ModelMessage[],
-        );
-        const messages = stripReasoning([...base, ...responseMessages.slice(responseOffset)]);
 
         if (aborted || signal.aborted) {
           emit({ type: 'done', reason: 'aborted', usage: usage() });
@@ -377,7 +410,7 @@ export class Agent {
         const reason: DoneReason =
           finishReason === 'length'
             ? 'length'
-            : finishReason === 'tool-calls' && steps >= (o.maxSteps ?? MAX_STEPS)
+            : finishReason === 'tool-calls' && steps >= maxSteps
               ? 'max_steps'
               : 'stop';
         emit({ type: 'done', reason, usage: usage() });
@@ -411,6 +444,19 @@ export class Agent {
       return this.#options.requestPermission(request, signal);
     };
   }
+}
+
+/** Relances max. d'un tour qui s'arrête avec des tâches encore ouvertes. */
+export const MAX_CONTINUATIONS = 2;
+
+function openTodos(todos: readonly TodoItem[] | undefined): TodoItem[] {
+  return (todos ?? []).filter((t) => t.status !== 'completed');
+}
+
+/** Message de relance (invisible dans l'UI, conservé dans l'historique modèle). */
+export function continuationPrompt(open: readonly TodoItem[]): string {
+  const list = open.map((t) => `- ${t.title} (${t.status})`).join('\n');
+  return `[Atelier] Ta réponse s'est arrêtée alors que des tâches de ta liste ne sont pas terminées :\n${list}\nContinue maintenant avec les appels d'outils nécessaires, sans attendre de réponse. Si une tâche n'est plus utile, mets la liste à jour avec todo_write ; si tu as besoin de l'utilisateur, pose-lui ta question.`;
 }
 
 function describeToolError(error: unknown): string {
