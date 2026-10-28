@@ -4,7 +4,8 @@
  * chaque session agent porte la génération du runtime qui l'a créée, et le
  * `ChatManager` la recrée (avec son historique) entre deux tours.
  */
-import { createAgentRuntime, type AgentRuntime } from '@atelier/agent-core';
+import { createAgentRuntime, createLlmModels, type AgentRuntime } from '@atelier/agent-core';
+import { createDocumentTools, createVisionAnalyzer } from '@atelier/documents';
 import { mcpPromptSection, toolSearchTool, type McpManager } from '@atelier/mcp-bridge';
 import { loadSkills } from '@atelier/skills';
 import { createSearchProvider, createWebTools } from '@atelier/web';
@@ -135,7 +136,7 @@ export class AgentRuntimeHost implements AgentSessionFactory {
   }
 
   #create(): Promise<AgentRuntime> {
-    const { baseUrl, model, thinking, numCtx } = this.#o.settings().llm;
+    const { baseUrl, model, thinking, numCtx, visionModel } = this.#o.settings().llm;
     if (baseUrl === '') {
       return Promise.reject(
         new AtelierError('llm/unreachable', 'Aucun serveur configuré.', {
@@ -145,6 +146,15 @@ export class AgentRuntimeHost implements AgentSessionFactory {
     }
     const token = this.#o.secret('llm_token');
     const { mcp, sandbox } = this.#o;
+    // Vision : modèle principal (multimodal) ou modèle vision des Réglages, thinking coupé.
+    const vision = createVisionAnalyzer({
+      model: createLlmModels({
+        baseUrl,
+        model: visionModel ?? model,
+        thinking: false,
+        ...(token ? { token } : {}),
+      }).fastModel,
+    });
     return createAgentRuntime({
       llm: {
         baseUrl,
@@ -153,7 +163,11 @@ export class AgentRuntimeHost implements AgentSessionFactory {
         ...(token ? { token } : {}),
         ...(numCtx !== undefined ? { numCtx } : {}),
       },
-      tools: [...this.#webTools, ...(this.#o.extraTools?.() ?? [])],
+      tools: [
+        ...createDocumentTools({ vision }),
+        ...this.#webTools,
+        ...(this.#o.extraTools?.() ?? []),
+      ],
       sessionTools: (registry) => [toolSearchTool({ source: mcp, registry })],
       lazyTools: () => mcp.definitions(),
       sandbox: () => sandbox.current(),

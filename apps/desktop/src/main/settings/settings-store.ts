@@ -57,7 +57,7 @@ export function validateSettings(settings: AppSettings): void {
     const check = checkServerUrl(llm.baseUrl);
     if (!check.ok) {
       throw new AtelierError(
-        check.reason === 'insecure_http' ? 'llm/insecure_url' : 'internal',
+        check.reason === 'insecure_http' ? 'llm/insecure_url' : 'settings/invalid',
         `URL du serveur refusée (${check.reason}) : ${llm.baseUrl}`,
       );
     }
@@ -81,7 +81,7 @@ export function validateSettings(settings: AppSettings): void {
 }
 
 function invalid(message: string): AtelierError {
-  return new AtelierError('internal', message, { details: { kind: 'invalid_settings' } });
+  return new AtelierError('settings/invalid', message);
 }
 
 function stripUndefined<T extends object>(value: T | undefined): Partial<T> {

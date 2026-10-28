@@ -89,3 +89,52 @@
       -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif;
   }
 }
+
+/* Réponses de l'assistant (markdown). */
+@layer components {
+  .markdown {
+    @apply space-y-3 text-sm leading-relaxed break-words;
+  }
+  .markdown h1,
+  .markdown h2,
+  .markdown h3 {
+    @apply mt-4 font-semibold;
+  }
+  .markdown h1 {
+    @apply text-lg;
+  }
+  .markdown h2 {
+    @apply text-base;
+  }
+  .markdown ul {
+    @apply list-disc space-y-1 pl-5;
+  }
+  .markdown ol {
+    @apply list-decimal space-y-1 pl-5;
+  }
+  .markdown a {
+    @apply underline underline-offset-2 hover:text-foreground/80;
+  }
+  .markdown code {
+    @apply rounded bg-muted px-1 py-0.5 font-mono text-[0.85em];
+  }
+  .markdown pre {
+    @apply overflow-x-auto rounded-lg bg-muted p-3 text-xs;
+  }
+  .markdown pre code {
+    @apply bg-transparent p-0;
+  }
+  .markdown blockquote {
+    @apply border-l-2 pl-3 text-muted-foreground;
+  }
+  .markdown table {
+    @apply block w-full overflow-x-auto border-collapse text-xs;
+  }
+  .markdown th,
+  .markdown td {
+    @apply border px-2 py-1 text-left align-top;
+  }
+  .markdown th {
+    @apply bg-muted font-medium;
+  }
+}

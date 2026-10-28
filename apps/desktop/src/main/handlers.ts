@@ -20,7 +20,7 @@ import type { SettingsStore } from './settings/settings-store.js';
 
 /** Opérations Electron utilisées par les gestionnaires (injectées). */
 export interface DesktopShell {
-  chooseDirectory(): Promise<string | null>;
+  chooseDirectory(options?: { title?: string; defaultPath?: string }): Promise<string | null>;
   openPath(absolutePath: string): Promise<string>;
   showItemInFolder(absolutePath: string): void;
 }
@@ -191,6 +191,11 @@ export function createHandlers(s: HandlerServices): IpcHandlers {
       const dir = await s.shell.chooseDirectory();
       return dir === null ? null : assertWorkspace(dir, home);
     },
+    'dialog:choose-directory': ({ title, defaultPath }) =>
+      s.shell.chooseDirectory({
+        ...(title !== undefined ? { title } : {}),
+        ...(defaultPath !== undefined ? { defaultPath } : {}),
+      }),
     'session:list': ({ limit }) => s.chats.list(limit),
     'session:create': async ({ workspace }) =>
       s.chats.create(await assertWorkspace(workspace, home)),
@@ -245,6 +250,7 @@ export function createHandlers(s: HandlerServices): IpcHandlers {
 
     // --- Skills et MCP
     'skills:list': () => loadSkills(s.settings.get().skillsDir),
+    'mcp:status': () => ({ servers: s.mcp.status(), issues: s.mcp.config.issues }),
     'mcp:read-config': async () => {
       try {
         return await readFile(s.settings.get().mcpConfigPath, 'utf8');

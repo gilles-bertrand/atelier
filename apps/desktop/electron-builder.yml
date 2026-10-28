@@ -25,6 +25,10 @@ extraResources:
     to: skills-examples
     filter: ['**/*']
 asar: true
+# sharp charge des binaires natifs : hors de l'archive asar (voir packages/documents/README.md).
+asarUnpack:
+  - '**/node_modules/sharp/**'
+  - '**/node_modules/@img/**'
 mac:
   target:
     - target: dmg

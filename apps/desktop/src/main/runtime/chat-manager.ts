@@ -138,7 +138,7 @@ export class ChatManager {
   ): { turnId: string } {
     const session = this.#session(sessionId);
     if (text.trim() === '' && attachments.length === 0) {
-      throw new AtelierError('internal', 'Message vide.', { details: { kind: 'empty_message' } });
+      throw new AtelierError('tool/invalid_input', 'Message vide.');
     }
     const runtime = this.#runtime(sessionId);
     this.#assertIdle(runtime);
@@ -300,9 +300,7 @@ export class ChatManager {
 
   #assertIdle(runtime: SessionRuntime): void {
     if (runtime.running) {
-      throw new AtelierError('internal', 'Un tour est déjà en cours dans cette conversation.', {
-        details: { kind: 'turn_in_progress' },
-      });
+      throw new AtelierError('agent/busy', 'Un tour est déjà en cours dans cette conversation.');
     }
   }
 

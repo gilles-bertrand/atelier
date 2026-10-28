@@ -68,6 +68,7 @@ export function installFakeApi(handlers: FakeHandlers = {}): FakeApi {
     'secrets:set': () => undefined,
     'llm:status': () => ({ health: 'unknown', checkedAt: '2026-10-28T10:00:00.000Z' }),
     'sandbox:status': () => ({ state: 'absent', networkEnabled: false }),
+    'session:list': () => [],
   };
   const all: FakeHandlers = { ...base, ...handlers };
   const listeners = new Map<string, Set<(payload: unknown) => void>>();
