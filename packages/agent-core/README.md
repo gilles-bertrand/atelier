@@ -38,7 +38,8 @@ const { contextWindow } = await fetchContextWindow({
 const agent = new Agent({
   model: llm.model,
   fastModel: llm.fastModel, // résumés de compaction (thinking coupé)
-  registry: createDefaultRegistry([...documentsTools, ...webTools, ...mcpTools]),
+  registry, // createDefaultRegistry([...documentsTools, ...webTools]) + tool_search (mcp-bridge)
+  lazyTools: () => mcp.definitions(), // outils MCP, actifs une fois activés par tool_search
   workspace, // dossier choisi par l'utilisateur
   requestPermission, // ouvre la modale, mémorise les allow_session
   sandbox, // packages/sandbox (Lima) ; absent → bash répond « VM indisponible »
@@ -56,6 +57,7 @@ const result = await session.send(
 
 - `runTurn` / `send` **ne lèvent jamais** : toute erreur devient un event `error` (`SerializedAtelierError`), sinon le tour finit par `done` (`stop` | `aborted` | `max_steps` | `length`).
 - Events émis : `text_delta`, `reasoning_delta` (thinking, jamais réinjecté), `tool_start`, `tool_display` (affichage publié pendant l'outil via `emitDisplay`), `tool_result` (`denied` si refus ; son `display` fait foi), `todo_update`, `permission_request` (émis juste avant l'appel au `PermissionHandler`), `sources`, `llm_retry` (nouvelle tentative réseau, rattachée au tour), `compaction`, `done`, `error`.
+- `lazyTools` (optionnel) : outils déclarés à l'AI SDK en début de tour mais inactifs (`activeTools`) tant qu'ils ne sont pas dans le registre. `activeTools` est recalculé à chaque étape (`prepareStep`) : un outil enregistré pendant le tour (par `tool_search`) est appelable dès l'étape suivante. Un outil du registre prime sur un outil paresseux de même nom ; un outil inactif appelé quand même est refusé avant toute demande de permission. Le prompt système ne liste que le registre.
 - `result.messages` est l'historique modèle à conserver pour le tour suivant (raisonnement retiré, compaction appliquée).
 
 ## Contenu
