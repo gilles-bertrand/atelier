@@ -11,9 +11,25 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "fixtures": "tsx scripts/make-fixtures.ts"
   },
   "dependencies": {
-    "@atelier/shared": "workspace:*"
+    "@atelier/agent-core": "workspace:*",
+    "@atelier/shared": "workspace:*",
+    "ai": "^7.0.154",
+    "exceljs": "4.4.0",
+    "file-type": "^22.2.0",
+    "heic-convert": "^2.1.0",
+    "mammoth": "^1.13.0",
+    "sharp": "^0.35.5",
+    "turndown": "^7.2.4",
+    "unpdf": "^1.9.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/heic-convert": "^2.1.1",
+    "@types/turndown": "^5.0.6",
+    "tsx": "^4.23.15"
   }
 }

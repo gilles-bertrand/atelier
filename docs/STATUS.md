@@ -6,14 +6,14 @@ _Dernière mise à jour : 2026-10-28, Lead._
 
 ## État par jalon
 
-| Jalon                                                       | État                                                                                         | Responsable(s)                |
-| ----------------------------------------------------------- | -------------------------------------------------------------------------------------------- | ----------------------------- |
-| M0 : squelette monorepo + `packages/shared` + `server/`     | ✅ fait                                                                                      | Lead                          |
-| M1 : boucle AI SDK en CLI, outils fichiers, bash local, web | 🟡 Core livré (PR `feat/core-agent-loop`), web livré (PR `feat/web-search-fetch`)            | Core, MCP & Web               |
-| M2 : sandbox Lima + permissions                             | 🟡 sandbox livrée (PR `feat/sandbox-lima`), permissions : Core                               | Sandbox, Core                 |
-| M3 : app Electron fonctionnelle                             | 🟡 process main branché (PR `feat/ui-shell`), écrans à venir                                 | UI                            |
-| M4 : skills + MCP + SearXNG + documents                     | 🟡 skills + SearXNG dans la VM livrés ; MCP livré (PR `feat/mcp-bridge`) ; documents à faire | Sandbox, MCP & Web, Documents |
-| M5 : historique, compaction, réglages, packaging signé      | ⏳                                                                                           | UI, Core, Lead                |
+| Jalon                                                       | État                                                                                                                       | Responsable(s)                |
+| ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| M0 : squelette monorepo + `packages/shared` + `server/`     | ✅ fait                                                                                                                    | Lead                          |
+| M1 : boucle AI SDK en CLI, outils fichiers, bash local, web | 🟡 Core livré (PR `feat/core-agent-loop`), web livré (PR `feat/web-search-fetch`)                                          | Core, MCP & Web               |
+| M2 : sandbox Lima + permissions                             | 🟡 sandbox livrée (PR `feat/sandbox-lima`), permissions : Core                                                             | Sandbox, Core                 |
+| M3 : app Electron fonctionnelle                             | 🟡 process main branché (PR `feat/ui-shell`), écrans à venir                                                               | UI                            |
+| M4 : skills + MCP + SearXNG + documents                     | 🟡 skills + SearXNG dans la VM livrés ; MCP livré (PR `feat/mcp-bridge`) ; documents livré (PR `feat/documents-read-file`) | Sandbox, MCP & Web, Documents |
+| M5 : historique, compaction, réglages, packaging signé      | ⏳                                                                                                                         | UI, Core, Lead                |
 
 ## Ce que contient le squelette
 
@@ -75,6 +75,18 @@ _Dernière mise à jour : 2026-10-28, Lead._
 - **Fichiers** : `attachment:import` copie dans `<dossier>/.atelier/uploads/` (nom unique, 200 Mo max) ; `file:open` / `file:reveal` limités aux dossiers des sessions, et `file:open` refuse apps et scripts (`.app`, `.command`, `.sh`…).
 - **Bundle** : `jsdom`, `undici` et les autres dépendances des packages sont externes au main (dépendances de `@atelier/desktop`). `electron-builder.yml` : `packages/skills/examples` → `Contents/Resources/skills-examples`. Historique en mémoire pour l'instant (`SessionStore`) : SQLite au lot 5.
 - Petit correctif dans `packages/web/src/fetch/extract.ts` (cast `as never` de la copie passée à Readability) : sous `lib.dom` (chargée par les types Electron), le type `DomNode` local n'était pas accepté.
+
+## Documents (agent Documents, `feat/documents-read-file`)
+
+- **`@atelier/documents`** : `createDocumentTools({ vision })` → `read_file` (remplace le provisoire d'agent-core via `createDefaultRegistry([...createDocumentTools({ vision }), …])`) + `look_at`. Détails : `packages/documents/README.md`.
+- **`read_file`** : type par magic bytes (`file-type`) puis extension. Texte numéroté (offset/limit, 2000 lignes, UTF-8/UTF-16/latin-1) ; PDF par page via unpdf (`--- page N ---`, total, `pages` 20 max) ; page sans texte → `pdftoppm` **dans la VM** puis modèle vision ; images (png, jpg, webp, gif, heic) réduites à 1568 px puis vision ; docx (mammoth → markdown) ; xlsx (exceljs, 200 lignes/feuille) ; binaire inconnu refusé avec le type détecté.
+- **`look_at({ path, question, page? })`** : image ou page PDF rendue → modèle vision → réponse texte.
+- **Vision** : `createVisionAnalyzer({ model })`, `generateText` isolé (sans historique), seul le texte revient. Validé en réel sur `qwen3.5:9b` local (ticket PNG, facture scannée, look_at) : `ATELIER_DOCUMENTS_IT=1`.
+- **Cache** `<dossier>/.atelier/cache/` (SHA-256 fichier + paramètres + id du modèle vision) ; **pièces jointes** `importAttachment(hostPath, workspace)` → `.atelier/uploads/<nom>`.
+- poppler-utils est déjà dans le provisioning de la VM (`lima/provision/10-packages.sh`) : rien à demander à Sandbox.
+- **sharp 0.35** : binaires précompilés (`@img/sharp-darwin-arm64`), plus de script d'installation → **aucune entrée `allowBuilds` nécessaire**.
+- Pour **UI / Lead** : externaliser `sharp`, `unpdf`, `exceljs`, `mammoth`, `heic-convert`, `file-type` du bundle main ; `asarUnpack` pour `@img/sharp-*`. Réglage « modèle vision séparé » : `createVisionAnalyzer({ model: createLlmModels({ …, model: visionModel }).model })`, sinon `models.fastModel`. Glisser-déposer : `importAttachment` puis mention du chemin relatif dans le message.
+- Pour **Core** : `glob`/`list_dir`/`grep` pourraient ignorer `.atelier/` (cache et rendus) ; `documents` dépend d'`agent-core` (chemins) : agent-core ne doit donc pas importer `documents` (c'est l'app qui compose le registre).
 
 ## Demandes d'évolution de `packages/shared`
 
