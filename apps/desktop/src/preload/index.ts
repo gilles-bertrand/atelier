@@ -1,14 +1,15 @@
-import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
+import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron';
 import {
   IPC_EVENT_CHANNELS,
-  IPC_INVOKE_CHANNELS,
+  IPC_RENDERER_INVOKE_CHANNELS,
   type AtelierApi,
   type IpcEventChannel,
   type IpcInvokeChannel,
   type IpcResult,
 } from '@atelier/shared';
 
-const invokeChannels = new Set<string>(IPC_INVOKE_CHANNELS);
+// Les canaux réservés au preload (attachment:import) ne sont pas dans cette liste.
+const invokeChannels = new Set<string>(IPC_RENDERER_INVOKE_CHANNELS);
 const eventChannels = new Set<string>(IPC_EVENT_CHANNELS);
 
 /** API typée exposée au renderer ; seuls les canaux du contrat sont autorisés. */
@@ -31,6 +32,25 @@ const api: AtelierApi = {
     return () => {
       ipcRenderer.removeListener(channel, wrapped);
     };
+  },
+  async importDroppedFiles(sessionId: string, files: readonly File[]) {
+    // Seuls des fichiers réellement déposés ont un chemin ; un File construit en
+    // mémoire renvoie une chaîne vide.
+    const hostPaths = files.map((file) => webUtils.getPathForFile(file)).filter((p) => p !== '');
+    if (hostPaths.length === 0 || hostPaths.length !== files.length) {
+      return {
+        ok: false,
+        error: {
+          code: 'documents/unsupported_type',
+          message: 'Seuls des fichiers présents sur le disque peuvent être déposés.',
+          retryable: false,
+        },
+      };
+    }
+    return (await ipcRenderer.invoke('attachment:import', {
+      sessionId,
+      hostPaths,
+    })) as IpcResult<never>;
   },
   platform: {
     os: 'darwin',

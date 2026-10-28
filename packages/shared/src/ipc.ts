@@ -14,6 +14,7 @@ import type { SerializedAtelierError } from './errors.js';
 import type { AgentEvent } from './events.js';
 import type { Attachment, ChatMessage, SessionSummary } from './messages.js';
 import type { ConnectionTestResult, LlmModelInfo, ServerStatus } from './llm.js';
+import type { McpStatus } from './mcp.js';
 import type { PermissionDecision } from './permissions.js';
 import type { SandboxDiagnostics, SandboxProgress, SandboxStatus } from './sandbox.js';
 import type { AppSettings, AppSettingsPatch, SecretId, SecretsPresence } from './settings.js';
@@ -40,6 +41,11 @@ export interface IpcInvokeContract {
 
   // --- Dossiers et sessions
   'workspace:choose': { request: undefined; response: string | null };
+  /** Sélecteur de dossier générique (ex. dossier des skills) ; `null` si annulé. */
+  'dialog:choose-directory': {
+    request: { title?: string; defaultPath?: string };
+    response: string | null;
+  };
   'session:list': { request: { limit?: number }; response: SessionSummary[] };
   'session:create': { request: { workspace: string }; response: SessionSummary };
   'session:open': {
@@ -61,6 +67,11 @@ export interface IpcInvokeContract {
   };
 
   // --- Fichiers
+  /**
+   * Copie des fichiers glissés dans `<dossier>/.atelier/uploads/`.
+   * ⚠️ Réservé au preload ({@link AtelierApi.importDroppedFiles}) : le renderer
+   * ne peut pas l'appeler directement, il ne fournit jamais de chemin arbitraire.
+   */
   'attachment:import': {
     request: { sessionId: string; hostPaths: string[] };
     response: Attachment[];
@@ -79,6 +90,7 @@ export interface IpcInvokeContract {
   'skills:list': { request: undefined; response: SkillInfo[] };
   'mcp:read-config': { request: undefined; response: string };
   'mcp:write-config': { request: { json: string }; response: undefined };
+  'mcp:status': { request: undefined; response: McpStatus };
 }
 
 /** Canal d'invocation. */
@@ -98,6 +110,8 @@ export interface IpcEventContract {
   'sandbox:status': SandboxStatus;
   /** Changement d'état du serveur LLM. */
   'llm:status': ServerStatus;
+  /** Changement d'état des connecteurs MCP. */
+  'mcp:status': McpStatus;
 }
 
 /** Canal d'événement. */
@@ -115,6 +129,7 @@ export const IPC_INVOKE_CHANNELS = [
   'llm:list-models',
   'llm:status',
   'workspace:choose',
+  'dialog:choose-directory',
   'session:list',
   'session:create',
   'session:open',
@@ -134,6 +149,7 @@ export const IPC_INVOKE_CHANNELS = [
   'skills:list',
   'mcp:read-config',
   'mcp:write-config',
+  'mcp:status',
 ] as const satisfies readonly IpcInvokeChannel[];
 
 /** Liste exhaustive des canaux d'événements. */
@@ -142,6 +158,7 @@ export const IPC_EVENT_CHANNELS = [
   'sandbox:progress',
   'sandbox:status',
   'llm:status',
+  'mcp:status',
 ] as const satisfies readonly IpcEventChannel[];
 
 // Vérifications à la compilation : les listes couvrent exactement les contrats.
@@ -159,6 +176,24 @@ export const _eventExhaustive: Missing<
   ? true
   : false = true;
 
+/** Canaux réservés au preload : le renderer ne peut pas les invoquer directement. */
+export const IPC_PRELOAD_ONLY_CHANNELS = [
+  'attachment:import',
+] as const satisfies readonly IpcInvokeChannel[];
+
+/** Canal invocable par le renderer via {@link AtelierApi.invoke}. */
+export type RendererInvokeChannel = Exclude<
+  IpcInvokeChannel,
+  (typeof IPC_PRELOAD_ONLY_CHANNELS)[number]
+>;
+
+/** Canaux que le preload laisse passer depuis le renderer. */
+export const IPC_RENDERER_INVOKE_CHANNELS: readonly RendererInvokeChannel[] =
+  IPC_INVOKE_CHANNELS.filter(
+    (channel): channel is RendererInvokeChannel =>
+      !(IPC_PRELOAD_ONLY_CHANNELS as readonly string[]).includes(channel),
+  );
+
 /** Fonction de désabonnement. */
 export type Unsubscribe = () => void;
 
@@ -167,8 +202,8 @@ export type Unsubscribe = () => void;
  * Les appels renvoient un {@link IpcResult} : le renderer gère les erreurs sans try/catch.
  */
 export interface AtelierApi {
-  /** Appelle un canal du main. */
-  invoke<C extends IpcInvokeChannel>(
+  /** Appelle un canal du main (sauf les canaux réservés au preload). */
+  invoke<C extends RendererInvokeChannel>(
     channel: C,
     ...args: IpcRequest<C> extends undefined ? [] : [request: IpcRequest<C>]
   ): Promise<IpcResult<IpcResponse<C>>>;
@@ -177,6 +212,17 @@ export interface AtelierApi {
     channel: C,
     listener: (payload: IpcEventPayload<C>) => void,
   ): Unsubscribe;
+  /**
+   * Importe des fichiers glissés-déposés dans la session (copie dans
+   * `<dossier>/.atelier/uploads/`). Le preload résout lui-même les chemins
+   * (`webUtils.getPathForFile`, `File.path` n'existe plus depuis Electron 32) :
+   * le renderer ne manipule jamais de chemin hôte. Un `File` construit en
+   * mémoire (sans fichier sur disque) est refusé.
+   */
+  importDroppedFiles(
+    sessionId: string,
+    files: readonly File[],
+  ): Promise<IpcResult<IpcResponse<'attachment:import'>>>;
   /** Informations de plateforme non sensibles. */
   readonly platform: { os: 'darwin'; arch: 'arm64' | 'x64'; appVersion: string };
 }

@@ -15,27 +15,12 @@ import {
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { ToolListChangedNotificationSchema } from '@modelcontextprotocol/sdk/types.js';
-import { AtelierError } from '@atelier/shared';
+import { AtelierError, type McpServerState, type McpServerStatus } from '@atelier/shared';
 import type { McpServerConfig } from './config.js';
 import type { McpCallResult, McpToolInfo } from './tools.js';
 
-/** État d'un serveur MCP. */
-export type McpServerState = 'connecting' | 'connected' | 'reconnecting' | 'failed' | 'stopped';
-
-/** Instantané d'un serveur (Réglages, diagnostics). */
-export interface McpServerStatus {
-  name: string;
-  transport: McpServerConfig['transport'];
-  state: McpServerState;
-  /** Nombre d'outils publiés. */
-  toolCount: number;
-  /** Nom et version annoncés par le serveur. */
-  serverInfo?: { name: string; version: string };
-  /** Dernière erreur lisible (avec la fin de stderr pour un serveur stdio). */
-  error?: string;
-  /** Tentatives de reconnexion consécutives. */
-  reconnectAttempts: number;
-}
+/** Types promus dans `@atelier/shared` (exposés au renderer via `mcp:status`). */
+export type { McpServerState, McpServerStatus } from '@atelier/shared';
 
 /** Fabrique de transport injectable (tests). */
 export type TransportFactory = (config: McpServerConfig, env: NodeJS.ProcessEnv) => Transport;

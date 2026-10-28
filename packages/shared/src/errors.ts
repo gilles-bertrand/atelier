@@ -19,6 +19,13 @@ export const ATELIER_ERROR_CODES = [
   'agent/aborted',
   'agent/max_steps',
   'agent/invalid_tool_call',
+  /** Un tour est déjà en cours dans cette session. */
+  'agent/busy',
+  // Sessions et réglages
+  /** Session inconnue (supprimée, identifiant invalide). */
+  'session/not_found',
+  /** Réglage refusé (valeur hors bornes, URL invalide…). */
+  'settings/invalid',
   // Outils
   'tool/not_found',
   'tool/invalid_input',
