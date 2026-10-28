@@ -4,9 +4,9 @@
  */
 import type {
   AtelierApi,
-  IpcInvokeChannel,
   IpcRequest,
   IpcResponse,
+  RendererInvokeChannel,
   SerializedAtelierError,
 } from '@atelier/shared';
 
@@ -29,7 +29,7 @@ export class IpcError extends Error {
  * Appelle un canal et renvoie la valeur, ou lève une {@link IpcError}.
  * Pratique dans les gestionnaires d'événements avec `try / catch`.
  */
-export async function call<C extends IpcInvokeChannel>(
+export async function call<C extends RendererInvokeChannel>(
   channel: C,
   ...args: IpcRequest<C> extends undefined ? [] : [request: IpcRequest<C>]
 ): Promise<IpcResponse<C>> {
