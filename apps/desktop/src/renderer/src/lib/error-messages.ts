@@ -43,7 +43,15 @@ const MESSAGES: Record<AtelierErrorCode, string> = {
   internal: 'Une erreur inattendue est survenue.',
 };
 
+/** Messages propres à un cas précis (`details.kind`), prioritaires sur le code. */
+const KIND_MESSAGES: Record<string, string> = {
+  blocked_open:
+    'Par sécurité, Atelier n’ouvre directement que les documents (PDF, images, textes, tableurs…). Utilisez « Afficher dans le Finder ».',
+};
+
 /** Message lisible pour une erreur sérialisée. */
-export function errorMessage(error: Pick<SerializedAtelierError, 'code'>): string {
+export function errorMessage(error: Pick<SerializedAtelierError, 'code' | 'details'>): string {
+  const kind = error.details?.['kind'];
+  if (typeof kind === 'string' && KIND_MESSAGES[kind]) return KIND_MESSAGES[kind];
   return MESSAGES[error.code];
 }
