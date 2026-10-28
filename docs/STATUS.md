@@ -100,6 +100,7 @@ _Format : date, agent, type proposé, raison, packages impactés._
 - **Chemins** : `resolveWorkspacePath(workspace, path)` (export d'agent-core) pour `packages/documents` ; gère le dossier de travail derrière un symlink (`/var` → `/private/var` sur macOS) et refuse tout symlink sortant.
 - **Thinking off** : `reasoning_effort: "none"` (Ollama) + `chat_template_kwargs.enable_thinking: false` (vLLM). Le raisonnement est retiré de l'historique, y compris entre deux étapes d'un même tour (`prepareStep`).
 - **Contexte** : `/api/show` → `num_ctx` du Modelfile ; sans `num_ctx`, hypothèse 32 768 (bornée par le max du modèle) car `OLLAMA_CONTEXT_LENGTH` n'est pas lisible à distance : d'où l'intérêt du Modelfile `atelier`. Repli vLLM : `/v1/models` (`max_model_len`).
+- **Fabrique `createAgentRuntime`** (PR `feat/core-agent-factory`) pour le main Electron : LLM + fenêtre de contexte (sans lever si le serveur est hors ligne), `createSession({ sessionId, workspace, requestPermission, history })` avec un registre par session (`tools`, `sessionTools` pour `tool_search`, `lazyTools`). `AgentOptions.sandbox`, `skills` et `extraInstructions` acceptent un getter relu à chaque tour (VM prête après création de la session) ; `session.send(..., { turnId })` pour un identifiant de tour fourni par l'app. Persister `TurnResult.messages` pour la reprise de session. API convenue avec l'agent UI.
 - **`LocalSandbox`** (M1) exécute `bash` sur l'hôte **sans isolation** : CLI de démo uniquement, à remplacer par `packages/sandbox` dans l'app.
 
 ## Comportements du modèle observés
