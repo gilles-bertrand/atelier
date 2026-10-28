@@ -209,6 +209,9 @@ importers:
         specifier: ^4.6.7
         version: 4.6.7
     devDependencies:
+      '@atelier/sandbox':
+        specifier: workspace:*
+        version: link:../sandbox
       '@types/heic-convert':
         specifier: ^2.1.1
         version: 2.1.1

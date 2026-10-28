@@ -4,6 +4,7 @@
  * dans `<dossier>/.atelier/cache/pages/` (visible des deux côtés via
  * `/workspace`), relue côté hôte après vérification du chemin.
  */
+import { randomUUID } from 'node:crypto';
 import { mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { GUEST_WORKSPACE, AtelierError, type Sandbox } from '@atelier/shared';
@@ -51,11 +52,12 @@ export function guestPathOf(sandbox: Sandbox, workspace: string, relativePath: s
  */
 export async function renderPdfPage(request: RenderPageRequest): Promise<Buffer> {
   const { sandbox, workspace, relativePath, fileHash, page } = request;
-  const name = `${fileHash.slice(0, 32)}-p${page}`;
+  // Nom unique à chaque rendu : avec virtiofs, la VM ne peut pas recréer un nom
+  // que l'hôte vient de supprimer (cache d'entrées côté invité, « Could not write
+  // image »). Le PNG est supprimé après lecture : seule la transcription est gardée.
+  const name = `${fileHash.slice(0, 16)}-p${page}-${randomUUID()}`;
   const target = await resolveWorkspacePath(workspace, `${PAGES_DIR}/${name}.png`);
   await mkdir(path.dirname(target.absolutePath), { recursive: true });
-  // Retire un rendu périmé (ou un lien posé à sa place) avant de lancer pdftoppm.
-  await rm(target.absolutePath, { force: true });
 
   const pdf = guestPathOf(sandbox, workspace, relativePath);
   const prefix = guestPathOf(sandbox, workspace, `${PAGES_DIR}/${name}`);
@@ -101,5 +103,9 @@ export async function renderPdfPage(request: RenderPageRequest): Promise<Buffer>
       `pdftoppm n'a produit aucune image pour la page ${page}.`,
     );
   }
-  return readRegularFile(output.absolutePath, 50 * 1024 * 1024);
+  try {
+    return await readRegularFile(output.absolutePath, 50 * 1024 * 1024);
+  } finally {
+    await rm(output.absolutePath, { force: true });
+  }
 }

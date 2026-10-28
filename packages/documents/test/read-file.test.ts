@@ -194,7 +194,7 @@ describe('read_file : PDF', () => {
       // pdftoppm dans la VM, sur le chemin /workspace, une seule page, 1568 px.
       expect(sandbox.commands).toHaveLength(1);
       expect(sandbox.commands[0]).toMatch(
-        /^pdftoppm -f 2 -l 2 -scale-to 1568 -png -singlefile '\/workspace\/scan\.pdf' '\/workspace\/\.atelier\/cache\/pages\/[0-9a-f]{32}-p2'$/,
+        /^pdftoppm -f 2 -l 2 -scale-to 1568 -png -singlefile '\/workspace\/scan\.pdf' '\/workspace\/\.atelier\/cache\/pages\/[0-9a-f]{16}-p2-[0-9a-f-]{36}'$/,
       );
       // Contexte isolé : consignes de vision + image PNG, sans l'historique du chat.
       expect(model.prompts).toHaveLength(1);

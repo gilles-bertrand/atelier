@@ -28,6 +28,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@atelier/sandbox": "workspace:*",
     "@types/heic-convert": "^2.1.1",
     "@types/turndown": "^5.0.6",
     "tsx": "^4.23.15"

@@ -56,7 +56,7 @@ Envoie l'image (ou la page PDF rendue dans la VM) au modèle vision avec la ques
 
 - Tous les chemins passent par `resolveWorkspacePath` d'agent-core (symlinks compris), y compris le cache, les rendus et les pièces jointes ; un `.atelier` remplacé par un lien sortant est ignoré (cache) ou refusé (uploads).
 - Lecture finale en `O_NOFOLLOW` : un lien posé entre la vérification et la lecture est refusé.
-- Les PDF scannés sont rendus dans la VM (poppler n'est jamais exécuté côté hôte) ; l'image produite est relue après re-vérification du chemin.
+- Les PDF scannés sont rendus dans la VM (poppler n'est jamais exécuté côté hôte) ; l'image produite est relue après re-vérification du chemin, puis supprimée. Chaque rendu a un nom unique : avec virtiofs, la VM ne peut pas recréer un nom que l'hôte vient de supprimer (« Could not write image »).
 - sharp : `limitInputPixels` (100 Mpx) contre les bombes de décompression.
 
 ## Tests
@@ -64,6 +64,8 @@ Envoie l'image (ou la page PDF rendue dans la VM) au modèle vision avec la ques
 ```bash
 pnpm --filter @atelier/documents test       # fixtures + MockLanguageModelV4, VM simulée
 pnpm --filter @atelier/documents fixtures   # régénère test/fixtures (macOS : sips, zip)
+# pdftoppm dans la vraie VM Lima (instance atelier-it de @atelier/sandbox, après pnpm fetch:lima) :
+ATELIER_SANDBOX_IT=1 pnpm --filter @atelier/documents test vm.integration
 # Vision réelle (Ollama) :
 ATELIER_DOCUMENTS_IT=1 ATELIER_LLM_URL=http://localhost:11434 ATELIER_LLM_MODEL=qwen3.5:9b \
   pnpm --filter @atelier/documents test

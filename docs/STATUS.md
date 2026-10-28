@@ -83,6 +83,7 @@ _Dernière mise à jour : 2026-10-28, Lead._
 - **`look_at({ path, question, page? })`** : image ou page PDF rendue → modèle vision → réponse texte.
 - **Vision** : `createVisionAnalyzer({ model })`, `generateText` isolé (sans historique), seul le texte revient. Validé en réel sur `qwen3.5:9b` local (ticket PNG, facture scannée, look_at) : `ATELIER_DOCUMENTS_IT=1`.
 - **Cache** `<dossier>/.atelier/cache/` (SHA-256 fichier + paramètres + id du modèle vision) ; **pièces jointes** `importAttachment(hostPath, workspace)` → `.atelier/uploads/<nom>`.
+- **Validé sur la vraie VM Lima** (`ATELIER_SANDBOX_IT=1`, instance `atelier-it`) : `pdftoppm` rend la page, qwen3.5:9b la transcrit, `look_at` répond. ⚠️ Piège virtiofs (pour tous) : un fichier supprimé côté hôte ne peut plus être recréé sous le même nom par la VM (cache d'entrées de l'invité) ; d'où un nom unique par rendu.
 - poppler-utils est déjà dans le provisioning de la VM (`lima/provision/10-packages.sh`) : rien à demander à Sandbox.
 - **sharp 0.35** : binaires précompilés (`@img/sharp-darwin-arm64`), plus de script d'installation → **aucune entrée `allowBuilds` nécessaire**.
 - Pour **UI / Lead** : externaliser `sharp`, `unpdf`, `exceljs`, `mammoth`, `heic-convert`, `file-type` du bundle main ; `asarUnpack` pour `@img/sharp-*`. Réglage « modèle vision séparé » : `createVisionAnalyzer({ model: createLlmModels({ …, model: visionModel }).model })`, sinon `models.fastModel`. Glisser-déposer : `importAttachment` puis mention du chemin relatif dans le message.
