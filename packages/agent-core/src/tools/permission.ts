@@ -58,11 +58,27 @@ export function describePermissionFor(
   input: unknown,
   appDescriber?: PermissionDescriber,
 ): PermissionDescription {
+  // Un libellé qui lève (outil MCP mal écrit…) ne doit pas faire échouer l'appel :
+  // on passe au niveau suivant. La demande de permission a lieu quoi qu'il arrive.
   return (
-    definition.describePermission?.(input) ??
-    appDescriber?.(definition.name, input) ??
+    safely(() => definition.describePermission?.(input)) ??
+    safely(() => appDescriber?.(definition.name, input)) ??
     genericDescribePermission(definition.name, input)
   );
+}
+
+function safely(
+  describe: () => PermissionDescription | undefined,
+): PermissionDescription | undefined {
+  try {
+    const description = describe();
+    // Libellé vide ou mal formé (JS non typé, MCP) : on l'ignore.
+    return description && typeof description.title === 'string' && description.title.trim() !== ''
+      ? description
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function safeJson(value: unknown): string {
