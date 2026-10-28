@@ -65,7 +65,7 @@ _Dernière mise à jour : 2026-10-28, Lead._
 - **`tool_search({ query })`** par session : `registry.register(toolSearchTool({ source: mcp, registry }))` ; les outils trouvés sont enregistrés dans le registre de la session. `mcpPromptSection(mcp)` → `extraInstructions`.
 - Reconnexion automatique (backoff 1 s → 30 s, 5 essais puis `failed`), reconnexion immédiate à l'appel d'un outil, `tools/list_changed` suivi, `stop()` termine les processus.
 - Pour **UI / Lead** : après `mcp:write-config`, relire et `apply()` (seuls les serveurs modifiés redémarrent). Afficher `status()` (état, erreur avec fin de stderr) et `config.issues` dans les Réglages. Il faudra des canaux IPC pour l'état des connecteurs (type `McpServerStatus`, local à mcp-bridge pour l'instant : à promouvoir dans shared quand l'UI s'y branchera).
-- ✅ **Demande à Core acceptée par le Lead le 2026-10-28, transmise à Core** (aucun changement de shared) : `toAiSdkTools` est appelé **une fois par tour**, donc un outil activé par `tool_search` n'est appelable qu'au tour suivant, alors que le contrat `ToolRegistry` prévoit une conversion « à chaque étape ». Proposition : `AgentOptions.lazyTools?: () => readonly AnyToolDefinition[]` (l'app passe `() => mcp.definitions()`) ; en début de tour, `tools` = registre ∪ `lazyTools()`, et `prepareStep` renvoie `activeTools: registry.list().map((t) => t.name)`. Le prompt système ne liste que le registre.
+- ✅ **Demande à Core acceptée par le Lead le 2026-10-28, à implémenter par Core** (⚠️ aucun agent Core actif : à reprendre au prochain lancement, branche `feat/core-lazy-tools`, test MockLanguageModelV4 « tool_search au step 1 → outil appelable au step 2 ») (aucun changement de shared) : `toAiSdkTools` est appelé **une fois par tour**, donc un outil activé par `tool_search` n'est appelable qu'au tour suivant, alors que le contrat `ToolRegistry` prévoit une conversion « à chaque étape ». Proposition : `AgentOptions.lazyTools?: () => readonly AnyToolDefinition[]` (l'app passe `() => mcp.definitions()`) ; en début de tour, `tools` = registre ∪ `lazyTools()`, et `prepareStep` renvoie `activeTools: registry.list().map((t) => t.name)`. Le prompt système ne liste que le registre.
 
 ## Demandes d'évolution de `packages/shared`
 
@@ -84,6 +84,9 @@ _Format : date, agent, type proposé, raison, packages impactés._
 - ✅ **2026-10-28, acceptée par le Lead (PR #7, mergée)** → Sandbox remplace `tool/path_outside_workspace` dans `assertMountableWorkspace`. ✅ Fait (PR `feat/sandbox-invalid-workspace`). 2026-10-27, Sandbox : code `sandbox/invalid_workspace` dans `ATELIER_ERROR_CODES`. Raison : `setWorkspace` refuse la racine, le `$HOME` complet, `LIMA_HOME` et le dossier des skills ; il utilise en attendant `tool/path_outside_workspace`, sémantiquement approximatif. Impact : `sandbox`, UI (traduction du message).
 
 ## Points ouverts / risques
+
+- **web_fetch** : la demande de permission sur redirection inter-domaines s'écoule pendant le délai de 20 s du téléchargement ; un utilisateur lent fait échouer la lecture. À traiter (suspendre le délai pendant la modale) si observé en démo.
+- **MCP `readOnlyHint`** : annotation déclarée par le serveur, non vérifiable ; on fait confiance aux serveurs installés par l'utilisateur (voir README du bridge).
 
 - `Caddyfile` validé syntaxiquement à la main seulement (pas de daemon Docker en local) : à valider au premier déploiement (`docker compose up -d && ./healthcheck.sh`).
 - Repli vLLM : `/api/tags` et `/api/show` n'existent pas dans vLLM, d'où un repli sur `/v1/models` à prévoir (Core + UI), voir `docs/SERVER.md` §5.
