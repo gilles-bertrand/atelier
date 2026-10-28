@@ -11,7 +11,7 @@ _Dernière mise à jour : 2026-10-28, Lead._
 | M0 : squelette monorepo + `packages/shared` + `server/`     | ✅ fait                                                                                      | Lead                          |
 | M1 : boucle AI SDK en CLI, outils fichiers, bash local, web | 🟡 Core livré (PR `feat/core-agent-loop`), web livré (PR `feat/web-search-fetch`)            | Core, MCP & Web               |
 | M2 : sandbox Lima + permissions                             | 🟡 sandbox livrée (PR `feat/sandbox-lima`), permissions : Core                               | Sandbox, Core                 |
-| M3 : app Electron fonctionnelle                             | ⏳ à démarrer                                                                                | UI                            |
+| M3 : app Electron fonctionnelle                             | 🟡 process main branché (PR `feat/ui-shell`), écrans à venir                                 | UI                            |
 | M4 : skills + MCP + SearXNG + documents                     | 🟡 skills + SearXNG dans la VM livrés ; MCP livré (PR `feat/mcp-bridge`) ; documents à faire | Sandbox, MCP & Web, Documents |
 | M5 : historique, compaction, réglages, packaging signé      | ⏳                                                                                           | UI, Core, Lead                |
 
@@ -67,9 +67,24 @@ _Dernière mise à jour : 2026-10-28, Lead._
 - Pour **UI / Lead** : après `mcp:write-config`, relire et `apply()` (seuls les serveurs modifiés redémarrent). Afficher `status()` (état, erreur avec fin de stderr) et `config.issues` dans les Réglages. Il faudra des canaux IPC pour l'état des connecteurs (type `McpServerStatus`, local à mcp-bridge pour l'instant : à promouvoir dans shared quand l'UI s'y branchera).
 - ✅ **`lazyTools` livré dans agent-core** (PR `feat/core-lazy-tools`, implémenté par l'agent MCP & Web à la demande de Gilles, aucun changement de shared) : `AgentOptions.lazyTools?: () => readonly AnyToolDefinition[]` ; en début de tour, `tools` = registre ∪ `lazyTools()`, et `activeTools` = noms du registre, recalculés à chaque étape dans `prepareStep`. Un outil activé par `tool_search` est appelable dès l'étape suivante. L'app passe `lazyTools: () => mcp.definitions()`.
 
+## UI desktop (agent UI, `feat/ui-shell`)
+
+- **Process main branché** (PR `feat/ui-shell`) : `SettingsStore` (`userData/settings.json`, validation, écriture atomique), `SecretsStore` (`safeStorage`, `userData/secrets.json` en 0600, le renderer ne voit que la présence), `ServerMonitor` (sonde `/api/version`, repli `/v1/models` ; `connected` / `slow` > 1,5 s / `offline`, toutes les 30 s, 10 s hors ligne) → `llm:status`, « Tester la connexion » (latence, version, `/api/tags` ou `/v1/models`, contexte via `fetchContextWindow`).
+- **Agent** : `ChatManager` (un tour à la fois par session, `agent:send` renvoie le `turnId` tout de suite, stop = annulation + refus des permissions ouvertes, `agent:retry` rejoue la dernière demande en échec avec l'historique d'avant) ; l'agent est recréé **à chaque tour** (`AgentFactory`, assemblage local en attendant la fabrique de Core) avec les réglages, la VM (dossier de la session monté, réseau de la session appliqué) et les skills courants ; le registre (natifs + web + `tool_search`) vit avec la session. `PermissionBroker` : modale ↔ `PermissionHandler`, `withSessionMemory` par session.
+- **VM** : `SandboxManager` (démarrage en arrière-plan si l'onboarding est fait, `sandbox:progress` / `sandbox:status` relayés, réseau par session, `reset` relit CPU/RAM/skills des Réglages, arrêt à la fermeture). Sans `limactl` (dev sans `pnpm fetch:lima`) : état `error` avec un message clair, l'app fonctionne sans VM.
+- **Fichiers** : `attachment:import` copie dans `<dossier>/.atelier/uploads/` (nom unique, 200 Mo max) ; `file:open` / `file:reveal` limités aux dossiers des sessions, et `file:open` refuse apps et scripts (`.app`, `.command`, `.sh`…).
+- **Bundle** : `jsdom`, `undici` et les autres dépendances des packages sont externes au main (dépendances de `@atelier/desktop`). `electron-builder.yml` : `packages/skills/examples` → `Contents/Resources/skills-examples`. Historique en mémoire pour l'instant (`SessionStore`) : SQLite au lot 5.
+- Petit correctif dans `packages/web/src/fetch/extract.ts` (cast `as never` de la copie passée à Readability) : sous `lib.dom` (chargée par les types Electron), le type `DomNode` local n'était pas accepté.
+
 ## Demandes d'évolution de `packages/shared`
 
 _Format : date, agent, type proposé, raison, packages impactés._
+
+- ⏳ **2026-10-28, UI** (impact : `shared`, preload, renderer ; rien d'autre) :
+  1. **`AtelierApi.getPathForFile(file: File): string`** (preload : `webUtils.getPathForFile`). Raison : glisser-déposer dans le chat ; depuis Electron 32 `File.path` n'existe plus et le renderer sandboxé ne peut pas obtenir le chemin autrement, or `attachment:import` attend des `hostPaths`. **Bloquant pour le lot 3 (chat).**
+  2. **`'mcp:status'`** (invoke, `request: undefined`, `response: { servers: McpServerStatus[]; issues: McpConfigIssue[] }`) + event **`'mcp:status'`** (même charge), avec promotion de `McpServerStatus` / `McpConfigIssue` depuis mcp-bridge. Raison : état des connecteurs dans les Réglages (lot 5).
+  3. **`'dialog:choose-directory'`** (`request: { title?: string; defaultPath?: string }`, `response: string | null`). Raison : choix du dossier des skills dans les Réglages ; `workspace:choose` est réservé au dossier de travail (il refuse `$HOME` et la racine).
+  4. Codes d'erreur (confort) : `settings/invalid`, `session/not_found`, `agent/busy` (tour déjà en cours). En attendant : `internal` + `details.kind` (`invalid_settings`, `session_not_found`, `turn_in_progress`).
 
 - ✅ **2026-10-28, acceptées par Gilles et le Lead (PR `feat/lead-shared-tool-contract`)**, les 4 demandes de Core du 2026-10-27 :
   1. `ToolOutput.denied?: boolean`, reporté dans `ToolResultEvent.denied`. → Core retire `ExecutedToolOutput`.
