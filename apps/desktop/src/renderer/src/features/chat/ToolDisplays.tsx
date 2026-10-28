@@ -32,7 +32,7 @@ const ACTION_LABELS: Record<FileCardData['action'], string> = {
 };
 
 /** Carte de fichier : ouverture avec l'application par défaut, ou dans le Finder. */
-export function FileCard({ file }: { file: FileCardData }) {
+export function FileCard({ file, compact = false }: { file: FileCardData; compact?: boolean }) {
   const [error, setError] = useState<string | undefined>();
   const run = async (channel: 'file:open' | 'file:reveal'): Promise<void> => {
     setError(undefined);
@@ -53,7 +53,7 @@ export function FileCard({ file }: { file: FileCardData }) {
           <p className="truncate text-xs text-muted-foreground">
             {ACTION_LABELS[file.action]}
             {file.size !== undefined ? ` · ${formatBytes(file.size)}` : ''}
-            {file.path.includes('/') ? ` · ${file.path}` : ''}
+            {!compact && file.path.includes('/') ? ` · ${file.path}` : ''}
           </p>
         </div>
         <Button size="sm" variant="outline" onClick={() => void run('file:open')}>
