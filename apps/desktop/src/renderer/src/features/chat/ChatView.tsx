@@ -2,8 +2,8 @@
  * Écran de conversation : en-tête (retour, titre, dossier, état du serveur),
  * fil des messages, saisie, et dépôt de fichiers sur toute la zone.
  */
-import { useEffect, useRef, useState, type DragEvent } from 'react';
-import { ArrowLeft, Folder, Plus, Upload } from 'lucide-react';
+import { useEffect, useId, useRef, useState, type DragEvent } from 'react';
+import { ArrowLeft, Folder, PanelRight, Plus, Upload } from 'lucide-react';
 import type { SessionSummary } from '@atelier/shared';
 import { ServerStatusBadge } from '@renderer/components/status/ServerStatusBadge';
 import { Button } from '@renderer/components/ui/button';
@@ -17,6 +17,7 @@ import { useChat, useSessionView } from '@renderer/state/chat-store';
 import { deriveSessionTitle } from '../../../../common/chat-reducer';
 import { Composer, type PendingAttachment } from './Composer';
 import { MessageList } from './MessageList';
+import { SidePanel } from './SidePanel';
 
 function hasFiles(event: DragEvent): boolean {
   return Array.from(event.dataTransfer.types).includes('Files');
@@ -40,6 +41,8 @@ export function ChatView({
   const [dragging, setDragging] = useState(false);
   // Le main nomme la session d'après le premier message : même règle ici.
   const [title, setTitle] = useState(session.title);
+  const [panelOpen, setPanelOpen] = useState(true);
+  const panelId = useId();
   const [error, setError] = useState<string | undefined>();
   const dragDepth = useRef(0);
   const running = isRunning(view);
@@ -160,51 +163,78 @@ export function ChatView({
             <Plus className="size-4" aria-hidden />
             Nouvelle conversation
           </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Panneau de suivi"
+            aria-expanded={panelOpen}
+            aria-controls={panelId}
+            title={panelOpen ? 'Masquer le suivi' : 'Afficher le suivi'}
+            onClick={() => {
+              setPanelOpen((open) => !open);
+            }}
+          >
+            <PanelRight className="size-4" aria-hidden />
+          </Button>
         </div>
       </header>
 
-      {view.messages.length === 0 && !view.live && view.loaded ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
-          <h2 className="text-lg font-semibold">Que puis-je faire pour vous ?</h2>
-          <p className="max-w-md text-sm text-muted-foreground">
-            Je travaille dans le dossier « {fileName(session.workspace)} » : je peux lire vos
-            documents, en créer de nouveaux, chercher sur internet et faire des calculs.
-          </p>
-        </div>
-      ) : (
-        <MessageList
-          view={view}
-          onRetry={() => {
-            guard(actions.retry(session.id));
-          }}
-        />
-      )}
+      <div className="flex min-h-0 flex-1">
+        <div className="flex min-w-0 flex-1 flex-col">
+          {view.messages.length === 0 && !view.live && view.loaded ? (
+            <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
+              <h2 className="text-lg font-semibold">Que puis-je faire pour vous ?</h2>
+              <p className="max-w-md text-sm text-muted-foreground">
+                Je travaille dans le dossier « {fileName(session.workspace)} » : je peux lire vos
+                documents, en créer de nouveaux, chercher sur internet et faire des calculs.
+              </p>
+            </div>
+          ) : (
+            <MessageList
+              view={view}
+              onRetry={() => {
+                guard(actions.retry(session.id));
+              }}
+            />
+          )}
 
-      {error ? (
-        <div className="mx-auto w-full max-w-3xl px-6 pb-2">
-          <Alert tone="error">{error}</Alert>
-        </div>
-      ) : null}
+          {error ? (
+            <div className="mx-auto w-full max-w-3xl px-6 pb-2">
+              <Alert tone="error">{error}</Alert>
+            </div>
+          ) : null}
 
-      <Composer
-        value={draft}
-        onChange={setDraft}
-        attachments={pending}
-        onRemoveAttachment={(index) => {
-          setPending((current) => {
-            const removed = current[index];
-            revoke(removed?.previewUrl);
-            return current.filter((_, i) => i !== index);
-          });
-        }}
-        onSend={() => void send()}
-        onStop={() => {
-          guard(actions.stop(session.id));
-        }}
-        running={running}
-        disabled={!view.loaded}
-        importing={importing}
-      />
+          <Composer
+            value={draft}
+            onChange={setDraft}
+            attachments={pending}
+            onRemoveAttachment={(index) => {
+              setPending((current) => {
+                const removed = current[index];
+                revoke(removed?.previewUrl);
+                return current.filter((_, i) => i !== index);
+              });
+            }}
+            onSend={() => void send()}
+            onStop={() => {
+              guard(actions.stop(session.id));
+            }}
+            running={running}
+            disabled={!view.loaded}
+            importing={importing}
+          />
+        </div>
+        {panelOpen ? (
+          <SidePanel
+            id={panelId}
+            session={session}
+            view={view}
+            sandbox={state.sandbox}
+            server={state.server}
+            model={state.settings.llm.model}
+          />
+        ) : null}
+      </div>
 
       {dragging ? (
         <div
