@@ -68,7 +68,9 @@ export function extractHtml(html: string, url: string): ExtractedPage {
     const document = dom.window.document;
     const pageTitle = document.title.trim();
     // Readability modifie le document : on lui passe une copie.
-    const article = new Readability(document.cloneNode(true), {
+    // `never` : sous `lib.dom` (process main d'Electron), Readability attend un vrai `Document`.
+    const copy = document.cloneNode(true) as never;
+    const article = new Readability(copy, {
       charThreshold: 200,
     }).parse();
     const turndown = createTurndown();

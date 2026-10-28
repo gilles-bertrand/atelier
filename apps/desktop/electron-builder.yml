@@ -20,6 +20,10 @@ extraResources:
   - from: ../../lima
     to: lima-templates
     filter: ['*.yaml', 'provision/**']
+  # Skills d'exemple copiés au premier lancement dans ~/Atelier/skills (installExampleSkills).
+  - from: ../../packages/skills/examples
+    to: skills-examples
+    filter: ['**/*']
 asar: true
 mac:
   target:
