@@ -33,6 +33,8 @@ _Dernière mise à jour : 2026-10-28, Lead._
 
 ## Notes du Lead pour les agents
 
+- **Écart au tableau « Décisions de stack » (validé par Gilles le 2026-10-28)** : persistance de l'historique en **`node:sqlite`** (module intégré à Node 22.13+ et à Electron 45) au lieu de `better-sqlite3`, derrière une interface `SessionStore`. Raison : pas de module natif à recompiler pour l'ABI d'Electron, ni à signer et notariser ; mêmes tests sous Node et sous Electron. Contrepartie : module marqué « experimental » (avertissement filtré), `engines` relevé à Node >= 22.13. Revenir à `better-sqlite3` reste local à l'implémentation du store.
+
 - **AI SDK v7** (et non v5) : `tool({ description, inputSchema, execute })` et `streamText` sont inchangés ; le mock de test est `MockLanguageModelV4` (`ai/test`).
 - Les outils se définissent avec `defineTool` (`@atelier/shared`) ; `agent-core` les convertit en outils AI SDK en injectant `ToolExecutionContext`.
 - `ToolExecutionContext.sandbox` est optionnel (VM pas encore prête) : les outils doivent dégrader proprement.
