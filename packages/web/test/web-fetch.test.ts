@@ -10,6 +10,7 @@ const DNS: Record<string, string[]> = {
   'www.journal.example': [PUBLIC_IP],
   'rebind.example': ['192.168.1.1'],
   'mixed.example': [PUBLIC_IP, '10.0.0.1'],
+  'autre.example': [PUBLIC_IP],
 };
 const resolveHost: ResolveHost = (host) => {
   const found = DNS[host];
@@ -35,6 +36,14 @@ const server = setupServer(
   ),
   http.get('https://journal.example/to-private', () =>
     HttpResponse.redirect('http://rebind.example/admin', 302),
+  ),
+  http.get('https://journal.example/ailleurs', () =>
+    HttpResponse.redirect('https://autre.example/page', 302),
+  ),
+  http.get('https://autre.example/page', () =>
+    HttpResponse.html(
+      '<html><head><title>Autre</title></head><body><p>Autre site.</p></body></html>',
+    ),
   ),
   http.get('https://journal.example/to-file', () =>
     HttpResponse.redirect('file:///etc/passwd', 302),
@@ -182,6 +191,34 @@ describe('web_fetch', () => {
       sessionId: 'session-1',
       toolCallId: 'call-1',
     });
+  });
+
+  it('une redirection dans le même domaine ne redemande pas la permission', async () => {
+    const { context, requestPermission } = makeContext('allow_once');
+    const out = await tool.execute({ url: 'https://journal.example/old' }, context);
+    expect(out.ok).toBe(true);
+    expect(requestPermission).toHaveBeenCalledOnce();
+  });
+
+  it('une redirection vers un autre domaine redemande la permission', async () => {
+    const { context, requestPermission } = makeContext('allow_once');
+    const out = await tool.execute({ url: 'https://journal.example/ailleurs' }, context);
+    expect(out.ok).toBe(true);
+    expect(out.content).toContain('Autre site.');
+    expect(requestPermission.mock.calls.map((c) => c[0].scopeKey)).toEqual([
+      'web_fetch:journal.example',
+      'web_fetch:autre.example',
+    ]);
+  });
+
+  it('refuser le domaine de destination arrête la redirection', async () => {
+    const { context } = makeContext((request) =>
+      Promise.resolve(request.scopeKey === 'web_fetch:autre.example' ? 'deny' : 'allow_once'),
+    );
+    const out = await tool.execute({ url: 'https://journal.example/ailleurs' }, context);
+    expect(out).toMatchObject({ ok: false, denied: true });
+    expect(out.content).toContain('Consulter le site autre.example');
+    expect(out.content).toContain('redirection depuis https://journal.example/ailleurs');
   });
 
   it('tronque le contenu à 20 ko', async () => {
