@@ -6,7 +6,7 @@ import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, extname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { parseMcpConfigText, type McpManager } from '@atelier/mcp-bridge';
-import { listModels, testConnection } from '@atelier/agent-core';
+import { listModels, testConnection, type FetchFunction } from '@atelier/agent-core';
 import { loadSkills } from '@atelier/skills';
 import { AtelierError, type SecretId } from '@atelier/shared';
 import type { IpcHandlers } from './ipc.js';
@@ -37,6 +37,35 @@ export interface HandlerServices {
   /** Un secret a changé (le token LLM impose un nouveau runtime). */
   onSecretChanged?: (id: SecretId) => void;
   home?: string;
+  /** `fetch` des appels de diagnostic (tests). */
+  fetch?: FetchFunction;
+}
+
+/** Origine normalisée d'une URL (`https://hote:port`), ou `undefined` si invalide. */
+export function urlOrigin(raw: string): string | undefined {
+  try {
+    return new URL(raw.trim()).origin;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Token à envoyer pour « Tester la connexion ». Le token enregistré ne part que
+ * vers l'origine du serveur enregistré : sinon, un renderer compromis pourrait
+ * le faire envoyer à un serveur de son choix (`baseUrl` vient du renderer).
+ */
+export function tokenForConnectionTest(options: {
+  requestedUrl: string;
+  providedToken: string | undefined;
+  savedUrl: string;
+  savedToken: string | undefined;
+}): string | undefined {
+  const provided = options.providedToken?.trim();
+  if (provided) return provided;
+  const requested = urlOrigin(options.requestedUrl);
+  if (requested === undefined || requested !== urlOrigin(options.savedUrl)) return undefined;
+  return options.savedToken;
 }
 
 /** Contenu proposé quand `mcp.json` n'existe pas encore. */
@@ -132,10 +161,16 @@ export function createHandlers(s: HandlerServices): IpcHandlers {
 
     // --- Serveur LLM
     'llm:test-connection': ({ baseUrl, token, model }) => {
-      const effective = token ?? s.secrets.get('llm_token');
-      const { numCtx } = s.settings.get().llm;
+      const { numCtx, baseUrl: savedUrl } = s.settings.get().llm;
+      const effective = tokenForConnectionTest({
+        requestedUrl: baseUrl,
+        providedToken: token,
+        savedUrl,
+        savedToken: s.secrets.get('llm_token'),
+      });
       return testConnection({
         baseUrl,
+        ...(s.fetch ? { fetch: s.fetch } : {}),
         ...(effective ? { token: effective } : {}),
         ...(model ? { model } : {}),
         ...(numCtx !== undefined ? { numCtx } : {}),
