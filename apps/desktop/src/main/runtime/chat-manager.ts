@@ -1,24 +1,24 @@
 /**
  * Sessions de chat côté main : un tour à la fois par session, relais des events
- * vers le renderer, persistance des messages affichés, stop et reprise.
+ * vers le renderer, persistance (messages affichés + historique modèle), stop
+ * et reprise.
  *
- * L'agent lui-même est fourni par `createRunner` à chaque tour (modèle, VM et
- * skills courants) ; le registre d'outils, lui, vit avec la session (les outils
- * activés par `tool_search` y restent enregistrés).
+ * Chaque session de chat garde une session agent (`createAgentRuntime` →
+ * `createSession`), recréée entre deux tours si le runtime a changé (Réglages
+ * LLM modifiés) ou pour rejouer un tour en échec.
  */
 import { randomUUID } from 'node:crypto';
-import { chatMessagesToModelMessages } from '@atelier/agent-core';
-import type { RunTurnOptions, TurnResult } from '@atelier/agent-core';
+import { chatMessagesToModelMessages, type TurnResult } from '@atelier/agent-core';
 import {
   AtelierError,
   serializeError,
   type AgentEvent,
+  type AgentEventSink,
   type Attachment,
   type ChatMessage,
   type PermissionHandler,
   type SerializedAtelierError,
   type SessionSummary,
-  type ToolRegistry,
 } from '@atelier/shared';
 import type { ModelMessage } from 'ai';
 import {
@@ -32,27 +32,39 @@ import {
 import type { PermissionBroker } from './permission-broker.js';
 import { sessionNotFound, type SessionStore } from './session-store.js';
 
-/** Ce dont le gestionnaire a besoin d'un agent : exécuter un tour. */
-export interface TurnRunner {
-  runTurn(options: RunTurnOptions): Promise<TurnResult>;
+/** Ce que le gestionnaire utilise d'une `AgentSession` d'agent-core. */
+export interface AgentSessionLike {
+  readonly history: readonly ModelMessage[];
+  send(
+    input: string,
+    emit: AgentEventSink,
+    abortSignal?: AbortSignal,
+    options?: { turnId?: string },
+  ): Promise<TurnResult>;
 }
 
-/** Contexte donné à la fabrique d'agent pour un tour. */
-export interface RunnerContext {
+/** Paramètres d'une nouvelle session agent. */
+export interface NewAgentSession {
   sessionId: string;
   workspace: string;
-  registry: ToolRegistry;
   requestPermission: PermissionHandler;
-  signal: AbortSignal;
+  history: readonly ModelMessage[];
+}
+
+/** Fabrique de sessions agent (runtime courant). */
+export interface AgentSessionFactory {
+  /** Change quand le runtime est recréé (Réglages LLM). */
+  generation(): number;
+  /** Prépare le tour : VM montée sur le dossier, skills relus… */
+  beforeTurn(sessionId: string, workspace: string): Promise<void>;
+  /** Crée une session agent ; rejette une `AtelierError` (serveur non configuré…). */
+  createSession(options: NewAgentSession): Promise<AgentSessionLike>;
 }
 
 export interface ChatManagerOptions {
   store: SessionStore;
   permissions: PermissionBroker;
-  /** Registre d'outils d'une nouvelle session (natifs, web, MCP…). */
-  createRegistry: (sessionId: string) => ToolRegistry;
-  /** Agent du tour (lève une `AtelierError` si le serveur n'est pas configuré…). */
-  createRunner: (context: RunnerContext) => Promise<TurnRunner>;
+  agents: AgentSessionFactory;
   /** Relais des événements (renderer). */
   emit: (event: AgentEvent) => void;
   /** Erreur de tour liée au serveur (pour revérifier l'indicateur). */
@@ -67,13 +79,11 @@ interface PendingInput {
 }
 
 interface SessionRuntime {
-  registry: ToolRegistry;
-  /** Historique modèle (reconstruit depuis le stockage à la première utilisation). */
-  history: ModelMessage[];
-  lastInputTokens?: number;
+  /** Session agent et génération du runtime qui l'a créée. */
+  agent?: { session: AgentSessionLike; generation: number };
   running?: { turnId: string; controller: AbortController; done: Promise<void> };
   /** Dernier tour en échec ou interrompu : relançable via `agent:retry`. */
-  retryable?: { input: PendingInput; history: ModelMessage[] };
+  retryable?: { input: PendingInput; history: readonly ModelMessage[] };
 }
 
 export class ChatManager {
@@ -137,7 +147,7 @@ export class ChatManager {
       updatedAt: at,
       ...(isFirst ? { title: deriveSessionTitle(text, attachments[0]?.name) } : {}),
     });
-    return this.#start(session, runtime, { text, attachments }, runtime.history);
+    return this.#start(session, runtime, { text, attachments }, undefined);
   }
 
   /** Relance le dernier tour en échec (coupure réseau…) avec la même demande. */
@@ -145,12 +155,13 @@ export class ChatManager {
     const session = this.#session(sessionId);
     const runtime = this.#runtime(sessionId);
     this.#assertIdle(runtime);
-    if (!runtime.retryable) {
+    const retryable = runtime.retryable;
+    if (!retryable) {
       throw new AtelierError('internal', 'Aucun tour à relancer.', {
         details: { kind: 'nothing_to_retry' },
       });
     }
-    return this.#start(session, runtime, runtime.retryable.input, runtime.retryable.history);
+    return this.#start(session, runtime, retryable.input, retryable.history);
   }
 
   /** Bouton stop : annule le tour et refuse les permissions en attente. */
@@ -167,16 +178,20 @@ export class ChatManager {
     await Promise.all([...this.#runtimes.keys()].map((id) => this.stop(id)));
   }
 
+  /**
+   * @param resetHistory - Historique à rétablir avant le tour (reprise d'un tour
+   *   en échec) ; sinon celui de la session agent courante.
+   */
   #start(
     session: SessionSummary,
     runtime: SessionRuntime,
     input: PendingInput,
-    history: ModelMessage[],
+    resetHistory: readonly ModelMessage[] | undefined,
   ): { turnId: string } {
     const turnId = this.#id();
     const controller = new AbortController();
     runtime.retryable = undefined;
-    const done = this.#run(session, runtime, turnId, input, history, controller);
+    const done = this.#run(session, runtime, turnId, input, resetHistory, controller);
     runtime.running = { turnId, controller, done };
     return { turnId };
   }
@@ -186,7 +201,7 @@ export class ChatManager {
     runtime: SessionRuntime,
     turnId: string,
     input: PendingInput,
-    history: ModelMessage[],
+    resetHistory: readonly ModelMessage[] | undefined,
     controller: AbortController,
   ): Promise<void> {
     // Laisse `send` renvoyer le turnId avant le premier événement.
@@ -197,33 +212,24 @@ export class ChatManager {
       assistant = applyAgentEvent(assistant, event);
       this.#o.emit(event);
     };
+    const historyBefore = resetHistory ?? this.#currentHistory(runtime, sessionId);
     let outcome: TurnResult['reason'] = 'error';
     try {
-      const runner = await this.#o.createRunner({
-        sessionId,
-        workspace: session.workspace,
-        registry: runtime.registry,
-        requestPermission: this.#o.permissions.handlerFor(sessionId),
-        signal: controller.signal,
-      });
+      await this.#o.agents.beforeTurn(sessionId, session.workspace);
+      const agent = await this.#agentSession(session, runtime, resetHistory);
       if (controller.signal.aborted) {
         outcome = 'aborted';
         emit({ type: 'done', sessionId, turnId, reason: 'aborted' });
       } else {
-        const result = await runner.runTurn({
-          sessionId,
-          turnId,
-          history,
-          input: userModelText(input.text, input.attachments),
+        const result = await agent.send(
+          userModelText(input.text, input.attachments),
           emit,
-          abortSignal: controller.signal,
-          ...(runtime.lastInputTokens !== undefined
-            ? { lastInputTokens: runtime.lastInputTokens }
-            : {}),
-        });
+          controller.signal,
+          { turnId },
+        );
         outcome = result.reason;
-        runtime.history = result.messages;
-        if (result.usage) runtime.lastInputTokens = result.usage.inputTokens;
+        // Historique modèle fidèle (compaction, paires outil/résultat) pour la reprise.
+        this.#o.store.saveModelHistory(sessionId, result.messages);
         if (result.error?.code.startsWith('llm/')) this.#o.onLlmError?.(result.error);
       }
     } catch (error) {
@@ -239,9 +245,50 @@ export class ChatManager {
       assistant = settleRunningTools(assistant);
       if (assistant.parts.length > 0) this.#o.store.saveMessage(assistant);
       if (this.#o.store.get(sessionId)) this.#o.store.update(sessionId, { updatedAt: this.#now() });
-      if (outcome === 'error' || outcome === 'aborted') runtime.retryable = { input, history };
+      if (outcome === 'error' || outcome === 'aborted') {
+        runtime.retryable = { input, history: historyBefore };
+      }
       runtime.running = undefined;
     }
+  }
+
+  /**
+   * Session agent du tour : réutilisée si le runtime n'a pas changé, sinon
+   * recréée avec l'historique courant (ou celui à rétablir).
+   */
+  async #agentSession(
+    session: SessionSummary,
+    runtime: SessionRuntime,
+    resetHistory: readonly ModelMessage[] | undefined,
+  ): Promise<AgentSessionLike> {
+    const generation = this.#o.agents.generation();
+    if (runtime.agent && runtime.agent.generation === generation && !resetHistory) {
+      return runtime.agent.session;
+    }
+    const created = await this.#o.agents.createSession({
+      sessionId: session.id,
+      workspace: session.workspace,
+      requestPermission: this.#o.permissions.handlerFor(session.id),
+      history: resetHistory ?? this.#currentHistory(runtime, session.id),
+    });
+    runtime.agent = { session: created, generation };
+    return created;
+  }
+
+  /** Historique modèle : session agent, sinon persisté, sinon reconstruit depuis l'affichage. */
+  #currentHistory(runtime: SessionRuntime, sessionId: string): readonly ModelMessage[] {
+    if (runtime.agent) return runtime.agent.session.history;
+    return (
+      this.#o.store.modelHistory(sessionId) ??
+      chatMessagesToModelMessages(
+        // Le message utilisateur du tour en cours est déjà enregistré : on l'exclut.
+        this.#withoutTrailingUser(this.#o.store.messages(sessionId)),
+      )
+    );
+  }
+
+  #withoutTrailingUser(messages: ChatMessage[]): ChatMessage[] {
+    return messages.at(-1)?.role === 'user' ? messages.slice(0, -1) : messages;
   }
 
   #assertIdle(runtime: SessionRuntime): void {
@@ -261,10 +308,7 @@ export class ChatManager {
   #runtime(sessionId: string): SessionRuntime {
     let runtime = this.#runtimes.get(sessionId);
     if (!runtime) {
-      runtime = {
-        registry: this.#o.createRegistry(sessionId),
-        history: chatMessagesToModelMessages(this.#o.store.messages(sessionId)),
-      };
+      runtime = {};
       this.#runtimes.set(sessionId, runtime);
     }
     return runtime;

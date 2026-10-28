@@ -6,10 +6,10 @@ import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, extname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { parseMcpConfigText, type McpManager } from '@atelier/mcp-bridge';
+import { listModels, testConnection } from '@atelier/agent-core';
 import { loadSkills } from '@atelier/skills';
-import { AtelierError } from '@atelier/shared';
+import { AtelierError, type SecretId } from '@atelier/shared';
 import type { IpcHandlers } from './ipc.js';
-import { listModels, testConnection } from './llm/server-api.js';
 import type { ServerMonitor } from './llm/server-monitor.js';
 import type { ChatManager } from './runtime/chat-manager.js';
 import { importAttachments } from './runtime/attachments.js';
@@ -34,6 +34,8 @@ export interface HandlerServices {
   sandbox: SandboxManager;
   mcp: McpManager;
   shell: DesktopShell;
+  /** Un secret a changé (le token LLM impose un nouveau runtime). */
+  onSecretChanged?: (id: SecretId) => void;
   home?: string;
 }
 
@@ -123,16 +125,30 @@ export function createHandlers(s: HandlerServices): IpcHandlers {
     'settings:update': (patch) => s.settings.update(patch),
     'secrets:set': async ({ id, value }) => {
       await s.secrets.set(id, value);
-      if (id === 'llm_token') void s.monitor.check();
+      s.onSecretChanged?.(id);
       return undefined;
     },
     'secrets:presence': () => s.secrets.presence(),
 
     // --- Serveur LLM
-    'llm:test-connection': ({ baseUrl, token, model }) =>
-      testConnection({ baseUrl, token: token ?? s.secrets.get('llm_token'), model }),
-    'llm:list-models': () =>
-      listModels({ baseUrl: s.settings.get().llm.baseUrl, token: s.secrets.get('llm_token') }),
+    'llm:test-connection': ({ baseUrl, token, model }) => {
+      const effective = token ?? s.secrets.get('llm_token');
+      const { numCtx } = s.settings.get().llm;
+      return testConnection({
+        baseUrl,
+        ...(effective ? { token: effective } : {}),
+        ...(model ? { model } : {}),
+        ...(numCtx !== undefined ? { numCtx } : {}),
+      });
+    },
+    'llm:list-models': async () => {
+      const token = s.secrets.get('llm_token');
+      const { models } = await listModels({
+        baseUrl: s.settings.get().llm.baseUrl,
+        ...(token ? { token } : {}),
+      });
+      return models;
+    },
     'llm:status': () => s.monitor.status(),
 
     // --- Dossiers et sessions

@@ -1,33 +1,31 @@
 /**
- * Indicateur permanent de l'état du serveur LLM : sonde périodique, état
- * `connected` / `slow` / `offline` / `unknown`, notification à chaque changement.
+ * Indicateur permanent de l'état du serveur LLM : sonde périodique
+ * (`checkServerHealth` d'agent-core, ne lève jamais), notification à chaque
+ * changement de santé ou de latence.
  */
-import type { ServerHealth, ServerStatus } from '@atelier/shared';
-import type { ServerTarget } from './server-api.js';
+import type { ServerStatus } from '@atelier/shared';
 
-/** Au-delà de cette latence, le serveur est jugé « lent ». */
-export const SLOW_LATENCY_MS = 1_500;
 /** Intervalle entre deux sondes. */
 export const PROBE_INTERVAL_MS = 30_000;
 /** Intervalle réduit tant que le serveur est hors ligne (reprise plus rapide). */
 export const OFFLINE_PROBE_INTERVAL_MS = 10_000;
 
+/** Cible de la sonde (token lu au moment de la sonde). */
+export interface ServerTarget {
+  baseUrl: string;
+  token?: string | undefined;
+}
+
 export interface ServerMonitorOptions {
   /** Cible courante (`undefined` : serveur non configuré). */
   target: () => ServerTarget | undefined;
-  /** Sonde (rejette si injoignable). */
-  probe: (target: ServerTarget, signal: AbortSignal) => Promise<{ latencyMs: number }>;
-  /** Changement d'état. */
-  onChange: (status: ServerStatus) => void;
+  /** Sonde : renvoie l'état (ne doit pas lever). */
+  probe: (target: ServerTarget, signal: AbortSignal) => Promise<ServerStatus>;
+  /** Changement d'état (santé ou latence). */
+  onChange: (status: ServerStatus, previous: ServerStatus) => void;
   now?: () => Date;
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (handle: unknown) => void;
-}
-
-/** Calcule la santé à partir d'une latence (ou d'un échec). */
-export function healthFromLatency(latencyMs: number | undefined): ServerHealth {
-  if (latencyMs === undefined) return 'offline';
-  return latencyMs > SLOW_LATENCY_MS ? 'slow' : 'connected';
 }
 
 export class ServerMonitor {
@@ -35,7 +33,7 @@ export class ServerMonitor {
   #status: ServerStatus;
   #timer: unknown;
   #inFlight: AbortController | undefined;
-  #stopped = false;
+  #stopped = true;
 
   constructor(options: ServerMonitorOptions) {
     this.#o = options;
@@ -46,7 +44,7 @@ export class ServerMonitor {
     return this.#status;
   }
 
-  /** Démarre la sonde (première vérification immédiate). */
+  /** Démarre la sonde périodique (première vérification immédiate). */
   start(): void {
     this.#stopped = false;
     void this.check();
@@ -58,7 +56,7 @@ export class ServerMonitor {
     this.#inFlight?.abort();
   }
 
-  /** Vérifie maintenant (après un changement de réglages, ou à la demande). */
+  /** Vérifie maintenant (changement de réglages, échec d'un tour, à la demande). */
   async check(): Promise<ServerStatus> {
     this.#clear();
     this.#inFlight?.abort();
@@ -69,34 +67,25 @@ export class ServerMonitor {
     }
     const controller = new AbortController();
     this.#inFlight = controller;
-    let latencyMs: number | undefined;
+    let next: ServerStatus;
     try {
-      latencyMs = (await this.#o.probe(target, controller.signal)).latencyMs;
+      next = await this.#o.probe(target, controller.signal);
     } catch {
-      latencyMs = undefined;
+      next = { health: 'offline', checkedAt: this.#now() };
     }
     if (controller.signal.aborted) return this.#status;
     this.#inFlight = undefined;
-    const health = healthFromLatency(latencyMs);
-    this.#set({
-      health,
-      ...(latencyMs !== undefined ? { latencyMs } : {}),
-      checkedAt: this.#now(),
-    });
-    this.#schedule(health === 'offline' ? OFFLINE_PROBE_INTERVAL_MS : PROBE_INTERVAL_MS);
+    this.#set(next);
+    this.#schedule(next.health === 'offline' ? OFFLINE_PROBE_INTERVAL_MS : PROBE_INTERVAL_MS);
     return this.#status;
   }
 
-  /** Signale un échec observé ailleurs (tour en erreur réseau) : revérifie tout de suite. */
-  reportFailure(): void {
-    void this.check();
-  }
-
   #set(next: ServerStatus): void {
-    const changed =
-      next.health !== this.#status.health || next.latencyMs !== this.#status.latencyMs;
+    const previous = this.#status;
     this.#status = next;
-    if (changed) this.#o.onChange(next);
+    if (next.health !== previous.health || next.latencyMs !== previous.latencyMs) {
+      this.#o.onChange(next, previous);
+    }
   }
 
   #schedule(ms: number): void {
