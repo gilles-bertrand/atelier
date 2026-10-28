@@ -6,14 +6,14 @@ _Dernière mise à jour : 2026-10-28, Lead._
 
 ## État par jalon
 
-| Jalon                                                       | État                                                           | Responsable(s)                |
-| ----------------------------------------------------------- | -------------------------------------------------------------- | ----------------------------- |
-| M0 : squelette monorepo + `packages/shared` + `server/`     | ✅ fait                                                        | Lead                          |
-| M1 : boucle AI SDK en CLI, outils fichiers, bash local, web | 🟡 Core livré (PR `feat/core-agent-loop`), web à venir         | Core, MCP & Web               |
-| M2 : sandbox Lima + permissions                             | 🟡 sandbox livrée (PR `feat/sandbox-lima`), permissions : Core | Sandbox, Core                 |
-| M3 : app Electron fonctionnelle                             | ⏳ à démarrer                                                  | UI                            |
-| M4 : skills + MCP + SearXNG + documents                     | 🟡 skills + SearXNG dans la VM livrés ; MCP, documents à faire | Sandbox, MCP & Web, Documents |
-| M5 : historique, compaction, réglages, packaging signé      | ⏳                                                             | UI, Core, Lead                |
+| Jalon                                                       | État                                                                              | Responsable(s)                |
+| ----------------------------------------------------------- | --------------------------------------------------------------------------------- | ----------------------------- |
+| M0 : squelette monorepo + `packages/shared` + `server/`     | ✅ fait                                                                           | Lead                          |
+| M1 : boucle AI SDK en CLI, outils fichiers, bash local, web | 🟡 Core livré (PR `feat/core-agent-loop`), web livré (PR `feat/web-search-fetch`) | Core, MCP & Web               |
+| M2 : sandbox Lima + permissions                             | 🟡 sandbox livrée (PR `feat/sandbox-lima`), permissions : Core                    | Sandbox, Core                 |
+| M3 : app Electron fonctionnelle                             | ⏳ à démarrer                                                                     | UI                            |
+| M4 : skills + MCP + SearXNG + documents                     | 🟡 skills + SearXNG dans la VM livrés ; MCP, documents à faire                    | Sandbox, MCP & Web, Documents |
+| M5 : historique, compaction, réglages, packaging signé      | ⏳                                                                                | UI, Core, Lead                |
 
 ## Ce que contient le squelette
 
@@ -49,6 +49,14 @@ _Dernière mise à jour : 2026-10-28, Lead._
 - Pour **Core** : l'outil `bash` doit appeler `sandbox.exec` ; `exec` rejette `agent/aborted` sur annulation et `sandbox/not_ready` si la VM n'est pas prête. Le prompt système peut inclure `skillsPrompt(await loadSkills(settings.skillsDir))`.
 - Pour **UI / Lead** : instancier `new LimaSandbox({ limactlPath: <Resources>/lima/bin/limactl, templatesDir: <Resources>/lima-templates, skillsDir, resources, networkEnabled })` côté main ; appeler `stop()` à la fermeture. **À ajouter dans `electron-builder.yml`** : `packages/skills/examples` → `Contents/Resources/skills-examples` (pour `installExampleSkills` au premier lancement).
 - Pour **MCP & Web** : SearXNG est disponible sur `http://127.0.0.1:8888/search?q=…&format=json` dès que la VM est prête (même si le réseau de `agent` est coupé).
+
+## Web (agent MCP & Web, `feat/web-search-fetch`)
+
+- **`@atelier/web`** : `createWebTools({ provider, fallbacks?, fetch? })` → `web_search` + `web_fetch` (`ToolDefinition`, à passer à `createDefaultRegistry`). Détails : `packages/web/README.md`.
+- **`web_search`** (sans permission) : `createSearchProvider(id, { getApiKey, searxngUrl? })` pour `searxng` (défaut, `127.0.0.1:8888`), `ollama` (`POST ollama.com/api/web_search`, Bearer) et `brave` (`X-Subscription-Token`). Les clés sont lues à chaque recherche via `getApiKey` (l'app branche `safeStorage`). Si le fournisseur est indisponible (VM pas prête, clé absente) : essai des `fallbacks`, sinon message « Recherche indisponible, configure Brave ou Ollama dans les Réglages d'Atelier ».
+- **`web_fetch`** (permission `conditional`, une fois par domaine : `scopeKey: web_fetch:<domaine>`, `kind: network`) : http(s) seulement, adresses non publiques refusées avant la requête, à chaque redirection et à la connexion TCP (lookup filtré d'undici, anti DNS rebinding), délai 20 s, 5 Mo max, Readability + jsdom → turndown, 20 ko max.
+- Pour **UI / Lead** : `jsdom` et `undici` doivent rester externes au bundle du main (`externalizeDepsPlugin` d'electron-vite) ; `web_fetch` tourne dans le main uniquement. `SearxngProvider.isAvailable()` (via `/healthz`) peut alimenter l'indicateur des Réglages.
+- ⚠️ `@types/jsdom` volontairement absent (déclaration locale `packages/web/src/types/jsdom.d.ts`) : jsdom étant un pair optionnel de Vitest, ses types injectaient `lib.dom` dans tous les packages (casse `scripts/fetch-lima.ts`).
 
 ## Demandes d'évolution de `packages/shared`
 
