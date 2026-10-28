@@ -1,0 +1,235 @@
+# Atelier : VM d'exécution de l'agent (Lima, Apple Silicon uniquement).
+#
+# Créée par @atelier/sandbox avec :
+#   limactl create --name atelier --cpus N --memory M --disk D --set '.mounts = [...]' atelier.yaml
+# Les ressources par défaut (4 CPU / 4 Gio) sont surchargées par les Réglages.
+#
+# Ce template ne contient que ce qui doit s'appliquer à CHAQUE démarrage (utilisateurs,
+# blocage réseau de `agent`, scripts d'exécution). Le provisioning lourd (python, node,
+# SearXNG…) est piloté par l'hôte via `lima/provision/*.sh` pour afficher une progression
+# lisible et pouvoir reprendre en cas d'échec (voir lima/README.md).
+#
+# ⚠️ Les champs `content` des provisions `data` sont des templates Go côté Lima :
+# ne jamais y écrire de double accolade.
+
+minimumLimaVersion: 2.0.0
+
+vmType: vz
+arch: aarch64
+cpus: 4
+memory: 4GiB
+disk: 30GiB
+
+# Ubuntu 26.04 LTS (resolute) arm64, image datée et vérifiée par digest.
+# Repli sur l'image « release » courante si l'image datée a été retirée par Canonical.
+images:
+  - location: 'https://cloud-images.ubuntu.com/releases/resolute/release-20260927/ubuntu-26.04-server-cloudimg-arm64.img'
+    arch: aarch64
+    digest: 'sha256:63a93bd5a8d76e33b15ceb5daa3657bd79be804748051ab178e643b0f5da22e7'
+  - location: 'https://cloud-images.ubuntu.com/releases/resolute/release/ubuntu-26.04-server-cloudimg-arm64.img'
+    arch: aarch64
+
+# Aucun mount par défaut (surtout pas le $HOME de l'utilisateur) : /workspace et /skills
+# sont ajoutés par l'app (`limactl edit --set '.mounts = [...]'`).
+mountType: virtiofs
+mounts: []
+
+# Pas de containerd/nerdctl : inutile ici et coûteux au démarrage.
+containerd:
+  system: false
+  user: false
+
+ssh:
+  # Ne pas copier les clés publiques de ~/.ssh de l'utilisateur dans la VM.
+  loadDotSSHPubKeys: false
+  forwardAgent: false
+  forwardX11: false
+
+upgradePackages: false
+
+rosetta:
+  enabled: false
+
+video:
+  display: none
+
+# Seul SearXNG (port 8888 de l'invité) est exposé, sur 127.0.0.1 côté hôte.
+# Tout autre port ouvert dans la VM (par l'agent par exemple) n'est pas forwardé.
+portForwards:
+  - guestIP: 127.0.0.1
+    guestPort: 8888
+    hostIP: 127.0.0.1
+    hostPort: 8888
+  - guestIP: 0.0.0.0
+    guestIPMustBeZero: false
+    guestPortRange: [1, 65535]
+    proto: any
+    ignore: true
+
+provision:
+  # Réseau sortant de `agent` : `atelier-network on|off|status`.
+  # Coupé : seul le loopback reste joignable, sauf le DNS local (53) et SearXNG (8888),
+  # pour qu'une commande ne puisse rien faire sortir (ni requête DNS, ni recherche).
+  # Ouvert : tout, sauf la passerelle de l'hôte (192.168.5.2), qui donnerait accès
+  # aux services du Mac écoutant sur localhost.
+  # `reject` plutôt que `drop` : la commande échoue immédiatement au lieu d'attendre
+  # le délai de connexion (même blocage, meilleure expérience pour l'agent).
+  - mode: data
+    path: /usr/local/sbin/atelier-network
+    permissions: 755
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+      state_dir=/run/atelier
+      host_gateway=192.168.5.2
+      mode="${1:-status}"
+      case "$mode" in
+        status)
+          cat "$state_dir/network" 2>/dev/null || echo off
+          exit 0
+          ;;
+        on)
+          rules='meta skuid "agent" ip daddr '"$host_gateway"' reject with icmpx admin-prohibited'
+          ;;
+        off)
+          rules='meta skuid "agent" ip daddr '"$host_gateway"' reject with icmpx admin-prohibited
+          meta skuid "agent" oifname "lo" udp dport 53 reject with icmpx admin-prohibited
+          meta skuid "agent" oifname "lo" tcp dport { 53, 8888 } reject with tcp reset
+          meta skuid "agent" oifname "lo" accept
+          meta skuid "agent" reject with icmpx admin-prohibited'
+          ;;
+        *)
+          echo "usage: atelier-network on|off|status" >&2
+          exit 2
+          ;;
+      esac
+      # Remplacement atomique de la table (déclaration, suppression, redéfinition).
+      nft -f - <<EOF
+      table inet atelier
+      delete table inet atelier
+      table inet atelier {
+        chain output {
+          type filter hook output priority filter; policy accept;
+          $rules
+        }
+      }
+      EOF
+      mkdir -p "$state_dir"
+      echo "$mode" > "$state_dir/network"
+      echo "$mode"
+
+  # Exécution d'une commande de l'agent : `atelier-exec <id> <délai-s> <commande>`.
+  # La commande tourne dans son propre groupe de processus (créé par `timeout`), tué
+  # en entier au délai ; `atelier-kill <id>` permet de l'annuler depuis l'hôte.
+  - mode: data
+    path: /usr/local/bin/atelier-exec
+    permissions: 755
+    content: |
+      #!/bin/bash
+      set -u
+      if [ "$#" -ne 3 ]; then
+        echo "usage: atelier-exec <id> <délai-s> <commande>" >&2
+        exit 2
+      fi
+      id="$1"
+      limit="$2"
+      cmd="$3"
+      case "$id" in '' | *[!A-Za-z0-9_-]*) echo "atelier-exec : identifiant invalide" >&2; exit 2 ;; esac
+      case "$limit" in '' | *[!0-9]*) echo "atelier-exec : délai invalide" >&2; exit 2 ;; esac
+      dir="/tmp/atelier-exec-$(id -u)"
+      mkdir -p -m 700 "$dir"
+      timeout --kill-after=5 "$limit" bash -lc "$cmd" </dev/null &
+      pid=$!
+      echo "$pid" >"$dir/$id"
+      wait "$pid"
+      rc=$?
+      rm -f "$dir/$id"
+      exit "$rc"
+
+  # Annule une commande lancée par atelier-exec (à lancer en tant que `agent`).
+  - mode: data
+    path: /usr/local/bin/atelier-kill
+    permissions: 755
+    content: |
+      #!/bin/bash
+      set -u
+      id="${1:-}"
+      case "$id" in '' | *[!A-Za-z0-9_-]*) exit 2 ;; esac
+      file="/tmp/atelier-exec-$(id -u)/$id"
+      [ -f "$file" ] || exit 0
+      pgid="$(cat "$file")"
+      case "$pgid" in '' | *[!0-9]*) exit 0 ;; esac
+      kill -TERM -- "-$pgid" 2>/dev/null || exit 0
+      sleep 1
+      kill -KILL -- "-$pgid" 2>/dev/null || true
+      exit 0
+
+  # Applique le blocage réseau dès le démarrage, avant que le réseau ne monte.
+  - mode: data
+    path: /etc/systemd/system/atelier-network.service
+    permissions: 644
+    content: |
+      [Unit]
+      Description=Atelier : réseau sortant de l'utilisateur agent (coupé au démarrage)
+      DefaultDependencies=no
+      After=local-fs.target
+      Before=network-pre.target
+      Wants=network-pre.target
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      ExecStart=/usr/local/sbin/atelier-network off
+
+      [Install]
+      WantedBy=multi-user.target
+
+  # Exécuté à chaque démarrage (cloud-init, étape finale) : doit rester rapide et idempotent.
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -euo pipefail
+      export DEBIAN_FRONTEND=noninteractive
+
+      # Utilisateurs : `agent` (commandes de l'IA, sans sudo) et `searxng` (service).
+      if ! id agent >/dev/null 2>&1; then
+        useradd --create-home --shell /bin/bash --user-group agent
+        passwd --lock agent >/dev/null
+      fi
+      if ! id searxng >/dev/null 2>&1; then
+        useradd --system --create-home --home-dir /usr/local/searxng --shell /usr/sbin/nologin --user-group searxng
+      fi
+      chmod 750 /home/agent
+      mkdir -p /workspace /skills
+
+      # nftables (normalement présent dans l'image cloud).
+      if ! command -v nft >/dev/null 2>&1; then
+        apt-get -o DPkg::Lock::Timeout=300 update -qq
+        apt-get -o DPkg::Lock::Timeout=300 install -y -qq nftables
+      fi
+      systemctl daemon-reload
+      systemctl enable atelier-network.service >/dev/null 2>&1
+      # Fail-closed : réseau coupé à chaque démarrage, l'app le rouvre si besoin.
+      /usr/local/sbin/atelier-network off >/dev/null
+
+      # Démarrage plus rapide : services inutiles dans cette VM.
+      if [ ! -f /var/lib/atelier/boot-tuned ]; then
+        for unit in snapd.service snapd.socket snapd.seeded.service unattended-upgrades.service \
+          apt-daily.timer apt-daily-upgrade.timer motd-news.timer man-db.timer \
+          ModemManager.service multipathd.service multipathd.socket; do
+          systemctl disable --now "$unit" >/dev/null 2>&1 || true
+        done
+        mkdir -p /var/lib/atelier
+        touch /var/lib/atelier/boot-tuned
+      fi
+
+probes:
+  - description: blocage réseau de l'utilisateur agent actif
+    script: |
+      #!/bin/bash
+      set -eux -o pipefail
+      if ! timeout 120s bash -c "until sudo nft list table inet atelier >/dev/null 2>&1; do sleep 1; done"; then
+        echo >&2 "la table nftables atelier n'est pas chargée"
+        exit 1
+      fi
+    hint: Voir /var/log/cloud-init-output.log dans la VM.

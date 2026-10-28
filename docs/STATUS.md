@@ -6,14 +6,14 @@ _Dernière mise à jour : 2026-10-28, Lead._
 
 ## État par jalon
 
-| Jalon                                                       | État                                                   | Responsable(s)                |
-| ----------------------------------------------------------- | ------------------------------------------------------ | ----------------------------- |
-| M0 : squelette monorepo + `packages/shared` + `server/`     | ✅ fait                                                | Lead                          |
-| M1 : boucle AI SDK en CLI, outils fichiers, bash local, web | 🟡 Core livré (PR `feat/core-agent-loop`), web à venir | Core, MCP & Web               |
-| M2 : sandbox Lima + permissions                             | ⏳ à démarrer                                          | Sandbox                       |
-| M3 : app Electron fonctionnelle                             | ⏳ à démarrer                                          | UI                            |
-| M4 : skills + MCP + SearXNG + documents                     | ⏳ à démarrer                                          | Sandbox, MCP & Web, Documents |
-| M5 : historique, compaction, réglages, packaging signé      | ⏳                                                     | UI, Core, Lead                |
+| Jalon                                                       | État                                                           | Responsable(s)                |
+| ----------------------------------------------------------- | -------------------------------------------------------------- | ----------------------------- |
+| M0 : squelette monorepo + `packages/shared` + `server/`     | ✅ fait                                                        | Lead                          |
+| M1 : boucle AI SDK en CLI, outils fichiers, bash local, web | 🟡 Core livré (PR `feat/core-agent-loop`), web à venir         | Core, MCP & Web               |
+| M2 : sandbox Lima + permissions                             | 🟡 sandbox livrée (PR `feat/sandbox-lima`), permissions : Core | Sandbox, Core                 |
+| M3 : app Electron fonctionnelle                             | ⏳ à démarrer                                                  | UI                            |
+| M4 : skills + MCP + SearXNG + documents                     | 🟡 skills + SearXNG dans la VM livrés ; MCP, documents à faire | Sandbox, MCP & Web, Documents |
+| M5 : historique, compaction, réglages, packaging signé      | ⏳                                                             | UI, Core, Lead                |
 
 ## Ce que contient le squelette
 
@@ -39,6 +39,17 @@ _Dernière mise à jour : 2026-10-28, Lead._
 - Les packages sont consommés en source TS (pas de build par package) ; electron-vite les bundle.
 - Pour les dépendances natives (`better-sqlite3`, `sharp`), l'autorisation des scripts d'installation se fait dans `pnpm-workspace.yaml` (`allowBuilds`) : demandez au Lead.
 
+## Sandbox & Skills (agent Sandbox, `feat/sandbox-lima`)
+
+- **Lima 2.2.1** épinglé (SHA-256) : `pnpm fetch:lima` → `apps/desktop/resources/lima/` (`limactl`, guest agent, licence). `pnpm dist:mac` l'appelle d'abord.
+- **`LimaSandbox`** (`@atelier/sandbox`) implémente `Sandbox` : création/démarrage/provisioning avec progression (`checking` → `downloading_image` → `starting` → `provisioning` (marqueurs des scripts) → `ready`), `setWorkspace` (stop → `limactl edit` → start, sans redémarrage si le dossier est inchangé ou si la VM ne tourne pas), `exec` (utilisateur `agent`, `/workspace`, délai tué par groupe de processus, annulation, sortie 10 ko tête + queue), `setNetwork` (nftables), `stop`, `reset`, `diagnostics`, `toGuestPath`/`toHostPath`. Détails : `lima/README.md`.
+- **Mesures (Mac Apple Silicon, macOS 27, Ubuntu 26.04 LTS, 4 CPU / 4 Gio)** : premier lancement 9 min 04 s (image ~600 Mo + provisioning complet, connexion fibre) ; démarrage d'une VM provisionnée **5,9 s** ; changement de dossier **7,7 à 9,1 s** (arrêt 1,5 s + démarrage 6,5 s) : objectif < 15 s tenu.
+- Tests : 69 unitaires (limactl simulé) + 10 d'intégration sur VM réelle (`ATELIER_SANDBOX_IT=1`, skippés en CI : pas de virtualisation imbriquée sur les runners) : boot, exec, écriture `/workspace` visible côté hôte, `/skills` en lecture seule, `$HOME` invisible, réseau bloqué → autorisé → rebloqué, SearXNG JSON sur `127.0.0.1:8888`, kill au délai, changement de dossier.
+- **Skills** (`@atelier/skills`) : `loadSkills()` (frontmatter via gray-matter, skills invalides ignorés avec avertissement, descriptions bornées à 1024 caractères), `skillsPrompt()`, `installExampleSkills()`. Exemples : `xlsx` (script `build-workbook.cjs` : feuilles, formules avec résultats pré-calculés, totaux, graphiques Excel natifs colonne/barre/courbe/camembert) et `rapport-markdown` (structure, modèle, `csv_to_markdown.py`, conversion pandoc).
+- Pour **Core** : l'outil `bash` doit appeler `sandbox.exec` ; `exec` rejette `agent/aborted` sur annulation et `sandbox/not_ready` si la VM n'est pas prête. Le prompt système peut inclure `skillsPrompt(await loadSkills(settings.skillsDir))`.
+- Pour **UI / Lead** : instancier `new LimaSandbox({ limactlPath: <Resources>/lima/bin/limactl, templatesDir: <Resources>/lima-templates, skillsDir, resources, networkEnabled })` côté main ; appeler `stop()` à la fermeture. **À ajouter dans `electron-builder.yml`** : `packages/skills/examples` → `Contents/Resources/skills-examples` (pour `installExampleSkills` au premier lancement).
+- Pour **MCP & Web** : SearXNG est disponible sur `http://127.0.0.1:8888/search?q=…&format=json` dès que la VM est prête (même si le réseau de `agent` est coupé).
+
 ## Demandes d'évolution de `packages/shared`
 
 _Format : date, agent, type proposé, raison, packages impactés._
@@ -53,11 +64,15 @@ _Format : date, agent, type proposé, raison, packages impactés._
 
   ✅ **2026-10-28, adoptées par Core** (PR `feat/core-shared-adoption`) : types locaux retirés, libellés natifs portés par les outils, `tool_display` et `llm_retry` émis par la boucle (`llm_retry` rattaché au bon tour via `AsyncLocalStorage`, même avec plusieurs sessions sur un provider partagé).
 
+- 2026-10-27, Sandbox : code `sandbox/invalid_workspace` dans `ATELIER_ERROR_CODES`. Raison : `setWorkspace` refuse la racine, le `$HOME` complet, `LIMA_HOME` et le dossier des skills ; il utilise en attendant `tool/path_outside_workspace`, sémantiquement approximatif. Impact : `sandbox`, UI (traduction du message).
+
 ## Points ouverts / risques
 
 - `Caddyfile` validé syntaxiquement à la main seulement (pas de daemon Docker en local) : à valider au premier déploiement (`docker compose up -d && ./healthcheck.sh`).
 - Repli vLLM : `/api/tags` et `/api/show` n'existent pas dans vLLM, d'où un repli sur `/v1/models` à prévoir (Core + UI), voir `docs/SERVER.md` §5.
 - Signature et notarisation : nécessitent un certificat « Developer ID Application » et une clé API App Store Connect (`CSC_LINK`, `APPLE_API_KEY*`).
+- Sandbox : le port hôte 8888 doit être libre (sinon Lima ne forwarde pas SearXNG ; à signaler dans les diagnostics). Le graphique Excel du skill `xlsx` est validé structurellement (schéma OOXML, xmllint, relecture exceljs) mais pas encore ouvert dans Excel : à faire par QA.
+- Sandbox : règle réseau en `reject` plutôt que `drop` (même blocage, échec immédiat au lieu d'un blocage de l'agent jusqu'au délai) ; le DNS et SearXNG sont aussi coupés pour `agent` quand le réseau est désactivé (pas d'exfiltration par requête DNS ou recherche).
 
 ## Notes de Core (agent-core)
 
