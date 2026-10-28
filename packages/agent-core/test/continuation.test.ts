@@ -5,7 +5,7 @@
  */
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { TodoItem } from '@atelier/shared';
 import {
   Agent,
@@ -13,7 +13,16 @@ import {
   createDefaultRegistry,
   MAX_CONTINUATIONS,
 } from '../src/index.js';
-import { collect, permissions, promptText, scriptedModel, withTempDir } from './helpers.js';
+import type { LanguageModelV4StreamPart } from '@ai-sdk/provider';
+import { MockLanguageModelV4 } from 'ai/test';
+import {
+  collect,
+  permissions,
+  promptText,
+  scriptedModel,
+  streamOf,
+  withTempDir,
+} from './helpers.js';
 
 const NOW = new Date('2026-10-28T10:00:00Z');
 
@@ -21,8 +30,13 @@ const todos = (...statuses: TodoItem['status'][]): { todos: TodoItem[] } => ({
   todos: statuses.map((status, i) => ({ id: String(i + 1), title: `Tâche ${i + 1}`, status })),
 });
 
-function agentFor(ws: string, model: ReturnType<typeof scriptedModel>): Agent {
+function agentFor(
+  ws: string,
+  model: MockLanguageModelV4,
+  log?: (message: string, data?: Record<string, unknown>) => void,
+): Agent {
   return new Agent({
+    ...(log ? { log } : {}),
     model,
     registry: createDefaultRegistry(),
     workspace: ws,
@@ -124,6 +138,74 @@ describe('relance des tâches ouvertes', () => {
       expect(model.doStreamCalls).toHaveLength(2 + MAX_CONTINUATIONS);
       expect(result.reason).toBe('stop');
       expect(events.filter((e) => e.type === 'done')).toHaveLength(1);
+    });
+  });
+
+  it('stop utilisateur pendant une relance : tour annulé, pas de nouvelle relance', async () => {
+    await withTempDir(async (ws) => {
+      const model = scriptedModel([
+        { toolCalls: [{ name: 'todo_write', input: todos('in_progress', 'pending') }] },
+        { text: 'Je m’en occupe.' },
+        { text: 'Relance en cours.' }, // 1re relance : interrompue par l'utilisateur
+        { text: 'jamais appelé' },
+      ]);
+      const controller = new AbortController();
+      const { events, emit } = collect();
+      const result = await agentFor(ws, model).runTurn({
+        sessionId: 's1',
+        turnId: 't1',
+        history: [],
+        input: 'Fais les deux tâches.',
+        abortSignal: controller.signal,
+        emit: (event) => {
+          emit(event);
+          if (event.type === 'text_delta' && event.delta.startsWith('Relance')) controller.abort();
+        },
+      });
+      expect(result.reason).toBe('aborted');
+      expect(model.doStreamCalls).toHaveLength(3);
+      const done = events.filter((e) => e.type === 'done');
+      expect(done).toHaveLength(1);
+      expect(done[0]).toMatchObject({ reason: 'aborted' });
+    });
+  });
+
+  it('stop utilisateur entre la fin « stop » et la relance : pas de relance', async () => {
+    await withTempDir(async (ws) => {
+      const controller = new AbortController();
+      // 2e réponse : flux complet terminé en « stop », puis clic sur stop à la fermeture.
+      const stopped = streamOf({ text: 'Je m’en occupe.' });
+      const reader = stopped.stream.getReader();
+      const abortAfterFinish = new ReadableStream<LanguageModelV4StreamPart>({
+        async pull(c) {
+          const { done, value } = await reader.read();
+          if (done) {
+            controller.abort();
+            c.close();
+          } else c.enqueue(value);
+        },
+      });
+      const model = new MockLanguageModelV4({
+        doStream: [
+          streamOf({ toolCalls: [{ name: 'todo_write', input: todos('in_progress', 'pending') }] }),
+          { stream: abortAfterFinish },
+          streamOf({ text: 'jamais appelé' }),
+        ],
+      });
+      const log = vi.fn();
+      const result = await agentFor(ws, model, log).runTurn({
+        sessionId: 's1',
+        turnId: 't1',
+        history: [],
+        input: 'Fais les deux tâches.',
+        abortSignal: controller.signal,
+        emit: () => undefined,
+      });
+      expect(result.reason).toBe('aborted');
+      expect(model.doStreamCalls).toHaveLength(2);
+      // Aucune relance tentée : ni journal, ni message `[Atelier]` dans l'historique.
+      expect(log).not.toHaveBeenCalledWith('continuation', expect.anything());
+      expect(JSON.stringify(result.messages)).not.toContain('[Atelier]');
     });
   });
 
