@@ -59,7 +59,7 @@ export function assertMountableWorkspace(
   forbidden: { limaHome: string; skillsDir: string; home?: string },
 ): void {
   const refuse = (reason: string): never => {
-    throw new AtelierError('tool/path_outside_workspace', `Dossier de travail refusé : ${reason}`, {
+    throw new AtelierError('sandbox/invalid_workspace', `Dossier de travail refusé : ${reason}`, {
       details: { hostDir },
     });
   };
