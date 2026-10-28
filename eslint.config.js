@@ -15,6 +15,7 @@ export default tseslint.config(
       'apps/desktop/resources/**',
       '.agentsroom/**',
       '.claude/**',
+      '.worktrees/**',
     ],
   },
   js.configs.recommended,

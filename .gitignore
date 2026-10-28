@@ -4,6 +4,9 @@
 .agentsroom/fork-context-*.txt
 .agentsroom/transfer-context-*.txt
 
+# Worktrees des agents (une branche par fonctionnalité)
+.worktrees/
+
 # Dépendances et builds
 node_modules/
 dist/
