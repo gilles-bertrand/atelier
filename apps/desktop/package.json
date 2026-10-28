@@ -13,7 +13,8 @@
     "typecheck": "tsc -p tsconfig.node.json && tsc -p tsconfig.web.json",
     "test": "vitest run",
     "dist": "electron-vite build && electron-builder --mac --arm64 --config electron-builder.yml",
-    "dist:dir": "electron-vite build && electron-builder --mac --arm64 --dir --config electron-builder.yml"
+    "dist:dir": "electron-vite build && electron-builder --mac --arm64 --dir --config electron-builder.yml",
+    "icon": "node -e \"require('sharp')('build/icon.svg').resize(1024,1024).png().toFile('build/icon.png')\""
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.79",

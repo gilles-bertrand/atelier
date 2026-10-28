@@ -35,6 +35,8 @@ mac:
       arch: [arm64]
     - target: zip
       arch: [arm64]
+  # 1024 px, converti en .icns par electron-builder ; source : build/icon.svg (script « icon »).
+  icon: build/icon.png
   category: public.app-category.productivity
   minimumSystemVersion: '14.0'
   hardenedRuntime: true
