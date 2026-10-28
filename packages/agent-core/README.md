@@ -58,6 +58,21 @@ const result = await session.send(
 - Events émis : `text_delta`, `reasoning_delta` (thinking, jamais réinjecté), `tool_start`, `tool_display` (affichage publié pendant l'outil via `emitDisplay`), `tool_result` (`denied` si refus ; son `display` fait foi), `todo_update`, `permission_request` (émis juste avant l'appel au `PermissionHandler`), `sources`, `llm_retry` (nouvelle tentative réseau, rattachée au tour), `compaction`, `done`, `error`.
 - `result.messages` est l'historique modèle à conserver pour le tour suivant (raisonnement retiré, compaction appliquée).
 
+### Serveur LLM (Réglages, onboarding, indicateur)
+
+Trois fonctions prêtes pour les canaux IPC `llm:*`, compatibles Ollama **et** vLLM (repli sur `GET /v1/models` quand `/api/tags`, `/api/version` ou `/api/show` répondent 404, voir `docs/SERVER.md` §5) :
+
+```ts
+import { checkServerHealth, listModels, testConnection } from '@atelier/agent-core';
+
+// 'llm:test-connection' : ne lève jamais, l'échec est dans { ok: false, errorCode, errorMessage }
+await testConnection({ baseUrl, token, model, numCtx: settings.llm.numCtx });
+// 'llm:list-models' : lève une AtelierError (llm/unauthorized, llm/unreachable…)
+const { models, flavor } = await listModels({ baseUrl, token }); // flavor : 'ollama' | 'openai-compatible'
+// 'llm:status' (sondage périodique) : connected / slow (> 2 s) / offline, ne lève jamais
+await checkServerHealth({ baseUrl, token });
+```
+
 ## Contenu
 
 | Module                    | Rôle                                                                                                                                                                      |
@@ -66,6 +81,7 @@ const result = await session.send(
 | `llm/provider.ts`         | `createOpenAICompatible` vers `<url>/v1`, Bearer, thinking on/off (`reasoning_effort: "none"` + `chat_template_kwargs.enable_thinking`), middlewares.                     |
 | `llm/retry-fetch.ts`      | Nouvelles tentatives avec backoff exponentiel + gigue (réseau, 429, 502-504, `Retry-After`).                                                                              |
 | `llm/context-window.ts`   | Contexte réel via `/api/show` (`num_ctx`), repli vLLM `/v1/models`.                                                                                                       |
+| `llm/server.ts`           | `listModels`, `testConnection`, `checkServerHealth` : Ollama, repli vLLM `/v1/models`.                                                                                    |
 | `llm/errors.ts`           | Erreurs explicites : `llm/unreachable`, `llm/unauthorized`, `llm/model_not_found`, `llm/timeout`…                                                                         |
 | `loop/repair.ts`          | `repairToolCall` : nom d'outil approximatif, JSON abîmé, arguments enveloppés.                                                                                            |
 | `loop/text-tool-calls.ts` | Middleware de repli : appels écrits dans le texte (`<tool_call>`, XML Qwen, JSON) → vrais appels.                                                                         |

@@ -5,7 +5,8 @@
  */
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { extractReasoningMiddleware, wrapLanguageModel, type LanguageModel } from 'ai';
-import { AtelierError, checkServerUrl, openAiCompatibleBaseUrl } from '@atelier/shared';
+import { openAiCompatibleBaseUrl } from '@atelier/shared';
+import { assertServerUrl } from './server.js';
 import { createRetryingFetch, type FetchFunction, type RetryOptions } from './retry-fetch.js';
 import { textToolCallMiddleware } from '../loop/text-tool-calls.js';
 
@@ -52,15 +53,7 @@ export function disableThinking(body: Record<string, unknown>): Record<string, u
 
 /** Crée les modèles AI SDK pour une connexion. */
 export function createLlmModels(options: LlmConnectionOptions): LlmModels {
-  const check = checkServerUrl(options.baseUrl);
-  if (!check.ok) {
-    throw new AtelierError(
-      check.reason === 'insecure_http' ? 'llm/insecure_url' : 'llm/unreachable',
-      check.reason === 'insecure_http'
-        ? 'URL refusée : utilise https://, ou http:// uniquement pour localhost ou une adresse Tailscale.'
-        : `URL du serveur invalide : ${options.baseUrl}`,
-    );
-  }
+  assertServerUrl(options.baseUrl);
   const apiBaseUrl = openAiCompatibleBaseUrl(options.baseUrl);
   const fetch = createRetryingFetch({
     ...options.retry,

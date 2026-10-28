@@ -38,6 +38,24 @@ export type {
   ContextWindowOptions,
   ContextWindowSource,
 } from './llm/context-window.js';
+export {
+  assertServerUrl,
+  checkServerHealth,
+  fetchServerVersion,
+  listModels,
+  parseOllamaTags,
+  parseOpenAiModels,
+  SERVER_CHECK_TIMEOUT_MS,
+  SLOW_SERVER_MS,
+  testConnection,
+} from './llm/server.js';
+export type {
+  ConnectionTestOptions,
+  HealthCheckOptions,
+  ModelList,
+  ServerFlavor,
+  ServerQueryOptions,
+} from './llm/server.js';
 export { backoffDelay, createRetryingFetch, withRetryListener } from './llm/retry-fetch.js';
 export type { FetchFunction, RetryInfo, RetryOptions } from './llm/retry-fetch.js';
 export { isNetworkError, toLlmError } from './llm/errors.js';
