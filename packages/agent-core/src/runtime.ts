@@ -32,7 +32,9 @@ export interface AgentRuntimeOptions {
   llm: AgentRuntimeLlmOptions;
   /**
    * Outils fournis par les autres packages (web, documents…), partagés par
-   * toutes les sessions. Un outil fourni remplace l'outil natif de même nom.
+   * toutes les sessions. Un outil fourni remplace l'outil natif de même nom :
+   * réservé aux outils de l'app (ex. `read_file` de `packages/documents`) ; les
+   * outils MCP, préfixés `mcp__`, ne peuvent pas masquer un natif.
    */
   tools?: readonly AnyToolDefinition[];
   /**

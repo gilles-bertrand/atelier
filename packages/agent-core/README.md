@@ -27,7 +27,7 @@ import { createAgentRuntime } from '@atelier/agent-core';
 // serveur injoignable → contextWindowSource 'fallback' (32 768, ou numCtx), à rafraîchir plus tard.
 const runtime = await createAgentRuntime({
   llm: { baseUrl, model, token, thinking, numCtx },
-  tools: [...createWebTools(webOptions), ...documentsTools], // remplacent un natif de même nom
+  tools: [...createWebTools(webOptions), ...documentsTools], // remplacent un natif de même nom (outils de l'app uniquement)
   sessionTools: (registry) => [toolSearchTool({ source: mcp, registry })], // registre de LA session
   lazyTools: () => mcp.definitions(),
   sandbox: () => (vmReady ? lima : undefined), // relu à chaque tour
