@@ -46,6 +46,15 @@ const session = runtime.createSession({
 const turnId = randomUUID();
 const result = await session.send(text, emit, abort.signal, { turnId });
 persist(result.messages); // historique modèle fidèle (compaction, paires outil/résultat)
+
+// Réglages LLM modifiés : nouveau runtime, sessions ouvertes recréées sans perdre la compaction
+const replaced = newRuntime.createSession({
+  sessionId,
+  workspace,
+  requestPermission,
+  history: session.history,
+  ...(session.lastInputTokens !== undefined ? { lastInputTokens: session.lastInputTokens } : {}),
+});
 ```
 
 ## Intégration manuelle (process main)

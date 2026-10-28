@@ -428,16 +428,29 @@ export class AgentSession {
   #lastInputTokens: number | undefined;
   #turn = 0;
 
+  /**
+   * @param lastInputTokens - `inputTokens` du dernier tour (session recréée,
+   *   par ex. après un changement de réglages) : conserve le déclenchement de la
+   *   compaction préalable au prochain tour.
+   */
   constructor(
     readonly agent: Agent,
     readonly sessionId: string,
     history: readonly ModelMessage[] = [],
+    lastInputTokens?: number,
   ) {
     this.#history = [...history];
+    this.#lastInputTokens = lastInputTokens;
   }
 
+  /** Historique modèle courant (raisonnement retiré), à persister ou à transmettre. */
   get history(): readonly ModelMessage[] {
     return this.#history;
+  }
+
+  /** `inputTokens` de la dernière étape du dernier tour, s'il est connu. */
+  get lastInputTokens(): number | undefined {
+    return this.#lastInputTokens;
   }
 
   /** Envoie un message utilisateur et exécute le tour. */
