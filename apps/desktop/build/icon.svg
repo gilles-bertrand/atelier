@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Icône d'Atelier : un orbe de verre vert flanqué de deux lames effilées,
+       silhouette abstraite d'un sage aux longues oreilles.
+       Grille macOS : carré arrondi de 824 px centré, marge de 100 px pour l'ombre.
+       Source de build/icon.png (1024 px), régénéré par le script « icon » de apps/desktop/package.json. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1C2023"/>
+      <stop offset="1" stop-color="#0A0B0D"/>
+    </linearGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.10"/>
+      <stop offset="0.45" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="halo" cx="512" cy="540" r="330" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5BE38C" stop-opacity="0.30"/>
+      <stop offset="1" stop-color="#5BE38C" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="bladeL" gradientUnits="userSpaceOnUse" x1="410" y1="0" x2="170" y2="0">
+      <stop offset="0" stop-color="#8AF0A8"/>
+      <stop offset="1" stop-color="#2E9E62" stop-opacity="0.85"/>
+    </linearGradient>
+    <linearGradient id="bladeR" gradientUnits="userSpaceOnUse" x1="614" y1="0" x2="854" y2="0">
+      <stop offset="0" stop-color="#8AF0A8"/>
+      <stop offset="1" stop-color="#2E9E62" stop-opacity="0.85"/>
+    </linearGradient>
+    <linearGradient id="orb" gradientUnits="userSpaceOnUse" x1="0" y1="412" x2="0" y2="668">
+      <stop offset="0" stop-color="#9EF5B8"/>
+      <stop offset="1" stop-color="#2C9A5E"/>
+    </linearGradient>
+    <linearGradient id="spec" gradientUnits="userSpaceOnUse" x1="0" y1="430" x2="0" y2="510">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.7"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <clipPath id="tile">
+      <rect x="100" y="100" width="824" height="824" rx="186"/>
+    </clipPath>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="12" stdDeviation="18" flood-color="#000" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#bg)" filter="url(#shadow)"/>
+
+  <g clip-path="url(#tile)">
+    <rect x="100" y="100" width="824" height="824" fill="url(#halo)"/>
+
+    <!-- Lames (oreilles) -->
+    <path d="M420 505 C340 470 260 430 168 392 C250 470 330 540 416 585 Z" fill="url(#bladeL)"/>
+    <path d="M604 505 C684 470 764 430 856 392 C774 470 694 540 608 585 Z" fill="url(#bladeR)"/>
+
+    <!-- Orbe -->
+    <circle cx="512" cy="540" r="128" fill="url(#orb)"/>
+    <path d="M408 500 A116 116 0 0 1 616 500" fill="none" stroke="url(#spec)" stroke-width="6" stroke-linecap="round"/>
+
+    <rect x="100" y="100" width="824" height="412" fill="url(#sheen)"/>
+  </g>
+
+  <rect x="101" y="101" width="822" height="822" rx="185" fill="none" stroke="#FFFFFF" stroke-opacity="0.10" stroke-width="2"/>
+</svg>
