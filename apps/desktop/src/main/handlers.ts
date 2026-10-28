@@ -4,7 +4,7 @@
  */
 import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { dirname, extname, isAbsolute, relative, resolve, sep } from 'node:path';
+import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { parseMcpConfigText, type McpManager } from '@atelier/mcp-bridge';
 import { listModels, testConnection, type FetchFunction } from '@atelier/agent-core';
 import { loadSkills } from '@atelier/skills';
@@ -13,6 +13,7 @@ import type { IpcHandlers } from './ipc.js';
 import type { ServerMonitor } from './llm/server-monitor.js';
 import type { ChatManager } from './runtime/chat-manager.js';
 import { importAttachments } from './runtime/attachments.js';
+import { resolveOpenable } from './safe-open.js';
 import type { PermissionBroker } from './runtime/permission-broker.js';
 import type { SandboxManager } from './runtime/sandbox-manager.js';
 import type { SecretsStore } from './settings/secrets-store.js';
@@ -71,31 +72,6 @@ export function tokenForConnectionTest(options: {
 /** Contenu proposé quand `mcp.json` n'existe pas encore. */
 export const EMPTY_MCP_CONFIG = '{\n  "mcpServers": {}\n}\n';
 
-/**
- * Extensions jamais ouvertes par `file:open` : `shell.openPath` lancerait
- * l'application ou le script (un fichier créé par l'agent n'est pas sûr).
- */
-const BLOCKED_OPEN_EXTENSIONS = new Set([
-  '.app',
-  '.command',
-  '.tool',
-  '.sh',
-  '.zsh',
-  '.bash',
-  '.terminal',
-  '.pkg',
-  '.mpkg',
-  '.scpt',
-  '.scptd',
-  '.applescript',
-  '.workflow',
-  '.action',
-  '.jar',
-  '.webloc',
-  '.inetloc',
-  '.fileloc',
-]);
-
 /** Vrai si `path` est dans `dir` (ou égal). */
 export function isWithin(dir: string, path: string): boolean {
   const rel = relative(resolve(dir), resolve(path));
@@ -128,25 +104,8 @@ export async function assertWorkspace(dir: string, home: string): Promise<string
 export function createHandlers(s: HandlerServices): IpcHandlers {
   const home = s.home ?? homedir();
 
-  /** Un fichier ne s'ouvre que s'il est dans le dossier d'une session connue. */
-  const assertOpenable = (absolutePath: string, forLaunch: boolean): string => {
-    const path = resolve(absolutePath);
-    const known = s.chats.list(1000).some((session) => isWithin(session.workspace, path));
-    if (!known) {
-      throw new AtelierError(
-        'tool/path_outside_workspace',
-        `Fichier hors des dossiers de travail : ${path}`,
-      );
-    }
-    if (forLaunch && BLOCKED_OPEN_EXTENSIONS.has(extname(path).toLowerCase())) {
-      throw new AtelierError(
-        'tool/failed',
-        'Par sécurité, Atelier n’ouvre pas les applications ni les scripts : utilisez « Afficher dans le Finder ».',
-        { details: { kind: 'blocked_open' } },
-      );
-    }
-    return path;
-  };
+  /** Dossiers de travail des conversations connues (seuls lieux ouvrables). */
+  const workspaces = (): string[] => [...new Set(s.chats.list(1000).map((c) => c.workspace))];
 
   return {
     // --- Réglages et secrets
@@ -218,12 +177,14 @@ export function createHandlers(s: HandlerServices): IpcHandlers {
       return importAttachments(session.workspace, hostPaths);
     },
     'file:open': async ({ absolutePath }) => {
-      const message = await s.shell.openPath(assertOpenable(absolutePath, true));
+      const message = await s.shell.openPath(
+        await resolveOpenable(absolutePath, workspaces(), 'open'),
+      );
       if (message !== '') throw new AtelierError('tool/failed', message);
       return undefined;
     },
-    'file:reveal': ({ absolutePath }) => {
-      s.shell.showItemInFolder(assertOpenable(absolutePath, false));
+    'file:reveal': async ({ absolutePath }) => {
+      s.shell.showItemInFolder(await resolveOpenable(absolutePath, workspaces(), 'reveal'));
       return undefined;
     },
 

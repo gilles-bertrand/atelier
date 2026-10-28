@@ -1,7 +1,7 @@
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
   assertWorkspace,
   createHandlers,
@@ -38,38 +38,6 @@ describe('assertWorkspace', () => {
       code: 'sandbox/invalid_workspace',
     });
     expect(await assertWorkspace(tmpdir(), home)).toBeTruthy();
-  });
-});
-
-describe('file:open', () => {
-  const services = (workspace: string) => {
-    const openPath = vi.fn(() => Promise.resolve(''));
-    const s = {
-      chats: { list: () => [{ id: 's', title: '', workspace, createdAt: '', updatedAt: '' }] },
-      shell: { openPath, showItemInFolder: vi.fn(), chooseDirectory: vi.fn() },
-    } as unknown as HandlerServices;
-    return { handlers: createHandlers(s), openPath };
-  };
-
-  it('ouvre un document du dossier de travail', async () => {
-    const { handlers, openPath } = services('/w');
-    await handlers['file:open']?.({ absolutePath: '/w/recap.xlsx' });
-    expect(openPath).toHaveBeenCalledWith('/w/recap.xlsx');
-  });
-
-  it('refuse hors dossier et les exécutables', async () => {
-    const { handlers, openPath } = services('/w');
-    await expect(
-      Promise.resolve().then(() => handlers['file:open']?.({ absolutePath: '/etc/hosts' })),
-    ).rejects.toMatchObject({
-      code: 'tool/path_outside_workspace',
-    });
-    await expect(
-      Promise.resolve().then(() => handlers['file:open']?.({ absolutePath: '/w/run.command' })),
-    ).rejects.toMatchObject({
-      code: 'tool/failed',
-    });
-    expect(openPath).not.toHaveBeenCalled();
   });
 });
 
