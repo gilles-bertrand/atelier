@@ -29,6 +29,8 @@ export const ATELIER_ERROR_CODES = [
   'sandbox/virtualization_unavailable',
   'sandbox/disk_full',
   'sandbox/not_ready',
+  /** Dossier de travail refusé (racine, `$HOME` complet, données de la VM, skills). */
+  'sandbox/invalid_workspace',
   'sandbox/timeout',
   'sandbox/failed',
   // Documents
