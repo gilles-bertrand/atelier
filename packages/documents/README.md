@@ -22,6 +22,9 @@ Sans `vision`, les images et les pages scannées sont signalées au modèle sans
 ### Glisser-déposer
 
 ```ts
+// Handler du canal `attachment:import` ({ sessionId, hostPaths } → Attachment[]) :
+const attachments = await importAttachments(hostPaths, workspace);
+// Ou fichier par fichier (détails : nom final, réutilisation…) :
 const { relativePath } = await importAttachment(droppedHostPath, workspace);
 // → ".atelier/uploads/facture.pdf" : à mentionner au modèle dans le message utilisateur.
 ```

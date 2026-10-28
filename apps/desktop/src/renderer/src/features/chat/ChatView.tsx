@@ -3,7 +3,7 @@
  * fil des messages, saisie, et dépôt de fichiers sur toute la zone.
  */
 import { useEffect, useId, useRef, useState, type DragEvent } from 'react';
-import { ArrowLeft, Folder, PanelRight, Plus, Upload } from 'lucide-react';
+import { ArrowLeft, Folder, PanelRight, Plus, Settings, Upload } from 'lucide-react';
 import type { SessionSummary } from '@atelier/shared';
 import { ServerStatusBadge } from '@renderer/components/status/ServerStatusBadge';
 import { Button } from '@renderer/components/ui/button';
@@ -27,10 +27,12 @@ export function ChatView({
   session,
   onBack,
   onNewConversation,
+  onOpenSettings,
 }: {
   session: SessionSummary;
   onBack: () => void;
   onNewConversation: () => void;
+  onOpenSettings: () => void;
 }) {
   const { state } = useApp();
   const { actions } = useChat();
@@ -175,6 +177,9 @@ export function ChatView({
             }}
           >
             <PanelRight className="size-4" aria-hidden />
+          </Button>
+          <Button variant="ghost" size="icon" aria-label="Réglages" onClick={onOpenSettings}>
+            <Settings className="size-4" aria-hidden />
           </Button>
         </div>
       </header>

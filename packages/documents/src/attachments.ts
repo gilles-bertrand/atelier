@@ -8,8 +8,9 @@ import { constants } from 'node:fs';
 import { copyFile, mkdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { AtelierError } from '@atelier/shared';
+import { AtelierError, type Attachment } from '@atelier/shared';
 import { resolveWorkspacePath } from '@atelier/agent-core';
+import { detectType, extensionOf, readSample } from './detect.js';
 import { formatBytes } from './fs.js';
 
 /** Dossier des pièces jointes, relatif au dossier de travail. */
@@ -25,6 +26,10 @@ export interface ImportedAttachment {
   absolutePath: string;
   /** Nom de fichier final (peut différer de l'original en cas de doublon). */
   name: string;
+  /** Nom d'origine du fichier déposé. */
+  originalName: string;
+  /** Type MIME détecté (signature, sinon extension), si connu. */
+  mimeType?: string;
   size: number;
   /** Vrai si un fichier identique existait déjà (pas de nouvelle copie). */
   reused: boolean;
@@ -108,32 +113,36 @@ export async function importAttachment(
   const ext = path.extname(name);
   const stem = name.slice(0, name.length - ext.length);
   let sourceHash: string | undefined;
+  const finish = async (
+    target: { relativePath: string; absolutePath: string },
+    finalName: string,
+    reused: boolean,
+  ): Promise<ImportedAttachment> => {
+    const mimeType = await detectMime(target.absolutePath);
+    return {
+      relativePath: target.relativePath,
+      absolutePath: target.absolutePath,
+      name: finalName,
+      originalName: path.basename(source),
+      ...(mimeType ? { mimeType } : {}),
+      size: info.size,
+      reused,
+    };
+  };
 
   for (let n = 1; n <= 1000; n++) {
     const candidate = n === 1 ? name : `${stem} (${n})${ext}`;
     // Re-vérifie à chaque essai : `.atelier/uploads` ne doit pas être un lien sortant.
     const target = await resolveWorkspacePath(workspace, `${UPLOADS_DIR}/${candidate}`);
     if (target.absolutePath === source) {
-      return {
-        relativePath: target.relativePath,
-        absolutePath: target.absolutePath,
-        name: candidate,
-        size: info.size,
-        reused: true,
-      };
+      return finish(target, candidate, true);
     }
     if (target.exists) {
       const existing = await stat(target.absolutePath);
       if (existing.isFile() && existing.size === info.size) {
         sourceHash ??= await fileHash(source);
         if ((await fileHash(target.absolutePath)) === sourceHash) {
-          return {
-            relativePath: target.relativePath,
-            absolutePath: target.absolutePath,
-            name: candidate,
-            size: info.size,
-            reused: true,
-          };
+          return finish(target, candidate, true);
         }
       }
       continue;
@@ -145,13 +154,59 @@ export async function importAttachment(
       if (isErrno(error, 'EEXIST')) continue;
       throw error;
     }
-    return {
-      relativePath: target.relativePath,
-      absolutePath: target.absolutePath,
-      name: candidate,
-      size: info.size,
-      reused: false,
-    };
+    return finish(target, candidate, false);
   }
   throw new AtelierError('tool/failed', `Trop de pièces jointes nommées « ${name} ».`);
+}
+
+const TEXT_MIME_BY_EXT: Record<string, string> = {
+  md: 'text/markdown',
+  markdown: 'text/markdown',
+  txt: 'text/plain',
+  csv: 'text/csv',
+  tsv: 'text/tab-separated-values',
+  json: 'application/json',
+  html: 'text/html',
+  htm: 'text/html',
+};
+
+/** Type MIME d'un fichier : signature binaire, sinon extension pour le texte. */
+async function detectMime(absolutePath: string): Promise<string | undefined> {
+  try {
+    const type = await detectType(absolutePath, await readSample(absolutePath));
+    if (type.mime) return type.mime;
+    if (type.kind === 'text') return TEXT_MIME_BY_EXT[extensionOf(absolutePath)] ?? 'text/plain';
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Convertit une pièce jointe importée en {@link Attachment} de shared (réponse du
+ * canal `attachment:import`).
+ */
+export function toAttachment(imported: ImportedAttachment): Attachment {
+  return {
+    path: imported.relativePath,
+    name: imported.originalName,
+    ...(imported.mimeType ? { mimeType: imported.mimeType } : {}),
+    size: imported.size,
+  };
+}
+
+/**
+ * Importe plusieurs fichiers déposés (handler de `attachment:import`), dans
+ * l'ordre ; s'arrête à la première erreur (`AtelierError`).
+ */
+export async function importAttachments(
+  hostPaths: readonly string[],
+  workspace: string,
+  options: ImportAttachmentOptions = {},
+): Promise<Attachment[]> {
+  const attachments: Attachment[] = [];
+  for (const hostPath of hostPaths) {
+    attachments.push(toAttachment(await importAttachment(hostPath, workspace, options)));
+  }
+  return attachments;
 }

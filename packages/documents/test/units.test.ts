@@ -8,6 +8,8 @@ import {
   decodeText,
   describePages,
   importAttachment,
+  importAttachments,
+  toAttachment,
   markdownTable,
   parsePageRange,
   prepareImage,
@@ -106,6 +108,12 @@ describe('importAttachment', () => {
           reused: false,
         });
         expect(await readFile(path.join(ws, first.relativePath), 'utf8')).toBe('v1');
+        expect(toAttachment(first)).toEqual({
+          path: `${UPLOADS_DIR}/facture.pdf`,
+          name: 'facture.pdf',
+          mimeType: 'text/plain',
+          size: 2,
+        });
         const same = await importAttachment(path.join(src, 'facture.pdf'), ws);
         expect(same).toMatchObject({ relativePath: first.relativePath, reused: true });
         await writeFile(path.join(src, 'facture.pdf'), 'v2');
@@ -115,6 +123,24 @@ describe('importAttachment', () => {
     } finally {
       await rm(src, { recursive: true, force: true });
     }
+  });
+
+  it('importAttachments renvoie des Attachment (nom d’origine, type MIME par signature)', async () => {
+    await withWorkspace([], async (ws) => {
+      const attachments = await importAttachments(
+        [path.join(FIXTURES, 'rapport.pdf'), path.join(FIXTURES, 'notes.md')],
+        ws,
+      );
+      expect(attachments).toEqual([
+        {
+          path: `${UPLOADS_DIR}/rapport.pdf`,
+          name: 'rapport.pdf',
+          mimeType: 'application/pdf',
+          size: expect.any(Number) as number,
+        },
+        { path: `${UPLOADS_DIR}/notes.md`, name: 'notes.md', mimeType: 'text/markdown', size: 66 },
+      ]);
+    });
   });
 
   it('refuse un dossier, un fichier trop gros et un uploads qui sort du dossier', async () => {
