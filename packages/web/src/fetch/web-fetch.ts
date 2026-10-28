@@ -156,7 +156,14 @@ async function readLimited(response: Response, maxBytes: number): Promise<Uint8A
  */
 export async function fetchPage(
   rawUrl: string,
-  options: WebFetchOptions & { signal?: AbortSignal } = {},
+  options: WebFetchOptions & {
+    signal?: AbortSignal;
+    /**
+     * Appelé avant de suivre chaque redirection ; `false` interrompt le
+     * téléchargement (`web/fetch_failed`, `details.redirectDenied`).
+     */
+    authorizeRedirect?: (to: URL, from: URL) => Promise<boolean>;
+  } = {},
 ): Promise<FetchedPage> {
   const fetchImpl = options.fetch ?? guardedFetch();
   const resolveHost = options.resolveHost ?? defaultResolveHost;
@@ -193,7 +200,13 @@ export async function fetchPage(
             `Trop de redirections (plus de ${MAX_REDIRECTS}).`,
           );
         }
-        url = parseFetchableUrl(new URL(location, url).href);
+        const next = parseFetchableUrl(new URL(location, url).href);
+        if (options.authorizeRedirect && !(await options.authorizeRedirect(next, url))) {
+          throw new AtelierError('web/fetch_failed', `Redirection vers ${next.href} refusée.`, {
+            details: { redirectDenied: true, url: next.href },
+          });
+        }
+        url = next;
         continue;
       }
       if (!response.ok) {
@@ -300,6 +313,19 @@ async function askDomainPermission(
   }
 }
 
+/** Résultat d'un refus (direct, ou d'une redirection vers un autre domaine). */
+function deniedOutput(deniedUrl: string, redirectedFrom?: string): ToolOutput {
+  const { title } = describeWebFetch(deniedUrl);
+  const via = redirectedFrom ? ` (redirection depuis ${redirectedFrom})` : '';
+  return {
+    ok: false,
+    denied: true,
+    content:
+      `L'utilisateur a refusé l'action « ${title} »${via}. Ne la retente pas, ni telle quelle ni ` +
+      `par un autre moyen : appuie-toi sur d'autres sources ou demande à l'utilisateur.`,
+  };
+}
+
 const inputSchema = z.object({
   url: z.string().min(1).describe('URL absolue http(s) de la page à lire.'),
 });
@@ -326,18 +352,22 @@ export function webFetchTool(options: WebFetchOptions = {}): ToolDefinition<WebF
       } catch (error) {
         return { ok: false, content: errorMessage(error) };
       }
-      if (!(await askDomainPermission(url, context))) {
-        const { title } = describeWebFetch(url);
-        return {
-          ok: false,
-          denied: true,
-          content:
-            `L'utilisateur a refusé l'action « ${title} ». Ne la retente pas, ni telle quelle ni ` +
-            `par un autre moyen : appuie-toi sur d'autres sources ou demande à l'utilisateur.`,
-        };
-      }
+      if (!(await askDomainPermission(url, context))) return deniedOutput(url);
+      // Une redirection vers un autre domaine redemande la permission pour ce domaine
+      // (le gestionnaire ne redemande pas un domaine déjà autorisé pour la session).
+      let deniedRedirect: string | undefined;
+      const authorizeRedirect = async (to: URL, from: URL): Promise<boolean> => {
+        if (permissionDomain(to) === permissionDomain(from)) return true;
+        if (await askDomainPermission(to.href, context)) return true;
+        deniedRedirect = to.href;
+        return false;
+      };
       try {
-        const page = await fetchPage(url, { ...options, signal: context.abortSignal });
+        const page = await fetchPage(url, {
+          ...options,
+          signal: context.abortSignal,
+          authorizeRedirect,
+        });
         const header = [`# ${page.title ?? page.url}`, `URL : ${page.url}`, ''].join('\n');
         const { text } = truncateUtf8(
           `${header}\n${page.markdown || '(page sans contenu textuel)'}`,
@@ -354,6 +384,7 @@ export function webFetchTool(options: WebFetchOptions = {}): ToolDefinition<WebF
         };
       } catch (error) {
         if (context.abortSignal.aborted) throw error;
+        if (deniedRedirect !== undefined) return deniedOutput(deniedRedirect, url);
         return { ok: false, content: errorMessage(error) };
       }
     },
