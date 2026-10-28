@@ -6,7 +6,13 @@
 export const PACKAGE_NAME = '@atelier/agent-core';
 
 // Boucle
-export { Agent, AgentSession, MAX_STEPS } from './loop/agent.js';
+export {
+  Agent,
+  AgentSession,
+  continuationPrompt,
+  MAX_CONTINUATIONS,
+  MAX_STEPS,
+} from './loop/agent.js';
 export type { AgentOptions, RunTurnOptions, SendOptions, TurnResult } from './loop/agent.js';
 export {
   compactMessages,

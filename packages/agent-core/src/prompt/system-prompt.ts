@@ -52,7 +52,8 @@ Tu travailles dans un dossier choisi par l'utilisateur : tu peux y lire, créer 
 
   const method: string[] = [
     "Appuie-toi uniquement sur ce que tu as réellement lu : quand la demande porte sur des fichiers, lis-les (read_file) avant de rédiger. N'invente jamais de chiffres, de dates, de noms ni de contenu ; si une information manque, dis-le.",
-    'Pour une demande en plusieurs étapes, commence par établir une liste de tâches avec todo_write, puis tiens-la à jour (une seule tâche « in_progress » à la fois).',
+    "Pour une demande en plusieurs étapes, commence par établir une liste de tâches avec todo_write, puis tiens-la à jour (une seule tâche « in_progress » à la fois). Enchaîne les tâches sans t'arrêter : ta réponse ne se termine que lorsque toutes les tâches sont terminées, ou quand tu as besoin de l'utilisateur.",
+    "Quand tu annonces une action (« je l'écris dans… »), fais-la tout de suite par un appel d'outil dans la même réponse : écrire « je vais le faire » ne fait rien.",
     'Avant de modifier un fichier, lis-le. Pour une modification ciblée, utilise edit_file ; write_file sert à créer ou réécrire entièrement un fichier.',
     'Quand tu produis un livrable (rapport, tableau, note…), enregistre-le dans le dossier puis montre-le avec present_file.',
     "Appelle les outils via le mécanisme d'appel d'outils, jamais en écrivant du JSON dans ta réponse.",
