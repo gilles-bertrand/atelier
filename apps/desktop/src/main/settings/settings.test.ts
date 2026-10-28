@@ -33,6 +33,16 @@ describe('réglages', () => {
     ).not.toThrow();
   });
 
+  it("efface le modèle vision et le contexte forcé avec '' et 0", () => {
+    const set = applySettingsPatch(defaultSettings('/h'), {
+      llm: { visionModel: 'qwen3-vl:8b', numCtx: 65536 },
+    });
+    expect(set.llm).toMatchObject({ visionModel: 'qwen3-vl:8b', numCtx: 65536 });
+    const cleared = applySettingsPatch(set, { llm: { visionModel: '', numCtx: 0 } });
+    expect(cleared.llm).not.toHaveProperty('visionModel');
+    expect(cleared.llm).not.toHaveProperty('numCtx');
+  });
+
   it('valide les ressources de la VM', () => {
     expect(() => applySettingsPatch(defaultSettings('/h'), { sandbox: { cpus: 0 } })).toThrow();
     expect(() =>

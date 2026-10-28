@@ -3,7 +3,7 @@
  * reprendre une conversation récente.
  */
 import { useEffect, useState } from 'react';
-import { Folder, FolderPlus, Loader2, MessageSquare, Trash2 } from 'lucide-react';
+import { Folder, FolderPlus, Loader2, MessageSquare, Settings, Trash2 } from 'lucide-react';
 import type { SessionSummary } from '@atelier/shared';
 import { ServerStatusBadge } from '@renderer/components/status/ServerStatusBadge';
 import { Button } from '@renderer/components/ui/button';
@@ -16,9 +16,11 @@ import { useApp } from '@renderer/state/app-state';
 export function Home({
   onOpen,
   onDeleted,
+  onOpenSettings,
 }: {
   onOpen: (session: SessionSummary) => void;
   onDeleted: (sessionId: string) => void;
+  onOpenSettings: () => void;
 }) {
   const { state } = useApp();
   const [sessions, setSessions] = useState<SessionSummary[] | undefined>();
@@ -74,7 +76,12 @@ export function Home({
   return (
     <div className="flex h-full flex-col">
       <header className="flex h-12 shrink-0 items-center justify-end border-b pl-20 pr-4 [-webkit-app-region:drag]">
-        <ServerStatusBadge status={state.server} className="[-webkit-app-region:no-drag]" />
+        <div className="flex items-center gap-2 [-webkit-app-region:no-drag]">
+          <ServerStatusBadge status={state.server} />
+          <Button variant="ghost" size="icon" aria-label="Réglages" onClick={onOpenSettings}>
+            <Settings className="size-4" aria-hidden />
+          </Button>
+        </div>
       </header>
       <main className="flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-2xl space-y-10 px-6 py-12">

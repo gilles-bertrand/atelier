@@ -106,3 +106,51 @@ export function Progress({ value, label }: { value?: number | undefined; label: 
     </div>
   );
 }
+
+/** Interrupteur accessible (`role="switch"`). */
+export function Switch({
+  checked,
+  onCheckedChange,
+  className,
+  ...props
+}: Omit<ComponentProps<'button'>, 'onChange' | 'role'> & {
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => {
+        onCheckedChange(!checked);
+      }}
+      className={cn(
+        'relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50',
+        checked ? 'bg-primary' : 'bg-input',
+        className,
+      )}
+      {...props}
+    >
+      <span
+        className={cn(
+          'inline-block size-4 rounded-full bg-background shadow transition-transform',
+          checked ? 'translate-x-4' : 'translate-x-0.5',
+        )}
+      />
+    </button>
+  );
+}
+
+/** Liste déroulante native (style aligné sur les champs). */
+export function Select({ className, ...props }: ComponentProps<'select'>) {
+  return (
+    <select
+      className={cn(
+        'flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50',
+        className,
+      )}
+      {...props}
+    />
+  );
+}
