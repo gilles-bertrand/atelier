@@ -1,7 +1,7 @@
 import { Loader2 } from 'lucide-react';
 import { Button } from '@renderer/components/ui/button';
 import { Alert } from '@renderer/components/ui/primitives';
-import { Home } from '@renderer/features/home/Home';
+import { Workspace } from '@renderer/features/Workspace';
 import { Onboarding } from '@renderer/features/onboarding/Onboarding';
 import { errorMessage } from '@renderer/lib/error-messages';
 import { AppStateProvider, useAppStatus } from '@renderer/state/app-state';
@@ -28,7 +28,7 @@ function Root() {
       </div>
     );
   }
-  return status.state.settings.onboardingCompleted ? <Home /> : <Onboarding />;
+  return status.state.settings.onboardingCompleted ? <Workspace /> : <Onboarding />;
 }
 
 export function App() {

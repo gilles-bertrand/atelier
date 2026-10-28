@@ -85,7 +85,7 @@ describe('onboarding', () => {
     await user.click(screen.getByRole('button', { name: 'Commencer' }));
 
     expect(api.callsTo('settings:update')).toContainEqual({ onboardingCompleted: true });
-    expect(await screen.findByText(/Configuration terminée/)).toBeInTheDocument();
+    expect(await screen.findByText('Sur quoi travaille-t-on ?')).toBeInTheDocument();
   });
 
   it('valide l’URL localement et traduit un token refusé', async () => {

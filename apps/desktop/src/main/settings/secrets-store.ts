@@ -72,7 +72,7 @@ export class SecretsStore {
   /** Enregistre (ou efface avec `null` / chaîne vide) un secret. */
   async set(id: SecretId, value: string | null): Promise<void> {
     if (!SECRET_IDS.includes(id)) {
-      throw new AtelierError('internal', `Secret inconnu : ${id as string}`);
+      throw new AtelierError('settings/invalid', `Secret inconnu : ${id as string}`);
     }
     const trimmed = value?.trim() ?? '';
     if (trimmed === '') {

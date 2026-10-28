@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { PermissionRequest } from '@atelier/shared';
-import { importAttachments, safeFileName } from './attachments.js';
+import { guessMimeType, importAttachments } from './attachments.js';
 import { PermissionBroker } from './permission-broker.js';
 
 const request = (id: string, sessionId = 's1', scopeKey = 'write_file'): PermissionRequest => ({
@@ -44,32 +44,24 @@ describe('PermissionBroker', () => {
 });
 
 describe('pièces jointes', () => {
-  it('copie dans .atelier/uploads sans écraser', async () => {
+  it('copie dans .atelier/uploads via documents et renvoie des Attachment', async () => {
     const workspace = await mkdtemp(join(tmpdir(), 'atelier-ws-'));
     const source = join(await mkdtemp(join(tmpdir(), 'atelier-src-')), 'facture.pdf');
-    await writeFile(source, 'pdf');
+    await writeFile(source, '%PDF-1.4 test');
     const [first] = await importAttachments(workspace, [source]);
-    const [second] = await importAttachments(workspace, [source]);
     expect(first).toEqual({
       path: '.atelier/uploads/facture.pdf',
       name: 'facture.pdf',
-      size: 3,
+      size: 13,
       mimeType: 'application/pdf',
     });
-    expect(second?.path).toBe('.atelier/uploads/facture (2).pdf');
-    expect(await readFile(join(workspace, '.atelier/uploads/facture (2).pdf'), 'utf8')).toBe('pdf');
+    expect(await readFile(join(workspace, '.atelier/uploads/facture.pdf'), 'utf8')).toBe(
+      '%PDF-1.4 test',
+    );
   });
 
-  it('nettoie les noms de fichiers', () => {
-    expect(safeFileName('..secret')).toBe('secret');
-    expect(safeFileName('a:b.txt')).toBe('a_b.txt');
-    expect(safeFileName('.')).toBe('fichier');
-  });
-
-  it('refuse un dossier', async () => {
-    const workspace = await mkdtemp(join(tmpdir(), 'atelier-ws-'));
-    await expect(importAttachments(workspace, [tmpdir()])).rejects.toMatchObject({
-      code: 'documents/unsupported_type',
-    });
+  it('devine le type MIME', () => {
+    expect(guessMimeType('Ticket.JPG')).toBe('image/jpeg');
+    expect(guessMimeType('inconnu.xyz')).toBeUndefined();
   });
 });

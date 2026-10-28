@@ -32,8 +32,8 @@ export interface SessionStore {
 
 /** Erreur « session introuvable ». */
 export function sessionNotFound(sessionId: string): AtelierError {
-  return new AtelierError('internal', `Session introuvable : ${sessionId}`, {
-    details: { kind: 'session_not_found', sessionId },
+  return new AtelierError('session/not_found', `Session introuvable : ${sessionId}`, {
+    details: { sessionId },
   });
 }
 

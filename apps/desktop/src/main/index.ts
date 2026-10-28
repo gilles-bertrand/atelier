@@ -139,6 +139,9 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
     }
   };
   void reloadMcp();
+  mcp.onChange(() => {
+    broadcast('mcp:status', { servers: mcp.status(), issues: mcp.config.issues });
+  });
 
   const monitor = new ServerMonitor({
     target: () => {
@@ -217,7 +220,8 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
       next.llm.baseUrl !== previous.llm.baseUrl ||
       next.llm.model !== previous.llm.model ||
       next.llm.numCtx !== previous.llm.numCtx ||
-      next.llm.thinking !== previous.llm.thinking
+      next.llm.thinking !== previous.llm.thinking ||
+      next.llm.visionModel !== previous.llm.visionModel
     ) {
       agents.invalidate();
       void monitor.check();
@@ -242,10 +246,11 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
         void monitor.check();
       },
       shell: {
-        chooseDirectory: async () => {
+        chooseDirectory: async (request) => {
           const window = BrowserWindow.getFocusedWindow();
           const options: Electron.OpenDialogOptions = {
-            title: 'Choisir le dossier de travail',
+            title: request?.title ?? 'Choisir le dossier de travail',
+            ...(request?.defaultPath ? { defaultPath: request.defaultPath } : {}),
             buttonLabel: 'Choisir',
             properties: ['openDirectory', 'createDirectory'],
           };
