@@ -14,6 +14,12 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@atelier/shared": "workspace:*"
+    "@atelier/shared": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "ai": "^7.0.154",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/server-filesystem": "^2.0.1"
   }
 }

@@ -6,14 +6,14 @@ _Dernière mise à jour : 2026-10-28, Lead._
 
 ## État par jalon
 
-| Jalon                                                       | État                                                                              | Responsable(s)                |
-| ----------------------------------------------------------- | --------------------------------------------------------------------------------- | ----------------------------- |
-| M0 : squelette monorepo + `packages/shared` + `server/`     | ✅ fait                                                                           | Lead                          |
-| M1 : boucle AI SDK en CLI, outils fichiers, bash local, web | 🟡 Core livré (PR `feat/core-agent-loop`), web livré (PR `feat/web-search-fetch`) | Core, MCP & Web               |
-| M2 : sandbox Lima + permissions                             | 🟡 sandbox livrée (PR `feat/sandbox-lima`), permissions : Core                    | Sandbox, Core                 |
-| M3 : app Electron fonctionnelle                             | ⏳ à démarrer                                                                     | UI                            |
-| M4 : skills + MCP + SearXNG + documents                     | 🟡 skills + SearXNG dans la VM livrés ; MCP, documents à faire                    | Sandbox, MCP & Web, Documents |
-| M5 : historique, compaction, réglages, packaging signé      | ⏳                                                                                | UI, Core, Lead                |
+| Jalon                                                       | État                                                                                         | Responsable(s)                |
+| ----------------------------------------------------------- | -------------------------------------------------------------------------------------------- | ----------------------------- |
+| M0 : squelette monorepo + `packages/shared` + `server/`     | ✅ fait                                                                                      | Lead                          |
+| M1 : boucle AI SDK en CLI, outils fichiers, bash local, web | 🟡 Core livré (PR `feat/core-agent-loop`), web livré (PR `feat/web-search-fetch`)            | Core, MCP & Web               |
+| M2 : sandbox Lima + permissions                             | 🟡 sandbox livrée (PR `feat/sandbox-lima`), permissions : Core                               | Sandbox, Core                 |
+| M3 : app Electron fonctionnelle                             | ⏳ à démarrer                                                                                | UI                            |
+| M4 : skills + MCP + SearXNG + documents                     | 🟡 skills + SearXNG dans la VM livrés ; MCP livré (PR `feat/mcp-bridge`) ; documents à faire | Sandbox, MCP & Web, Documents |
+| M5 : historique, compaction, réglages, packaging signé      | ⏳                                                                                           | UI, Core, Lead                |
 
 ## Ce que contient le squelette
 
@@ -57,6 +57,15 @@ _Dernière mise à jour : 2026-10-28, Lead._
 - **`web_fetch`** (permission `conditional`, une fois par domaine : `scopeKey: web_fetch:<domaine>`, `kind: network`) : http(s) seulement, adresses non publiques refusées avant la requête, à chaque redirection et à la connexion TCP (lookup filtré d'undici, anti DNS rebinding), délai 20 s, 5 Mo max, Readability + jsdom → turndown, 20 ko max.
 - Pour **UI / Lead** : `jsdom` et `undici` doivent rester externes au bundle du main (`externalizeDepsPlugin` d'electron-vite) ; `web_fetch` tourne dans le main uniquement. `SearxngProvider.isAvailable()` (via `/healthz`) peut alimenter l'indicateur des Réglages.
 - ⚠️ `@types/jsdom` volontairement absent (déclaration locale `packages/web/src/types/jsdom.d.ts`) : jsdom étant un pair optionnel de Vitest, ses types injectaient `lib.dom` dans tous les packages (casse `scripts/fetch-lima.ts`).
+
+## MCP (agent MCP & Web, `feat/mcp-bridge`)
+
+- **`@atelier/mcp-bridge`** : `McpManager` (une instance dans le main) : `apply(await loadMcpConfig(path))` démarre les serveurs de `~/Atelier/mcp.json` (format Claude Desktop, stdio + streamable HTTP, lancés côté hôte), `status()`, `catalog()` / `definitions()`, `onChange()`, `stop()` à la fermeture. Détails : `packages/mcp-bridge/README.md`.
+- Outils `mcp__<serveur>__<outil>` (`ToolDefinition`, schéma JSON → Zod) ; permission `never` si `readOnlyHint`, sinon `always` (`kind: mcp_write`, libellé « Utiliser « X » du connecteur Y »).
+- **`tool_search({ query })`** par session : `registry.register(toolSearchTool({ source: mcp, registry }))` ; les outils trouvés sont enregistrés dans le registre de la session. `mcpPromptSection(mcp)` → `extraInstructions`.
+- Reconnexion automatique (backoff 1 s → 30 s, 5 essais puis `failed`), reconnexion immédiate à l'appel d'un outil, `tools/list_changed` suivi, `stop()` termine les processus.
+- Pour **UI / Lead** : après `mcp:write-config`, relire et `apply()` (seuls les serveurs modifiés redémarrent). Afficher `status()` (état, erreur avec fin de stderr) et `config.issues` dans les Réglages. Il faudra des canaux IPC pour l'état des connecteurs (type `McpServerStatus`, local à mcp-bridge pour l'instant : à promouvoir dans shared quand l'UI s'y branchera).
+- ✅ **Demande à Core acceptée par le Lead le 2026-10-28, transmise à Core** (aucun changement de shared) : `toAiSdkTools` est appelé **une fois par tour**, donc un outil activé par `tool_search` n'est appelable qu'au tour suivant, alors que le contrat `ToolRegistry` prévoit une conversion « à chaque étape ». Proposition : `AgentOptions.lazyTools?: () => readonly AnyToolDefinition[]` (l'app passe `() => mcp.definitions()`) ; en début de tour, `tools` = registre ∪ `lazyTools()`, et `prepareStep` renvoie `activeTools: registry.list().map((t) => t.name)`. Le prompt système ne liste que le registre.
 
 ## Demandes d'évolution de `packages/shared`
 
