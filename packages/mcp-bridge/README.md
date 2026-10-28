@@ -18,7 +18,12 @@ await mcp.apply(await loadMcpConfig(settings.mcpConfigPath));
 // Par session : tool_search active les outils dans le registre de la session.
 const registry = createDefaultRegistry([...webTools]);
 registry.register(toolSearchTool({ source: mcp, registry }));
-const agent = new Agent({ registry, extraInstructions: mcpPromptSection(mcp), ... });
+const agent = new Agent({
+  registry,
+  lazyTools: () => mcp.definitions(), // activables dans le même tour
+  extraInstructions: mcpPromptSection(mcp),
+  // ...
+});
 ```
 
 Réglages : `mcp.status()` (état, nombre d'outils, erreur avec la fin de stderr) et `mcp.config.issues` (serveurs ignorés car invalides) ; `mcp.onChange(cb)` pour rafraîchir l'affichage.
@@ -58,7 +63,7 @@ Réglages : `mcp.status()` (état, nombre d'outils, erreur avec la fin de stderr
 
 Classe le catalogue (nom de l'outil ×3, serveur ×2, titre ×2, description ×1 ; préfixes, accents et camelCase gérés ; bonus si tous les mots sont couverts ; nom exact prioritaire) et enregistre jusqu'à 8 outils dans le registre de la session. Le modèle reçoit la liste des outils activés avec leurs paramètres. Sans connecteur ou sans résultat : message explicite avec l'état des connecteurs.
 
-⚠️ agent-core convertit aujourd'hui le registre **une fois par tour** : un outil activé par `tool_search` n'est appelable qu'au tour suivant. Demande faite à Core (voir `docs/STATUS.md`) pour l'activation dans le même tour.
+Avec `AgentOptions.lazyTools: () => mcp.definitions()` (agent-core), un outil activé par `tool_search` est appelable dès l'étape suivante du même tour. Sans cette option, il ne l'est qu'au tour suivant.
 
 ## Cycle de vie et erreurs
 
