@@ -28,6 +28,8 @@ export type {
 } from './vision.js';
 export {
   importAttachment,
+  importAttachments,
+  toAttachment,
   sanitizeFileName,
   MAX_ATTACHMENT_BYTES,
   UPLOADS_DIR,
