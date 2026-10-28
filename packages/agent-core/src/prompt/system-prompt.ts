@@ -59,6 +59,11 @@ Tu travailles dans un dossier choisi par l'utilisateur : tu peux y lire, créer 
     "Si une action est refusée par l'utilisateur, ne la retente pas : propose une autre approche ou demande comment procéder.",
     'Termine par une réponse courte qui dit ce qui a été fait et où trouver le résultat.',
   ];
+  if (has('look_at')) {
+    method.push(
+      'read_file lit aussi les PDF, les documents Word (docx), les classeurs Excel (xlsx) et les images. Pour une question visuelle (graphique, schéma, photo, mise en page), utilise look_at.',
+    );
+  }
   if (has('bash') && options.sandboxAvailable !== false) {
     method.push(
       "La commande bash s'exécute dans une machine virtuelle Linux isolée où le dossier de travail est monté sur /workspace. Utilise-la pour les conversions, calculs et traitements de fichiers (Python est disponible).",

@@ -110,6 +110,8 @@ describe('outils fichiers', () => {
       );
       await writeFile(path.join(ws, 'rapports/budget.csv'), 'poste,montant\nloyer,1200');
       await writeFile(path.join(ws, 'node_modules/x/q.md'), 'Chiffre ignoré');
+      await mkdir(path.join(ws, '.atelier/cache'), { recursive: true });
+      await writeFile(path.join(ws, '.atelier/cache/rendu.md'), 'Chiffre en cache');
       await writeFile(path.join(ws, '.cache'), 'caché');
 
       const list = await listDirTool.execute({}, ctx(ws));

@@ -102,5 +102,12 @@ describe('buildSystemPrompt', () => {
     expect(p).not.toContain('# Recherche web');
     expect(p).not.toContain('# Skills');
     expect(p).not.toContain('/workspace');
+    expect(p).not.toContain('look_at');
+  });
+
+  it('mentionne les formats de read_file et look_at quand documents est branché', () => {
+    const p = buildSystemPrompt({ workspace: '/w', toolNames: ['read_file', 'look_at'] });
+    expect(p).toMatch(/PDF.*docx.*xlsx/);
+    expect(p).toContain('utilise look_at');
   });
 });
