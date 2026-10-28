@@ -14,13 +14,13 @@ import {
   type Sandbox,
   type ToolDisplay,
   type ToolExecutionContext,
+  type ToolOutput,
   type ToolRegistry,
 } from '@atelier/shared';
 import {
   askPermission,
-  defaultDescribePermission,
   deniedOutput,
-  type ExecutedToolOutput,
+  describePermissionFor,
   type PermissionDescriber,
 } from './permission.js';
 
@@ -31,13 +31,14 @@ export interface ToolRuntime {
   abortSignal: AbortSignal;
   requestPermission: PermissionHandler;
   sandbox?: Sandbox;
+  /** Relaie `ToolExecutionContext.emitDisplay` (event `tool_display`). */
   emitDisplay?: (toolCallId: string, display: ToolDisplay) => void;
-  /** Libellés des demandes de permission (défaut : {@link defaultDescribePermission}). */
+  /** Libellés fournis par l'application, après ceux de l'outil (voir {@link describePermissionFor}). */
   describePermission?: PermissionDescriber;
 }
 
-/** Garde de type pour la sortie interne d'un outil. */
-export function isExecutedToolOutput(value: unknown): value is ExecutedToolOutput {
+/** Garde de type pour la sortie d'un outil Atelier. */
+export function isToolOutput(value: unknown): value is ToolOutput {
   return (
     typeof value === 'object' &&
     value !== null &&
@@ -52,7 +53,7 @@ export async function executeTool(
   input: unknown,
   toolCallId: string,
   runtime: ToolRuntime,
-): Promise<ExecutedToolOutput> {
+): Promise<ToolOutput> {
   const context: ToolExecutionContext = {
     sessionId: runtime.sessionId,
     toolCallId,
@@ -69,8 +70,7 @@ export async function executeTool(
       : {}),
   };
   if (definition.permission === 'always') {
-    const describe = runtime.describePermission ?? defaultDescribePermission;
-    const description = describe(definition.name, input);
+    const description = describePermissionFor(definition, input, runtime.describePermission);
     const decision = await askPermission(context, definition.name, input, description);
     if (!isAllowed(decision)) return deniedOutput(description.title);
   }
@@ -91,7 +91,7 @@ export function toAiSdkTools(registry: ToolRegistry, runtime: ToolRuntime): Tool
         executeTool(definition, input, options.toolCallId, runtime),
       toModelOutput: ({ output }) => ({
         type: 'text',
-        value: isExecutedToolOutput(output) ? modelText(output) : JSON.stringify(output),
+        value: isToolOutput(output) ? modelText(output) : JSON.stringify(output),
       }),
     });
   }
@@ -99,7 +99,7 @@ export function toAiSdkTools(registry: ToolRegistry, runtime: ToolRuntime): Tool
 }
 
 /** Texte vu par le modèle : le contenu, préfixé d'un marqueur d'échec si besoin. */
-function modelText(output: ExecutedToolOutput): string {
+function modelText(output: ToolOutput): string {
   if (output.ok) return output.content;
   return output.content.startsWith('Erreur') ? output.content : `Erreur : ${output.content}`;
 }

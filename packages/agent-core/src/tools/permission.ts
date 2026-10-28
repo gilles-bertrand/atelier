@@ -8,70 +8,62 @@
 import { randomUUID } from 'node:crypto';
 import {
   isAllowed,
+  type AnyToolDefinition,
   type PermissionDecision,
+  type PermissionDescription,
   type PermissionHandler,
-  type PermissionKind,
   type PermissionRequest,
   type ToolExecutionContext,
   type ToolOutput,
 } from '@atelier/shared';
 
-/** Partie descriptive d'une demande de permission (le reste est fourni par le contexte). */
-export interface PermissionDescription {
-  kind: PermissionKind;
-  title: string;
-  detail?: string;
-  scopeKey?: string;
-}
+/**
+ * Libellés de permission fournis par l'application (`AgentOptions.describePermission`).
+ * Renvoyer `undefined` laisse la main au repli générique.
+ */
+export type PermissionDescriber = (
+  toolName: string,
+  input: unknown,
+) => PermissionDescription | undefined;
 
-/** Produit la description d'une demande de permission pour un appel d'outil. */
-export type PermissionDescriber = (toolName: string, input: unknown) => PermissionDescription;
-
-function field(input: unknown, key: string): string | undefined {
+/** Extrait un champ texte d'une entrée d'outil (pour les libellés). */
+export function stringField(input: unknown, key: string): string | undefined {
   if (typeof input !== 'object' || input === null) return undefined;
   const value: unknown = (input as Record<string, unknown>)[key];
   return typeof value === 'string' ? value : undefined;
 }
 
-function preview(text: string | undefined, max = 2_000): string | undefined {
+/** Tronque un aperçu affiché dans la modale de permission. */
+export function preview(text: string | undefined, max = 2_000): string | undefined {
   if (text === undefined) return undefined;
   return text.length > max ? `${text.slice(0, max)}\n…` : text;
 }
 
-/** Description par défaut : libellés français pour les outils natifs, générique sinon. */
-export const defaultDescribePermission: PermissionDescriber = (toolName, input) => {
-  const p = field(input, 'path') ?? '';
-  switch (toolName) {
-    case 'write_file':
-      return {
-        kind: 'file_write',
-        title: `Écrire le fichier ${p}`,
-        detail: preview(field(input, 'content')),
-        scopeKey: 'write_file',
-      };
-    case 'edit_file':
-      return {
-        kind: 'file_write',
-        title: `Modifier le fichier ${p}`,
-        detail: preview(`- ${field(input, 'old_str') ?? ''}\n+ ${field(input, 'new_str') ?? ''}`),
-        scopeKey: 'edit_file',
-      };
-    case 'bash':
-      return {
-        kind: 'command',
-        title: 'Exécuter une commande',
-        detail: field(input, 'command'),
-        scopeKey: 'bash',
-      };
-    default:
-      return {
-        kind: toolName.startsWith('mcp__') ? 'mcp_write' : 'other',
-        title: `Utiliser l'outil ${toolName}`,
-        detail: preview(safeJson(input)),
-        scopeKey: toolName,
-      };
-  }
-};
+/** Repli générique quand ni l'outil ni l'application ne fournissent de libellé. */
+export function genericDescribePermission(toolName: string, input: unknown): PermissionDescription {
+  return {
+    kind: toolName.startsWith('mcp__') ? 'mcp_write' : 'other',
+    title: `Utiliser l'outil ${toolName}`,
+    detail: preview(safeJson(input)),
+    scopeKey: toolName,
+  };
+}
+
+/**
+ * Description d'une demande de permission, par priorité :
+ * `describePermission` de l'outil, puis celui de l'application, puis le repli générique.
+ */
+export function describePermissionFor(
+  definition: AnyToolDefinition,
+  input: unknown,
+  appDescriber?: PermissionDescriber,
+): PermissionDescription {
+  return (
+    definition.describePermission?.(input) ??
+    appDescriber?.(definition.name, input) ??
+    genericDescribePermission(definition.name, input)
+  );
+}
 
 function safeJson(value: unknown): string {
   try {
@@ -110,13 +102,8 @@ export async function askPermission(
   }
 }
 
-/** Sortie d'outil enrichie d'un drapeau de refus (interne à agent-core). */
-export interface ExecutedToolOutput extends ToolOutput {
-  denied?: boolean;
-}
-
 /** Message renvoyé au modèle quand l'utilisateur refuse. */
-export function deniedOutput(title: string): ExecutedToolOutput {
+export function deniedOutput(title: string): ToolOutput {
   return {
     ok: false,
     denied: true,

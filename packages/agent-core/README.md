@@ -55,7 +55,7 @@ const result = await session.send(
 ```
 
 - `runTurn` / `send` **ne lèvent jamais** : toute erreur devient un event `error` (`SerializedAtelierError`), sinon le tour finit par `done` (`stop` | `aborted` | `max_steps` | `length`).
-- Events émis : `text_delta`, `reasoning_delta` (thinking, jamais réinjecté), `tool_start`, `tool_result` (`denied` si refus), `todo_update`, `permission_request` (émis juste avant l'appel au `PermissionHandler`), `sources`, `compaction`, `done`, `error`.
+- Events émis : `text_delta`, `reasoning_delta` (thinking, jamais réinjecté), `tool_start`, `tool_display` (affichage publié pendant l'outil via `emitDisplay`), `tool_result` (`denied` si refus ; son `display` fait foi), `todo_update`, `permission_request` (émis juste avant l'appel au `PermissionHandler`), `sources`, `llm_retry` (nouvelle tentative réseau, rattachée au tour), `compaction`, `done`, `error`.
 - `result.messages` est l'historique modèle à conserver pour le tour suivant (raisonnement retiré, compaction appliquée).
 
 ## Contenu
@@ -77,6 +77,6 @@ const result = await session.send(
 
 ## Permissions
 
-- `permission: 'always'` : l'adaptateur (`executeTool`) demande l'accord avant `execute`. Libellés français via `defaultDescribePermission` (surchargeable par `describePermission`).
+- `permission: 'always'` : l'adaptateur (`executeTool`) demande l'accord avant `execute`. Libellé, par priorité : `describePermission` de l'outil (shared), puis `AgentOptions.describePermission` (peut renvoyer `undefined`), puis le repli générique « Utiliser l'outil … ». Les outils natifs fournissent le leur.
 - `permission: 'conditional'` : l'outil décide (`bash` hors liste blanche `ls`, `cat`, `head`, `grep`, `wc`… sans redirection ni chaînage).
 - Un refus renvoie au modèle « L'utilisateur a refusé l'action … », jamais une exception.

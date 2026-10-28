@@ -93,9 +93,13 @@ describe('boucle agentique', () => {
         'permission_request',
         'tool_result',
         'tool_start',
+        'tool_display',
         'tool_result',
         'done',
       ]);
+      // present_file publie sa carte pendant l'exécution, puis dans tool_result.
+      const shown = events.find((e) => e.type === 'tool_display');
+      expect(shown).toMatchObject({ display: { type: 'file', file: { action: 'presented' } } });
       const text = events.flatMap((e) => (e.type === 'text_delta' ? [e.delta] : [])).join('');
       expect(text).toBe('La synthèse est prête dans synthese.md.');
       const read = events.find((e) => e.type === 'tool_result' && e.toolName === 'read_file');

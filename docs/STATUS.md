@@ -51,6 +51,8 @@ _Format : date, agent, type proposé, raison, packages impactés._
 
   ⚠️ `AgentEvent` gagne 2 membres : tout `switch` exhaustif sur `event.type` (UI, persistance) doit les traiter.
 
+  ✅ **2026-10-28, adoptées par Core** (PR `feat/core-shared-adoption`) : types locaux retirés, libellés natifs portés par les outils, `tool_display` et `llm_retry` émis par la boucle (`llm_retry` rattaché au bon tour via `AsyncLocalStorage`, même avec plusieurs sessions sur un provider partagé).
+
 ## Points ouverts / risques
 
 - `Caddyfile` validé syntaxiquement à la main seulement (pas de daemon Docker en local) : à valider au premier déploiement (`docker compose up -d && ./healthcheck.sh`).

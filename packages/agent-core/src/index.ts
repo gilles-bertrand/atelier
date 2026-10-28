@@ -38,8 +38,8 @@ export type {
   ContextWindowOptions,
   ContextWindowSource,
 } from './llm/context-window.js';
-export { backoffDelay, createRetryingFetch } from './llm/retry-fetch.js';
-export type { FetchFunction, RetryOptions } from './llm/retry-fetch.js';
+export { backoffDelay, createRetryingFetch, withRetryListener } from './llm/retry-fetch.js';
+export type { FetchFunction, RetryInfo, RetryOptions } from './llm/retry-fetch.js';
 export { isNetworkError, toLlmError } from './llm/errors.js';
 
 // Prompt
@@ -63,19 +63,16 @@ export {
   writeFileTool,
 } from './tools/native.js';
 export { BASH_TIMEOUT_MS, BASH_WHITELIST, bashTool, isWhitelistedCommand } from './tools/bash.js';
-export { executeTool, isExecutedToolOutput, toAiSdkTools } from './tools/registry.js';
+export { executeTool, isToolOutput, toAiSdkTools } from './tools/registry.js';
 export type { ToolRuntime } from './tools/registry.js';
 export {
   askPermission,
-  defaultDescribePermission,
   deniedOutput,
+  describePermissionFor,
+  genericDescribePermission,
   withSessionMemory,
 } from './tools/permission.js';
-export type {
-  ExecutedToolOutput,
-  PermissionDescriber,
-  PermissionDescription,
-} from './tools/permission.js';
+export type { PermissionDescriber } from './tools/permission.js';
 export { globToRegExp } from './tools/fs-utils.js';
 export { DEFAULT_MAX_OUTPUT_BYTES, truncateOutput } from './tools/text.js';
 export { LocalSandbox } from './local-sandbox.js';

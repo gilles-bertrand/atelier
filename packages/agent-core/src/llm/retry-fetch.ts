@@ -6,9 +6,34 @@
  * On ne relance que l'établissement de la requête : une fois les en-têtes reçus,
  * le flux SSE appartient à l'AI SDK.
  */
-import { isNetworkError } from './errors.js';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { isNetworkError, networkErrorCode } from './errors.js';
 
 export type FetchFunction = typeof globalThis.fetch;
+
+/** Nouvelle tentative annoncée (journal, event `llm_retry`). */
+export interface RetryInfo {
+  /** Numéro de la nouvelle tentative (1 = premier réessai). */
+  attempt: number;
+  /** Nombre maximal de nouvelles tentatives. */
+  maxAttempts: number;
+  /** Délai avant la tentative, en ms. */
+  delayMs: number;
+  /** Cause technique courte (`HTTP 503`, `ECONNRESET`…). */
+  reason: string;
+}
+
+/**
+ * Écouteur de nouvelles tentatives propre à l'appel en cours. Le `fetch` est
+ * partagé par toutes les sessions : `AsyncLocalStorage` rattache chaque nouvelle
+ * tentative au tour qui l'a provoquée (voir `Agent.runTurn`).
+ */
+const retryListeners = new AsyncLocalStorage<(info: RetryInfo) => void>();
+
+/** Exécute `fn` en notifiant `listener` des nouvelles tentatives réseau qu'il provoque. */
+export function withRetryListener<T>(listener: (info: RetryInfo) => void, fn: () => T): T {
+  return retryListeners.run(listener, fn);
+}
 
 export interface RetryOptions {
   /** Nombre de nouvelles tentatives (défaut 3, donc 4 essais au total). */
@@ -22,7 +47,7 @@ export interface RetryOptions {
   /** Attente injectable (tests). */
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
   /** Notifié avant chaque nouvelle tentative (journalisation). */
-  onRetry?: (info: { attempt: number; delayMs: number; reason: string }) => void;
+  onRetry?: (info: RetryInfo) => void;
 }
 
 const RETRYABLE_STATUS = new Set([429, 502, 503, 504]);
@@ -70,6 +95,10 @@ export function createRetryingFetch(options: RetryOptions = {}): FetchFunction {
   const max = options.maxDelayMs ?? 8_000;
   const inner = options.fetch ?? globalThis.fetch;
   const sleep = options.sleep ?? defaultSleep;
+  const notify = (info: RetryInfo): void => {
+    options.onRetry?.(info);
+    retryListeners.getStore()?.(info);
+  };
 
   return async (input, init) => {
     const signal = init?.signal ?? undefined;
@@ -81,16 +110,23 @@ export function createRetryingFetch(options: RetryOptions = {}): FetchFunction {
           max,
           retryAfterMs(response) ?? backoffDelay(attempt + 1, base, max),
         );
-        options.onRetry?.({ attempt: attempt + 1, delayMs, reason: `HTTP ${response.status}` });
+        notify({
+          attempt: attempt + 1,
+          maxAttempts: retries,
+          delayMs,
+          reason: `HTTP ${response.status}`,
+        });
         await response.body?.cancel().catch(() => undefined);
         await sleep(delayMs, signal);
       } catch (error) {
         if (signal?.aborted || !isNetworkError(error) || attempt >= retries) throw error;
         const delayMs = backoffDelay(attempt + 1, base, max);
-        options.onRetry?.({
+        notify({
           attempt: attempt + 1,
+          maxAttempts: retries,
           delayMs,
-          reason: error instanceof Error ? error.message : String(error),
+          reason:
+            networkErrorCode(error) ?? (error instanceof Error ? error.message : String(error)),
         });
         await sleep(delayMs, signal);
       }
