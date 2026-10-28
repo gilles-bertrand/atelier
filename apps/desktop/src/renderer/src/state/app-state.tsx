@@ -12,6 +12,7 @@ import {
   type ReactNode,
 } from 'react';
 import type {
+  AppHealth,
   AppSettings,
   AppSettingsPatch,
   SandboxProgress,
@@ -25,6 +26,8 @@ import { atelier, call, toSerializedError } from '@renderer/lib/api';
 
 export interface AppState {
   settings: AppSettings;
+  /** Dégradations de démarrage (historique non conservé…). */
+  health: AppHealth;
   secrets: SecretsPresence;
   server: ServerStatus;
   sandbox: SandboxStatus;
@@ -46,13 +49,14 @@ type AppStateValue =
 const AppStateContext = createContext<AppStateValue | null>(null);
 
 async function loadInitialState(): Promise<AppState> {
-  const [settings, secrets, server, sandbox] = await Promise.all([
+  const [health, settings, secrets, server, sandbox] = await Promise.all([
+    call('app:health'),
     call('settings:get'),
     call('secrets:presence'),
     call('llm:status'),
     call('sandbox:status'),
   ]);
-  return { settings, secrets, server, sandbox, sandboxProgress: undefined };
+  return { health, settings, secrets, server, sandbox, sandboxProgress: undefined };
 }
 
 export function AppStateProvider({ children }: { children: ReactNode }) {

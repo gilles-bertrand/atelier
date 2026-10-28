@@ -9,7 +9,7 @@ import { importAttachments } from '@atelier/documents';
 import { parseMcpConfigText, type McpManager } from '@atelier/mcp-bridge';
 import { listModels, testConnection, type FetchFunction } from '@atelier/agent-core';
 import { loadSkills } from '@atelier/skills';
-import { AtelierError, type SecretId } from '@atelier/shared';
+import { AtelierError, type AppHealth, type SecretId } from '@atelier/shared';
 import type { IpcHandlers } from './ipc.js';
 import type { ServerMonitor } from './llm/server-monitor.js';
 import type { ChatManager } from './runtime/chat-manager.js';
@@ -38,6 +38,8 @@ export interface HandlerServices {
   /** Un secret a changé (le token LLM impose un nouveau runtime). */
   onSecretChanged?: (id: SecretId) => void;
   home?: string;
+  /** État de démarrage (historique persistant ou non). */
+  health?: () => AppHealth;
   /** `fetch` des appels de diagnostic (tests). */
   fetch?: FetchFunction;
 }
@@ -108,6 +110,9 @@ export function createHandlers(s: HandlerServices): IpcHandlers {
   const workspaces = (): string[] => [...new Set(s.chats.list(1000).map((c) => c.workspace))];
 
   return {
+    // --- Application
+    'app:health': () => s.health?.() ?? { historyPersistent: true },
+
     // --- Réglages et secrets
     'settings:get': () => s.settings.get(),
     'settings:update': (patch) => s.settings.update(patch),

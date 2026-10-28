@@ -3,6 +3,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { app, BrowserWindow, dialog, safeStorage, session, shell } from 'electron';
 import { checkServerHealth } from '@atelier/agent-core';
+import type { AppHealth } from '@atelier/shared';
 import { loadMcpConfig, McpManager } from '@atelier/mcp-bridge';
 import { LimaSandbox } from '@atelier/sandbox';
 import { installExampleSkills } from '@atelier/skills';
@@ -205,11 +206,16 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
 
   // Historique persistant ; si la base est inutilisable, l'app reste utilisable (en mémoire).
   let store: SessionStore;
+  let health: AppHealth = { historyPersistent: true };
   try {
     store = await SqliteSessionStore.open(join(paths.userData, 'atelier.db'));
   } catch (error) {
     log('historique SQLite indisponible, conversations gardées en mémoire', error);
     store = new InMemorySessionStore();
+    health = {
+      historyPersistent: false,
+      historyError: error instanceof Error ? error.message : String(error),
+    };
   }
 
   const permissions = new PermissionBroker();
@@ -250,6 +256,7 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
       sandbox,
       mcp,
       home,
+      health: () => health,
       onSecretChanged: (id) => {
         if (id !== 'llm_token') return;
         agents.invalidate();

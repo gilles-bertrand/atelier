@@ -101,6 +101,21 @@ describe('llm:test-connection : le token enregistré ne quitte pas son serveur',
   });
 });
 
+describe('app:health', () => {
+  it('relaie l’état de démarrage du main', async () => {
+    const s = {
+      health: () => ({ historyPersistent: false, historyError: 'disk I/O error' }),
+    } as unknown as HandlerServices;
+    expect(await createHandlers(s)['app:health']?.(undefined)).toEqual({
+      historyPersistent: false,
+      historyError: 'disk I/O error',
+    });
+    expect(await createHandlers({} as HandlerServices)['app:health']?.(undefined)).toEqual({
+      historyPersistent: true,
+    });
+  });
+});
+
 describe('attachment:import', () => {
   it('copie les fichiers dans .atelier/uploads avec le type détecté', async () => {
     const workspace = await mkdtemp(join(tmpdir(), 'atelier-ws-'));
