@@ -1,19 +1,20 @@
 # STATUS : Atelier
 
-**Squelette prêt, les agents peuvent démarrer.**
+**Tous les lots sont mergés ; reste la signature et la répétition de la démo (voir `docs/DEMO.md`).**
 
 _Dernière mise à jour : 2026-10-28, Lead._
 
 ## État par jalon
 
-| Jalon                                                       | État                                                                                                                       | Responsable(s)                |
-| ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
-| M0 : squelette monorepo + `packages/shared` + `server/`     | ✅ fait                                                                                                                    | Lead                          |
-| M1 : boucle AI SDK en CLI, outils fichiers, bash local, web | 🟡 Core livré (PR `feat/core-agent-loop`), web livré (PR `feat/web-search-fetch`)                                          | Core, MCP & Web               |
-| M2 : sandbox Lima + permissions                             | 🟡 sandbox livrée (PR `feat/sandbox-lima`), permissions : Core                                                             | Sandbox, Core                 |
-| M3 : app Electron fonctionnelle                             | 🟡 process main branché (PR `feat/ui-shell`), écrans à venir                                                               | UI                            |
-| M4 : skills + MCP + SearXNG + documents                     | 🟡 skills + SearXNG dans la VM livrés ; MCP livré (PR `feat/mcp-bridge`) ; documents livré (PR `feat/documents-read-file`) | Sandbox, MCP & Web, Documents |
-| M5 : historique, compaction, réglages, packaging signé      | ⏳                                                                                                                         | UI, Core, Lead                |
+| Jalon                                                       | État                                                                                                                                                                                                           | Responsable(s)                |
+| ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| M0 : squelette monorepo + `packages/shared` + `server/`     | ✅ fait                                                                                                                                                                                                        | Lead                          |
+| M1 : boucle AI SDK en CLI, outils fichiers, bash local, web | ✅ fait                                                                                                                                                                                                        | Core, MCP & Web               |
+| M2 : sandbox Lima + permissions                             | ✅ fait                                                                                                                                                                                                        | Sandbox, Core                 |
+| M3 : app Electron fonctionnelle                             | ✅ fait (chat, panneau latéral, onboarding, ouverture sécurisée des fichiers)                                                                                                                                  | UI                            |
+| M4 : skills + MCP + SearXNG + documents                     | ✅ fait (pièces jointes et vision comprises)                                                                                                                                                                   | Sandbox, MCP & Web, Documents |
+| M5 : historique, compaction, réglages, packaging signé      | 🟡 historique (node:sqlite), compaction et réglages faits ; build arm64 non signé vérifié (`.dmg`, icône) ; **signature et notarisation en attente du certificat Developer ID et de la clé App Store Connect** | UI, Core, Lead                |
+| Démo finale (critères d'acceptation)                        | 🟡 scénario et fichiers prêts (`docs/DEMO.md`, `demo/fixtures/`) ; répétition à faire avec `qwen3.5:35b` en local (Ollama sur le Mac de Gilles)                                                                | Lead                          |
 
 ## Ce que contient le squelette
 

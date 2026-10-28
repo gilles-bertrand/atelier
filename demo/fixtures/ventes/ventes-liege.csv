@@ -1,0 +1,609 @@
+date,magasin,produit,quantite,prix_unitaire,montant
+2026-01-01,Liège,Café en grains 1 kg,3,18.50,55.50
+2026-01-01,Liège,Thé vert 250 g,6,9.90,59.40
+2026-01-01,Liège,Chocolat noir 100 g,1,3.20,3.20
+2026-01-01,Liège,Miel 500 g,5,11.40,57.00
+2026-01-02,Liège,Café en grains 1 kg,5,18.50,92.50
+2026-01-02,Liège,Thé vert 250 g,5,9.90,49.50
+2026-01-02,Liège,Chocolat noir 100 g,4,3.20,12.80
+2026-01-02,Liège,Miel 500 g,4,11.40,45.60
+2026-01-03,Liège,Café en grains 1 kg,5,18.50,92.50
+2026-01-03,Liège,Thé vert 250 g,4,9.90,39.60
+2026-01-03,Liège,Chocolat noir 100 g,2,3.20,6.40
+2026-01-03,Liège,Miel 500 g,3,11.40,34.20
+2026-01-05,Liège,Café en grains 1 kg,5,18.50,92.50
+2026-01-05,Liège,Thé vert 250 g,3,9.90,29.70
+2026-01-05,Liège,Chocolat noir 100 g,4,3.20,12.80
+2026-01-05,Liège,Miel 500 g,3,11.40,34.20
+2026-01-06,Liège,Café en grains 1 kg,5,18.50,92.50
+2026-01-06,Liège,Thé vert 250 g,7,9.90,69.30
+2026-01-06,Liège,Chocolat noir 100 g,3,3.20,9.60
+2026-01-06,Liège,Miel 500 g,5,11.40,57.00
+2026-01-07,Liège,Café en grains 1 kg,5,18.50,92.50
+2026-01-07,Liège,Thé vert 250 g,3,9.90,29.70
+2026-01-07,Liège,Chocolat noir 100 g,5,3.20,16.00
+2026-01-07,Liège,Miel 500 g,9,11.40,102.60
+2026-01-08,Liège,Café en grains 1 kg,4,18.50,74.00
+2026-01-08,Liège,Thé vert 250 g,5,9.90,49.50
+2026-01-08,Liège,Chocolat noir 100 g,6,3.20,19.20
+2026-01-08,Liège,Miel 500 g,4,11.40,45.60
+2026-01-09,Liège,Café en grains 1 kg,1,18.50,18.50
+2026-01-09,Liège,Thé vert 250 g,6,9.90,59.40
+2026-01-09,Liège,Chocolat noir 100 g,3,3.20,9.60
+2026-01-10,Liège,Café en grains 1 kg,3,18.50,55.50
+2026-01-10,Liège,Thé vert 250 g,3,9.90,29.70
+2026-01-10,Liège,Chocolat noir 100 g,6,3.20,19.20
+2026-01-10,Liège,Miel 500 g,3,11.40,34.20
+2026-01-12,Liège,Café en grains 1 kg,7,18.50,129.50
+2026-01-12,Liège,Thé vert 250 g,6,9.90,59.40
+2026-01-12,Liège,Chocolat noir 100 g,4,3.20,12.80
+2026-01-12,Liège,Miel 500 g,3,11.40,34.20
+2026-01-13,Liège,Café en grains 1 kg,7,18.50,129.50
+2026-01-13,Liège,Thé vert 250 g,6,9.90,59.40
+2026-01-13,Liège,Chocolat noir 100 g,3,3.20,9.60
+2026-01-13,Liège,Miel 500 g,3,11.40,34.20
+2026-01-14,Liège,Café en grains 1 kg,5,18.50,92.50
+2026-01-14,Liège,Thé vert 250 g,6,9.90,59.40
+2026-01-14,Liège,Chocolat noir 100 g,6,3.20,19.20
+2026-01-14,Liège,Miel 500 g,8,11.40,91.20
+2026-01-15,Liège,Café en grains 1 kg,5,18.50,92.50
+2026-01-15,Liège,Thé vert 250 g,4,9.90,39.60
+2026-01-15,Liège,Chocolat noir 100 g,7,3.20,22.40
+2026-01-15,Liège,Miel 500 g,4,11.40,45.60
+2026-01-16,Liège,Café en grains 1 kg,7,18.50,129.50
+2026-01-16,Liège,Thé vert 250 g,3,9.90,29.70
+2026-01-16,Liège,Chocolat noir 100 g,4,3.20,12.80
+2026-01-16,Liège,Miel 500 g,6,11.40,68.40
+2026-01-17,Liège,Café en grains 1 kg,6,18.50,111.00
+2026-01-17,Liège,Thé vert 250 g,4,9.90,39.60
+2026-01-17,Liège,Chocolat noir 100 g,7,3.20,22.40
+2026-01-17,Liège,Miel 500 g,2,11.40,22.80
+2026-01-19,Liège,Café en grains 1 kg,3,18.50,55.50
+2026-01-19,Liège,Thé vert 250 g,4,9.90,39.60
+2026-01-19,Liège,Chocolat noir 100 g,5,3.20,16.00
+2026-01-19,Liège,Miel 500 g,2,11.40,22.80
+2026-01-20,Liège,Café en grains 1 kg,6,18.50,111.00
+2026-01-20,Liège,Thé vert 250 g,4,9.90,39.60
+2026-01-20,Liège,Chocolat noir 100 g,2,3.20,6.40
+2026-01-20,Liège,Miel 500 g,3,11.40,34.20
+2026-01-21,Liège,Café en grains 1 kg,7,18.50,129.50
+2026-01-21,Liège,Thé vert 250 g,3,9.90,29.70
+2026-01-21,Liège,Chocolat noir 100 g,4,3.20,12.80
+2026-01-21,Liège,Miel 500 g,5,11.40,57.00
+2026-01-22,Liège,Café en grains 1 kg,3,18.50,55.50
+2026-01-22,Liège,Thé vert 250 g,2,9.90,19.80
+2026-01-22,Liège,Chocolat noir 100 g,2,3.20,6.40
+2026-01-22,Liège,Miel 500 g,7,11.40,79.80
+2026-01-23,Liège,Café en grains 1 kg,2,18.50,37.00
+2026-01-23,Liège,Thé vert 250 g,4,9.90,39.60
+2026-01-23,Liège,Chocolat noir 100 g,5,3.20,16.00
+2026-01-23,Liège,Miel 500 g,5,11.40,57.00
+2026-01-24,Liège,Café en grains 1 kg,6,18.50,111.00
+2026-01-24,Liège,Thé vert 250 g,5,9.90,49.50
+2026-01-24,Liège,Chocolat noir 100 g,8,3.20,25.60
+2026-01-24,Liège,Miel 500 g,6,11.40,68.40
+2026-01-26,Liège,Café en grains 1 kg,3,18.50,55.50
+2026-01-26,Liège,Thé vert 250 g,4,9.90,39.60
+2026-01-26,Liège,Chocolat noir 100 g,3,3.20,9.60
+2026-01-26,Liège,Miel 500 g,2,11.40,22.80
+2026-01-27,Liège,Café en grains 1 kg,2,18.50,37.00
+2026-01-27,Liège,Thé vert 250 g,5,9.90,49.50
+2026-01-27,Liège,Chocolat noir 100 g,8,3.20,25.60
+2026-01-27,Liège,Miel 500 g,5,11.40,57.00
+2026-01-28,Liège,Café en grains 1 kg,5,18.50,92.50
+2026-01-28,Liège,Thé vert 250 g,5,9.90,49.50
+2026-01-28,Liège,Chocolat noir 100 g,6,3.20,19.20
+2026-01-28,Liège,Miel 500 g,5,11.40,57.00
+2026-01-29,Liège,Café en grains 1 kg,4,18.50,74.00
+2026-01-29,Liège,Thé vert 250 g,9,9.90,89.10
+2026-01-29,Liège,Chocolat noir 100 g,4,3.20,12.80
+2026-01-29,Liège,Miel 500 g,4,11.40,45.60
+2026-01-30,Liège,Café en grains 1 kg,3,18.50,55.50
+2026-01-30,Liège,Thé vert 250 g,4,9.90,39.60
+2026-01-30,Liège,Chocolat noir 100 g,8,3.20,25.60
+2026-01-30,Liège,Miel 500 g,3,11.40,34.20
+2026-01-31,Liège,Café en grains 1 kg,4,18.50,74.00
+2026-01-31,Liège,Thé vert 250 g,3,9.90,29.70
+2026-01-31,Liège,Chocolat noir 100 g,3,3.20,9.60
+2026-01-31,Liège,Miel 500 g,4,11.40,45.60
+2026-02-02,Liège,Café en grains 1 kg,6,18.50,111.00
+2026-02-02,Liège,Thé vert 250 g,3,9.90,29.70
+2026-02-02,Liège,Chocolat noir 100 g,2,3.20,6.40
+2026-02-02,Liège,Miel 500 g,5,11.40,57.00
+2026-02-03,Liège,Café en grains 1 kg,5,18.50,92.50
+2026-02-03,Liège,Thé vert 250 g,3,9.90,29.70
+2026-02-03,Liège,Chocolat noir 100 g,2,3.20,6.40
+2026-02-03,Liège,Miel 500 g,4,11.40,45.60
+2026-02-04,Liège,Café en grains 1 kg,1,18.50,18.50
+2026-02-04,Liège,Thé vert 250 g,5,9.90,49.50
+2026-02-04,Liège,Chocolat noir 100 g,2,3.20,6.40
+2026-02-04,Liège,Miel 500 g,3,11.40,34.20
+2026-02-05,Liège,Café en grains 1 kg,4,18.50,74.00
+2026-02-05,Liège,Thé vert 250 g,4,9.90,39.60
+2026-02-05,Liège,Chocolat noir 100 g,6,3.20,19.20
+2026-02-05,Liège,Miel 500 g,4,11.40,45.60
+2026-02-06,Liège,Café en grains 1 kg,6,18.50,111.00
+2026-02-06,Liège,Thé vert 250 g,5,9.90,49.50
+2026-02-06,Liège,Chocolat noir 100 g,5,3.20,16.00
+2026-02-06,Liège,Miel 500 g,5,11.40,57.00
+2026-02-07,Liège,Café en grains 1 kg,3,18.50,55.50
+2026-02-07,Liège,Thé vert 250 g,4,9.90,39.60
+2026-02-07,Liège,Chocolat noir 100 g,2,3.20,6.40
+2026-02-07,Liège,Miel 500 g,5,11.40,57.00
+2026-02-09,Liège,Café en grains 1 kg,7,18.50,129.50
+2026-02-09,Liège,Thé vert 250 g,5,9.90,49.50
+2026-02-09,Liège,Miel 500 g,4,11.40,45.60
+2026-02-10,Liège,Café en grains 1 kg,5,18.50,92.50
+2026-02-10,Liège,Thé vert 250 g,5,9.90,49.50
+2026-02-10,Liège,Chocolat noir 100 g,4,3.20,12.80
+2026-02-10,Liège,Miel 500 g,5,11.40,57.00
+2026-02-11,Liège,Café en grains 1 kg,5,18.50,92.50
+2026-02-11,Liège,Thé vert 250 g,6,9.90,59.40
+2026-02-11,Liège,Chocolat noir 100 g,5,3.20,16.00
+2026-02-11,Liège,Miel 500 g,5,11.40,57.00
+2026-02-12,Liège,Café en grains 1 kg,6,18.50,111.00
+2026-02-12,Liège,Thé vert 250 g,4,9.90,39.60
+2026-02-12,Liège,Chocolat noir 100 g,5,3.20,16.00
+2026-02-12,Liège,Miel 500 g,4,11.40,45.60
+2026-02-13,Liège,Café en grains 1 kg,4,18.50,74.00
+2026-02-13,Liège,Thé vert 250 g,7,9.90,69.30
+2026-02-13,Liège,Miel 500 g,4,11.40,45.60
+2026-02-14,Liège,Café en grains 1 kg,5,18.50,92.50
+2026-02-14,Liège,Thé vert 250 g,5,9.90,49.50
+2026-02-14,Liège,Chocolat noir 100 g,5,3.20,16.00
+2026-02-14,Liège,Miel 500 g,4,11.40,45.60
+2026-02-16,Liège,Café en grains 1 kg,6,18.50,111.00
+2026-02-16,Liège,Thé vert 250 g,2,9.90,19.80
+2026-02-16,Liège,Chocolat noir 100 g,1,3.20,3.20
+2026-02-16,Liège,Miel 500 g,3,11.40,34.20
+2026-02-17,Liège,Café en grains 1 kg,4,18.50,74.00
+2026-02-17,Liège,Thé vert 250 g,4,9.90,39.60
+2026-02-17,Liège,Chocolat noir 100 g,9,3.20,28.80
+2026-02-17,Liège,Miel 500 g,3,11.40,34.20
+2026-02-18,Liège,Café en grains 1 kg,3,18.50,55.50
+2026-02-18,Liège,Thé vert 250 g,1,9.90,9.90
+2026-02-18,Liège,Miel 500 g,4,11.40,45.60
+2026-02-19,Liège,Café en grains 1 kg,8,18.50,148.00
+2026-02-19,Liège,Thé vert 250 g,3,9.90,29.70
+2026-02-19,Liège,Chocolat noir 100 g,7,3.20,22.40
+2026-02-19,Liège,Miel 500 g,4,11.40,45.60
+2026-02-20,Liège,Café en grains 1 kg,5,18.50,92.50
+2026-02-20,Liège,Thé vert 250 g,4,9.90,39.60
+2026-02-20,Liège,Chocolat noir 100 g,6,3.20,19.20
+2026-02-20,Liège,Miel 500 g,6,11.40,68.40
+2026-02-21,Liège,Café en grains 1 kg,4,18.50,74.00
+2026-02-21,Liège,Thé vert 250 g,4,9.90,39.60
+2026-02-21,Liège,Chocolat noir 100 g,4,3.20,12.80
+2026-02-21,Liège,Miel 500 g,4,11.40,45.60
+2026-02-23,Liège,Café en grains 1 kg,5,18.50,92.50
+2026-02-23,Liège,Thé vert 250 g,4,9.90,39.60
+2026-02-23,Liège,Chocolat noir 100 g,4,3.20,12.80
+2026-02-23,Liège,Miel 500 g,2,11.40,22.80
+2026-02-24,Liège,Café en grains 1 kg,2,18.50,37.00
+2026-02-24,Liège,Thé vert 250 g,4,9.90,39.60
+2026-02-24,Liège,Chocolat noir 100 g,2,3.20,6.40
+2026-02-24,Liège,Miel 500 g,4,11.40,45.60
+2026-02-25,Liège,Café en grains 1 kg,6,18.50,111.00
+2026-02-25,Liège,Thé vert 250 g,5,9.90,49.50
+2026-02-25,Liège,Chocolat noir 100 g,2,3.20,6.40
+2026-02-25,Liège,Miel 500 g,4,11.40,45.60
+2026-02-26,Liège,Café en grains 1 kg,4,18.50,74.00
+2026-02-26,Liège,Thé vert 250 g,5,9.90,49.50
+2026-02-26,Liège,Chocolat noir 100 g,4,3.20,12.80
+2026-02-26,Liège,Miel 500 g,5,11.40,57.00
+2026-02-27,Liège,Café en grains 1 kg,4,18.50,74.00
+2026-02-27,Liège,Thé vert 250 g,3,9.90,29.70
+2026-02-27,Liège,Chocolat noir 100 g,4,3.20,12.80
+2026-02-27,Liège,Miel 500 g,6,11.40,68.40
+2026-02-28,Liège,Café en grains 1 kg,3,18.50,55.50
+2026-02-28,Liège,Thé vert 250 g,4,9.90,39.60
+2026-02-28,Liège,Chocolat noir 100 g,4,3.20,12.80
+2026-02-28,Liège,Miel 500 g,7,11.40,79.80
+2026-03-02,Liège,Café en grains 1 kg,5,18.50,92.50
+2026-03-02,Liège,Thé vert 250 g,5,9.90,49.50
+2026-03-02,Liège,Chocolat noir 100 g,3,3.20,9.60
+2026-03-02,Liège,Miel 500 g,7,11.40,79.80
+2026-03-03,Liège,Café en grains 1 kg,7,18.50,129.50
+2026-03-03,Liège,Thé vert 250 g,7,9.90,69.30
+2026-03-03,Liège,Chocolat noir 100 g,6,3.20,19.20
+2026-03-03,Liège,Miel 500 g,2,11.40,22.80
+2026-03-04,Liège,Café en grains 1 kg,5,18.50,92.50
+2026-03-04,Liège,Thé vert 250 g,2,9.90,19.80
+2026-03-04,Liège,Chocolat noir 100 g,3,3.20,9.60
+2026-03-04,Liège,Miel 500 g,2,11.40,22.80
+2026-03-05,Liège,Café en grains 1 kg,3,18.50,55.50
+2026-03-05,Liège,Thé vert 250 g,6,9.90,59.40
+2026-03-05,Liège,Chocolat noir 100 g,4,3.20,12.80
+2026-03-05,Liège,Miel 500 g,4,11.40,45.60
+2026-03-06,Liège,Café en grains 1 kg,1,18.50,18.50
+2026-03-06,Liège,Thé vert 250 g,7,9.90,69.30
+2026-03-06,Liège,Chocolat noir 100 g,2,3.20,6.40
+2026-03-06,Liège,Miel 500 g,4,11.40,45.60
+2026-03-07,Liège,Café en grains 1 kg,2,18.50,37.00
+2026-03-07,Liège,Thé vert 250 g,3,9.90,29.70
+2026-03-07,Liège,Chocolat noir 100 g,2,3.20,6.40
+2026-03-07,Liège,Miel 500 g,6,11.40,68.40
+2026-03-09,Liège,Café en grains 1 kg,2,18.50,37.00
+2026-03-09,Liège,Thé vert 250 g,3,9.90,29.70
+2026-03-09,Liège,Chocolat noir 100 g,4,3.20,12.80
+2026-03-09,Liège,Miel 500 g,6,11.40,68.40
+2026-03-10,Liège,Café en grains 1 kg,4,18.50,74.00
+2026-03-10,Liège,Thé vert 250 g,6,9.90,59.40
+2026-03-10,Liège,Chocolat noir 100 g,3,3.20,9.60
+2026-03-10,Liège,Miel 500 g,2,11.40,22.80
+2026-03-11,Liège,Café en grains 1 kg,3,18.50,55.50
+2026-03-11,Liège,Thé vert 250 g,4,9.90,39.60
+2026-03-11,Liège,Miel 500 g,3,11.40,34.20
+2026-03-12,Liège,Café en grains 1 kg,3,18.50,55.50
+2026-03-12,Liège,Thé vert 250 g,7,9.90,69.30
+2026-03-12,Liège,Chocolat noir 100 g,4,3.20,12.80
+2026-03-12,Liège,Miel 500 g,2,11.40,22.80
+2026-03-13,Liège,Café en grains 1 kg,4,18.50,74.00
+2026-03-13,Liège,Thé vert 250 g,6,9.90,59.40
+2026-03-13,Liège,Chocolat noir 100 g,6,3.20,19.20
+2026-03-13,Liège,Miel 500 g,3,11.40,34.20
+2026-03-14,Liège,Café en grains 1 kg,2,18.50,37.00
+2026-03-14,Liège,Thé vert 250 g,4,9.90,39.60
+2026-03-14,Liège,Chocolat noir 100 g,5,3.20,16.00
+2026-03-14,Liège,Miel 500 g,5,11.40,57.00
+2026-03-16,Liège,Café en grains 1 kg,3,18.50,55.50
+2026-03-16,Liège,Thé vert 250 g,3,9.90,29.70
+2026-03-16,Liège,Chocolat noir 100 g,3,3.20,9.60
+2026-03-16,Liège,Miel 500 g,5,11.40,57.00
+2026-03-17,Liège,Café en grains 1 kg,3,18.50,55.50
+2026-03-17,Liège,Thé vert 250 g,5,9.90,49.50
+2026-03-17,Liège,Chocolat noir 100 g,6,3.20,19.20
+2026-03-17,Liège,Miel 500 g,6,11.40,68.40
+2026-03-18,Liège,Café en grains 1 kg,7,18.50,129.50
+2026-03-18,Liège,Thé vert 250 g,4,9.90,39.60
+2026-03-18,Liège,Chocolat noir 100 g,7,3.20,22.40
+2026-03-18,Liège,Miel 500 g,6,11.40,68.40
+2026-03-19,Liège,Café en grains 1 kg,4,18.50,74.00
+2026-03-19,Liège,Thé vert 250 g,4,9.90,39.60
+2026-03-19,Liège,Chocolat noir 100 g,3,3.20,9.60
+2026-03-19,Liège,Miel 500 g,5,11.40,57.00
+2026-03-20,Liège,Café en grains 1 kg,5,18.50,92.50
+2026-03-20,Liège,Thé vert 250 g,1,9.90,9.90
+2026-03-20,Liège,Chocolat noir 100 g,5,3.20,16.00
+2026-03-20,Liège,Miel 500 g,3,11.40,34.20
+2026-03-21,Liège,Café en grains 1 kg,4,18.50,74.00
+2026-03-21,Liège,Thé vert 250 g,2,9.90,19.80
+2026-03-21,Liège,Chocolat noir 100 g,4,3.20,12.80
+2026-03-21,Liège,Miel 500 g,6,11.40,68.40
+2026-03-23,Liège,Café en grains 1 kg,5,18.50,92.50
+2026-03-23,Liège,Thé vert 250 g,6,9.90,59.40
+2026-03-23,Liège,Chocolat noir 100 g,5,3.20,16.00
+2026-03-23,Liège,Miel 500 g,4,11.40,45.60
+2026-03-24,Liège,Café en grains 1 kg,3,18.50,55.50
+2026-03-24,Liège,Thé vert 250 g,2,9.90,19.80
+2026-03-24,Liège,Chocolat noir 100 g,4,3.20,12.80
+2026-03-24,Liège,Miel 500 g,2,11.40,22.80
+2026-03-25,Liège,Café en grains 1 kg,6,18.50,111.00
+2026-03-25,Liège,Thé vert 250 g,2,9.90,19.80
+2026-03-25,Liège,Chocolat noir 100 g,5,3.20,16.00
+2026-03-25,Liège,Miel 500 g,5,11.40,57.00
+2026-03-26,Liège,Café en grains 1 kg,2,18.50,37.00
+2026-03-26,Liège,Thé vert 250 g,6,9.90,59.40
+2026-03-26,Liège,Chocolat noir 100 g,3,3.20,9.60
+2026-03-26,Liège,Miel 500 g,3,11.40,34.20
+2026-03-27,Liège,Café en grains 1 kg,3,18.50,55.50
+2026-03-27,Liège,Thé vert 250 g,3,9.90,29.70
+2026-03-27,Liège,Miel 500 g,3,11.40,34.20
+2026-03-28,Liège,Café en grains 1 kg,4,18.50,74.00
+2026-03-28,Liège,Thé vert 250 g,3,9.90,29.70
+2026-03-28,Liège,Chocolat noir 100 g,5,3.20,16.00
+2026-03-28,Liège,Miel 500 g,4,11.40,45.60
+2026-03-30,Liège,Café en grains 1 kg,4,18.50,74.00
+2026-03-30,Liège,Thé vert 250 g,4,9.90,39.60
+2026-03-30,Liège,Chocolat noir 100 g,3,3.20,9.60
+2026-03-30,Liège,Miel 500 g,3,11.40,34.20
+2026-03-31,Liège,Café en grains 1 kg,5,18.50,92.50
+2026-03-31,Liège,Thé vert 250 g,6,9.90,59.40
+2026-03-31,Liège,Chocolat noir 100 g,3,3.20,9.60
+2026-03-31,Liège,Miel 500 g,3,11.40,34.20
+2026-04-01,Liège,Café en grains 1 kg,3,18.50,55.50
+2026-04-01,Liège,Thé vert 250 g,6,9.90,59.40
+2026-04-01,Liège,Chocolat noir 100 g,6,3.20,19.20
+2026-04-01,Liège,Miel 500 g,5,11.40,57.00
+2026-04-02,Liège,Café en grains 1 kg,6,18.50,111.00
+2026-04-02,Liège,Thé vert 250 g,5,9.90,49.50
+2026-04-02,Liège,Chocolat noir 100 g,3,3.20,9.60
+2026-04-02,Liège,Miel 500 g,5,11.40,57.00
+2026-04-03,Liège,Thé vert 250 g,7,9.90,69.30
+2026-04-03,Liège,Chocolat noir 100 g,3,3.20,9.60
+2026-04-03,Liège,Miel 500 g,3,11.40,34.20
+2026-04-04,Liège,Café en grains 1 kg,6,18.50,111.00
+2026-04-04,Liège,Chocolat noir 100 g,4,3.20,12.80
+2026-04-04,Liège,Miel 500 g,7,11.40,79.80
+2026-04-06,Liège,Café en grains 1 kg,6,18.50,111.00
+2026-04-06,Liège,Thé vert 250 g,4,9.90,39.60
+2026-04-06,Liège,Chocolat noir 100 g,5,3.20,16.00
+2026-04-06,Liège,Miel 500 g,3,11.40,34.20
+2026-04-07,Liège,Café en grains 1 kg,3,18.50,55.50
+2026-04-07,Liège,Thé vert 250 g,5,9.90,49.50
+2026-04-07,Liège,Chocolat noir 100 g,3,3.20,9.60
+2026-04-07,Liège,Miel 500 g,5,11.40,57.00
+2026-04-08,Liège,Café en grains 1 kg,1,18.50,18.50
+2026-04-08,Liège,Thé vert 250 g,2,9.90,19.80
+2026-04-08,Liège,Chocolat noir 100 g,6,3.20,19.20
+2026-04-08,Liège,Miel 500 g,2,11.40,22.80
+2026-04-09,Liège,Café en grains 1 kg,3,18.50,55.50
+2026-04-09,Liège,Thé vert 250 g,4,9.90,39.60
+2026-04-09,Liège,Chocolat noir 100 g,6,3.20,19.20
+2026-04-09,Liège,Miel 500 g,2,11.40,22.80
+2026-04-10,Liège,Café en grains 1 kg,5,18.50,92.50
+2026-04-10,Liège,Thé vert 250 g,4,9.90,39.60
+2026-04-10,Liège,Chocolat noir 100 g,5,3.20,16.00
+2026-04-10,Liège,Miel 500 g,6,11.40,68.40
+2026-04-11,Liège,Café en grains 1 kg,1,18.50,18.50
+2026-04-11,Liège,Thé vert 250 g,5,9.90,49.50
+2026-04-11,Liège,Chocolat noir 100 g,3,3.20,9.60
+2026-04-11,Liège,Miel 500 g,5,11.40,57.00
+2026-04-13,Liège,Café en grains 1 kg,5,18.50,92.50
+2026-04-13,Liège,Thé vert 250 g,4,9.90,39.60
+2026-04-13,Liège,Chocolat noir 100 g,5,3.20,16.00
+2026-04-13,Liège,Miel 500 g,5,11.40,57.00
+2026-04-14,Liège,Café en grains 1 kg,6,18.50,111.00
+2026-04-14,Liège,Thé vert 250 g,6,9.90,59.40
+2026-04-14,Liège,Chocolat noir 100 g,1,3.20,3.20
+2026-04-15,Liège,Café en grains 1 kg,3,18.50,55.50
+2026-04-15,Liège,Thé vert 250 g,3,9.90,29.70
+2026-04-15,Liège,Chocolat noir 100 g,3,3.20,9.60
+2026-04-15,Liège,Miel 500 g,8,11.40,91.20
+2026-04-16,Liège,Café en grains 1 kg,5,18.50,92.50
+2026-04-16,Liège,Thé vert 250 g,5,9.90,49.50
+2026-04-16,Liège,Chocolat noir 100 g,4,3.20,12.80
+2026-04-16,Liège,Miel 500 g,5,11.40,57.00
+2026-04-17,Liège,Café en grains 1 kg,4,18.50,74.00
+2026-04-17,Liège,Thé vert 250 g,4,9.90,39.60
+2026-04-17,Liège,Chocolat noir 100 g,7,3.20,22.40
+2026-04-17,Liège,Miel 500 g,6,11.40,68.40
+2026-04-18,Liège,Café en grains 1 kg,6,18.50,111.00
+2026-04-18,Liège,Thé vert 250 g,3,9.90,29.70
+2026-04-18,Liège,Chocolat noir 100 g,2,3.20,6.40
+2026-04-18,Liège,Miel 500 g,4,11.40,45.60
+2026-04-20,Liège,Café en grains 1 kg,5,18.50,92.50
+2026-04-20,Liège,Thé vert 250 g,5,9.90,49.50
+2026-04-20,Liège,Chocolat noir 100 g,5,3.20,16.00
+2026-04-20,Liège,Miel 500 g,6,11.40,68.40
+2026-04-21,Liège,Café en grains 1 kg,5,18.50,92.50
+2026-04-21,Liège,Thé vert 250 g,4,9.90,39.60
+2026-04-21,Liège,Chocolat noir 100 g,7,3.20,22.40
+2026-04-21,Liège,Miel 500 g,4,11.40,45.60
+2026-04-22,Liège,Thé vert 250 g,6,9.90,59.40
+2026-04-22,Liège,Chocolat noir 100 g,6,3.20,19.20
+2026-04-22,Liège,Miel 500 g,6,11.40,68.40
+2026-04-23,Liège,Thé vert 250 g,7,9.90,69.30
+2026-04-23,Liège,Chocolat noir 100 g,4,3.20,12.80
+2026-04-23,Liège,Miel 500 g,4,11.40,45.60
+2026-04-24,Liège,Café en grains 1 kg,1,18.50,18.50
+2026-04-24,Liège,Thé vert 250 g,5,9.90,49.50
+2026-04-24,Liège,Chocolat noir 100 g,6,3.20,19.20
+2026-04-24,Liège,Miel 500 g,4,11.40,45.60
+2026-04-25,Liège,Café en grains 1 kg,4,18.50,74.00
+2026-04-25,Liège,Thé vert 250 g,4,9.90,39.60
+2026-04-25,Liège,Chocolat noir 100 g,4,3.20,12.80
+2026-04-25,Liège,Miel 500 g,2,11.40,22.80
+2026-04-27,Liège,Café en grains 1 kg,3,18.50,55.50
+2026-04-27,Liège,Thé vert 250 g,5,9.90,49.50
+2026-04-27,Liège,Chocolat noir 100 g,6,3.20,19.20
+2026-04-27,Liège,Miel 500 g,7,11.40,79.80
+2026-04-28,Liège,Café en grains 1 kg,2,18.50,37.00
+2026-04-28,Liège,Thé vert 250 g,2,9.90,19.80
+2026-04-28,Liège,Chocolat noir 100 g,4,3.20,12.80
+2026-04-28,Liège,Miel 500 g,7,11.40,79.80
+2026-04-29,Liège,Café en grains 1 kg,5,18.50,92.50
+2026-04-29,Liège,Thé vert 250 g,2,9.90,19.80
+2026-04-29,Liège,Chocolat noir 100 g,2,3.20,6.40
+2026-04-29,Liège,Miel 500 g,6,11.40,68.40
+2026-04-30,Liège,Café en grains 1 kg,2,18.50,37.00
+2026-04-30,Liège,Thé vert 250 g,6,9.90,59.40
+2026-04-30,Liège,Chocolat noir 100 g,2,3.20,6.40
+2026-04-30,Liège,Miel 500 g,3,11.40,34.20
+2026-05-01,Liège,Café en grains 1 kg,3,18.50,55.50
+2026-05-01,Liège,Thé vert 250 g,7,9.90,69.30
+2026-05-01,Liège,Chocolat noir 100 g,5,3.20,16.00
+2026-05-01,Liège,Miel 500 g,3,11.40,34.20
+2026-05-02,Liège,Café en grains 1 kg,4,18.50,74.00
+2026-05-02,Liège,Thé vert 250 g,2,9.90,19.80
+2026-05-02,Liège,Chocolat noir 100 g,5,3.20,16.00
+2026-05-02,Liège,Miel 500 g,6,11.40,68.40
+2026-05-04,Liège,Café en grains 1 kg,7,18.50,129.50
+2026-05-04,Liège,Thé vert 250 g,5,9.90,49.50
+2026-05-04,Liège,Chocolat noir 100 g,3,3.20,9.60
+2026-05-04,Liège,Miel 500 g,4,11.40,45.60
+2026-05-05,Liège,Café en grains 1 kg,4,18.50,74.00
+2026-05-05,Liège,Thé vert 250 g,1,9.90,9.90
+2026-05-05,Liège,Chocolat noir 100 g,5,3.20,16.00
+2026-05-05,Liège,Miel 500 g,8,11.40,91.20
+2026-05-06,Liège,Café en grains 1 kg,4,18.50,74.00
+2026-05-06,Liège,Thé vert 250 g,2,9.90,19.80
+2026-05-06,Liège,Chocolat noir 100 g,3,3.20,9.60
+2026-05-06,Liège,Miel 500 g,6,11.40,68.40
+2026-05-07,Liège,Café en grains 1 kg,6,18.50,111.00
+2026-05-07,Liège,Thé vert 250 g,4,9.90,39.60
+2026-05-07,Liège,Chocolat noir 100 g,5,3.20,16.00
+2026-05-07,Liège,Miel 500 g,3,11.40,34.20
+2026-05-08,Liège,Café en grains 1 kg,6,18.50,111.00
+2026-05-08,Liège,Thé vert 250 g,3,9.90,29.70
+2026-05-08,Liège,Chocolat noir 100 g,3,3.20,9.60
+2026-05-08,Liège,Miel 500 g,6,11.40,68.40
+2026-05-09,Liège,Café en grains 1 kg,6,18.50,111.00
+2026-05-09,Liège,Thé vert 250 g,3,9.90,29.70
+2026-05-09,Liège,Chocolat noir 100 g,3,3.20,9.60
+2026-05-09,Liège,Miel 500 g,3,11.40,34.20
+2026-05-11,Liège,Café en grains 1 kg,2,18.50,37.00
+2026-05-11,Liège,Thé vert 250 g,5,9.90,49.50
+2026-05-11,Liège,Chocolat noir 100 g,4,3.20,12.80
+2026-05-11,Liège,Miel 500 g,5,11.40,57.00
+2026-05-12,Liège,Café en grains 1 kg,2,18.50,37.00
+2026-05-12,Liège,Thé vert 250 g,7,9.90,69.30
+2026-05-12,Liège,Chocolat noir 100 g,2,3.20,6.40
+2026-05-12,Liège,Miel 500 g,5,11.40,57.00
+2026-05-13,Liège,Café en grains 1 kg,2,18.50,37.00
+2026-05-13,Liège,Thé vert 250 g,3,9.90,29.70
+2026-05-13,Liège,Chocolat noir 100 g,2,3.20,6.40
+2026-05-13,Liège,Miel 500 g,7,11.40,79.80
+2026-05-14,Liège,Café en grains 1 kg,3,18.50,55.50
+2026-05-14,Liège,Thé vert 250 g,5,9.90,49.50
+2026-05-14,Liège,Chocolat noir 100 g,4,3.20,12.80
+2026-05-14,Liège,Miel 500 g,6,11.40,68.40
+2026-05-15,Liège,Café en grains 1 kg,3,18.50,55.50
+2026-05-15,Liège,Thé vert 250 g,6,9.90,59.40
+2026-05-15,Liège,Chocolat noir 100 g,1,3.20,3.20
+2026-05-15,Liège,Miel 500 g,2,11.40,22.80
+2026-05-16,Liège,Café en grains 1 kg,3,18.50,55.50
+2026-05-16,Liège,Thé vert 250 g,9,9.90,89.10
+2026-05-16,Liège,Chocolat noir 100 g,4,3.20,12.80
+2026-05-16,Liège,Miel 500 g,3,11.40,34.20
+2026-05-18,Liège,Café en grains 1 kg,4,18.50,74.00
+2026-05-18,Liège,Thé vert 250 g,5,9.90,49.50
+2026-05-18,Liège,Chocolat noir 100 g,3,3.20,9.60
+2026-05-18,Liège,Miel 500 g,8,11.40,91.20
+2026-05-19,Liège,Café en grains 1 kg,4,18.50,74.00
+2026-05-19,Liège,Thé vert 250 g,4,9.90,39.60
+2026-05-19,Liège,Chocolat noir 100 g,4,3.20,12.80
+2026-05-19,Liège,Miel 500 g,5,11.40,57.00
+2026-05-20,Liège,Café en grains 1 kg,5,18.50,92.50
+2026-05-20,Liège,Thé vert 250 g,7,9.90,69.30
+2026-05-20,Liège,Chocolat noir 100 g,8,3.20,25.60
+2026-05-20,Liège,Miel 500 g,2,11.40,22.80
+2026-05-21,Liège,Café en grains 1 kg,3,18.50,55.50
+2026-05-21,Liège,Thé vert 250 g,4,9.90,39.60
+2026-05-21,Liège,Chocolat noir 100 g,3,3.20,9.60
+2026-05-21,Liège,Miel 500 g,3,11.40,34.20
+2026-05-22,Liège,Café en grains 1 kg,3,18.50,55.50
+2026-05-22,Liège,Thé vert 250 g,3,9.90,29.70
+2026-05-22,Liège,Chocolat noir 100 g,6,3.20,19.20
+2026-05-22,Liège,Miel 500 g,5,11.40,57.00
+2026-05-23,Liège,Café en grains 1 kg,9,18.50,166.50
+2026-05-23,Liège,Thé vert 250 g,8,9.90,79.20
+2026-05-23,Liège,Chocolat noir 100 g,7,3.20,22.40
+2026-05-23,Liège,Miel 500 g,2,11.40,22.80
+2026-05-25,Liège,Café en grains 1 kg,6,18.50,111.00
+2026-05-25,Liège,Thé vert 250 g,5,9.90,49.50
+2026-05-25,Liège,Chocolat noir 100 g,4,3.20,12.80
+2026-05-25,Liège,Miel 500 g,2,11.40,22.80
+2026-05-26,Liège,Café en grains 1 kg,7,18.50,129.50
+2026-05-26,Liège,Thé vert 250 g,8,9.90,79.20
+2026-05-26,Liège,Chocolat noir 100 g,4,3.20,12.80
+2026-05-26,Liège,Miel 500 g,4,11.40,45.60
+2026-05-27,Liège,Café en grains 1 kg,4,18.50,74.00
+2026-05-27,Liège,Thé vert 250 g,3,9.90,29.70
+2026-05-27,Liège,Chocolat noir 100 g,6,3.20,19.20
+2026-05-27,Liège,Miel 500 g,3,11.40,34.20
+2026-05-28,Liège,Café en grains 1 kg,5,18.50,92.50
+2026-05-28,Liège,Thé vert 250 g,3,9.90,29.70
+2026-05-28,Liège,Chocolat noir 100 g,6,3.20,19.20
+2026-05-28,Liège,Miel 500 g,3,11.40,34.20
+2026-05-29,Liège,Café en grains 1 kg,6,18.50,111.00
+2026-05-29,Liège,Thé vert 250 g,6,9.90,59.40
+2026-05-29,Liège,Chocolat noir 100 g,5,3.20,16.00
+2026-05-29,Liège,Miel 500 g,4,11.40,45.60
+2026-05-30,Liège,Café en grains 1 kg,4,18.50,74.00
+2026-05-30,Liège,Thé vert 250 g,5,9.90,49.50
+2026-05-30,Liège,Chocolat noir 100 g,2,3.20,6.40
+2026-05-30,Liège,Miel 500 g,5,11.40,57.00
+2026-06-01,Liège,Café en grains 1 kg,5,18.50,92.50
+2026-06-01,Liège,Thé vert 250 g,2,9.90,19.80
+2026-06-01,Liège,Chocolat noir 100 g,2,3.20,6.40
+2026-06-01,Liège,Miel 500 g,2,11.40,22.80
+2026-06-02,Liège,Café en grains 1 kg,3,18.50,55.50
+2026-06-02,Liège,Thé vert 250 g,7,9.90,69.30
+2026-06-02,Liège,Chocolat noir 100 g,5,3.20,16.00
+2026-06-02,Liège,Miel 500 g,2,11.40,22.80
+2026-06-03,Liège,Café en grains 1 kg,4,18.50,74.00
+2026-06-03,Liège,Thé vert 250 g,7,9.90,69.30
+2026-06-03,Liège,Chocolat noir 100 g,3,3.20,9.60
+2026-06-03,Liège,Miel 500 g,4,11.40,45.60
+2026-06-04,Liège,Café en grains 1 kg,3,18.50,55.50
+2026-06-04,Liège,Thé vert 250 g,7,9.90,69.30
+2026-06-04,Liège,Chocolat noir 100 g,4,3.20,12.80
+2026-06-04,Liège,Miel 500 g,4,11.40,45.60
+2026-06-05,Liège,Café en grains 1 kg,6,18.50,111.00
+2026-06-05,Liège,Thé vert 250 g,5,9.90,49.50
+2026-06-05,Liège,Chocolat noir 100 g,6,3.20,19.20
+2026-06-05,Liège,Miel 500 g,5,11.40,57.00
+2026-06-06,Liège,Café en grains 1 kg,9,18.50,166.50
+2026-06-06,Liège,Thé vert 250 g,7,9.90,69.30
+2026-06-06,Liège,Chocolat noir 100 g,2,3.20,6.40
+2026-06-06,Liège,Miel 500 g,6,11.40,68.40
+2026-06-08,Liège,Café en grains 1 kg,4,18.50,74.00
+2026-06-08,Liège,Thé vert 250 g,5,9.90,49.50
+2026-06-08,Liège,Chocolat noir 100 g,4,3.20,12.80
+2026-06-08,Liège,Miel 500 g,5,11.40,57.00
+2026-06-09,Liège,Café en grains 1 kg,3,18.50,55.50
+2026-06-09,Liège,Thé vert 250 g,4,9.90,39.60
+2026-06-09,Liège,Chocolat noir 100 g,2,3.20,6.40
+2026-06-09,Liège,Miel 500 g,3,11.40,34.20
+2026-06-10,Liège,Café en grains 1 kg,3,18.50,55.50
+2026-06-10,Liège,Thé vert 250 g,5,9.90,49.50
+2026-06-10,Liège,Chocolat noir 100 g,4,3.20,12.80
+2026-06-10,Liège,Miel 500 g,3,11.40,34.20
+2026-06-11,Liège,Café en grains 1 kg,6,18.50,111.00
+2026-06-11,Liège,Thé vert 250 g,6,9.90,59.40
+2026-06-11,Liège,Chocolat noir 100 g,3,3.20,9.60
+2026-06-11,Liège,Miel 500 g,3,11.40,34.20
+2026-06-12,Liège,Café en grains 1 kg,3,18.50,55.50
+2026-06-12,Liège,Thé vert 250 g,3,9.90,29.70
+2026-06-12,Liège,Chocolat noir 100 g,5,3.20,16.00
+2026-06-12,Liège,Miel 500 g,7,11.40,79.80
+2026-06-13,Liège,Café en grains 1 kg,6,18.50,111.00
+2026-06-13,Liège,Thé vert 250 g,3,9.90,29.70
+2026-06-13,Liège,Chocolat noir 100 g,6,3.20,19.20
+2026-06-13,Liège,Miel 500 g,3,11.40,34.20
+2026-06-15,Liège,Café en grains 1 kg,3,18.50,55.50
+2026-06-15,Liège,Thé vert 250 g,3,9.90,29.70
+2026-06-15,Liège,Chocolat noir 100 g,6,3.20,19.20
+2026-06-15,Liège,Miel 500 g,4,11.40,45.60
+2026-06-16,Liège,Café en grains 1 kg,6,18.50,111.00
+2026-06-16,Liège,Thé vert 250 g,4,9.90,39.60
+2026-06-16,Liège,Chocolat noir 100 g,7,3.20,22.40
+2026-06-16,Liège,Miel 500 g,3,11.40,34.20
+2026-06-17,Liège,Thé vert 250 g,5,9.90,49.50
+2026-06-17,Liège,Chocolat noir 100 g,5,3.20,16.00
+2026-06-17,Liège,Miel 500 g,4,11.40,45.60
+2026-06-18,Liège,Café en grains 1 kg,1,18.50,18.50
+2026-06-18,Liège,Thé vert 250 g,5,9.90,49.50
+2026-06-18,Liège,Chocolat noir 100 g,7,3.20,22.40
+2026-06-18,Liège,Miel 500 g,3,11.40,34.20
+2026-06-19,Liège,Café en grains 1 kg,4,18.50,74.00
+2026-06-19,Liège,Thé vert 250 g,5,9.90,49.50
+2026-06-19,Liège,Chocolat noir 100 g,7,3.20,22.40
+2026-06-19,Liège,Miel 500 g,4,11.40,45.60
+2026-06-20,Liège,Café en grains 1 kg,6,18.50,111.00
+2026-06-20,Liège,Thé vert 250 g,5,9.90,49.50
+2026-06-20,Liège,Chocolat noir 100 g,3,3.20,9.60
+2026-06-20,Liège,Miel 500 g,9,11.40,102.60
+2026-06-22,Liège,Café en grains 1 kg,3,18.50,55.50
+2026-06-22,Liège,Thé vert 250 g,1,9.90,9.90
+2026-06-22,Liège,Chocolat noir 100 g,5,3.20,16.00
+2026-06-22,Liège,Miel 500 g,4,11.40,45.60
+2026-06-23,Liège,Café en grains 1 kg,1,18.50,18.50
+2026-06-23,Liège,Thé vert 250 g,6,9.90,59.40
+2026-06-23,Liège,Chocolat noir 100 g,2,3.20,6.40
+2026-06-23,Liège,Miel 500 g,1,11.40,11.40
+2026-06-24,Liège,Café en grains 1 kg,9,18.50,166.50
+2026-06-24,Liège,Thé vert 250 g,5,9.90,49.50
+2026-06-24,Liège,Chocolat noir 100 g,5,3.20,16.00
+2026-06-24,Liège,Miel 500 g,7,11.40,79.80
+2026-06-25,Liège,Café en grains 1 kg,4,18.50,74.00
+2026-06-25,Liège,Thé vert 250 g,5,9.90,49.50
+2026-06-25,Liège,Chocolat noir 100 g,8,3.20,25.60
+2026-06-25,Liège,Miel 500 g,4,11.40,45.60
+2026-06-26,Liège,Café en grains 1 kg,3,18.50,55.50
+2026-06-26,Liège,Thé vert 250 g,2,9.90,19.80
+2026-06-26,Liège,Chocolat noir 100 g,4,3.20,12.80
+2026-06-26,Liège,Miel 500 g,4,11.40,45.60
+2026-06-27,Liège,Café en grains 1 kg,5,18.50,92.50
+2026-06-27,Liège,Thé vert 250 g,2,9.90,19.80
+2026-06-27,Liège,Chocolat noir 100 g,2,3.20,6.40
+2026-06-27,Liège,Miel 500 g,4,11.40,45.60
+2026-06-29,Liège,Café en grains 1 kg,4,18.50,74.00
+2026-06-29,Liège,Thé vert 250 g,4,9.90,39.60
+2026-06-29,Liège,Chocolat noir 100 g,2,3.20,6.40
+2026-06-29,Liège,Miel 500 g,1,11.40,11.40
+2026-06-30,Liège,Café en grains 1 kg,5,18.50,92.50
+2026-06-30,Liège,Thé vert 250 g,8,9.90,79.20
+2026-06-30,Liège,Chocolat noir 100 g,2,3.20,6.40
+2026-06-30,Liège,Miel 500 g,3,11.40,34.20
