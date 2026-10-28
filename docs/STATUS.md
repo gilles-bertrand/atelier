@@ -54,7 +54,7 @@ _Dernière mise à jour : 2026-10-28, Lead._
 
 - **`@atelier/web`** : `createWebTools({ provider, fallbacks?, fetch? })` → `web_search` + `web_fetch` (`ToolDefinition`, à passer à `createDefaultRegistry`). Détails : `packages/web/README.md`.
 - **`web_search`** (sans permission) : `createSearchProvider(id, { getApiKey, searxngUrl? })` pour `searxng` (défaut, `127.0.0.1:8888`), `ollama` (`POST ollama.com/api/web_search`, Bearer) et `brave` (`X-Subscription-Token`). Les clés sont lues à chaque recherche via `getApiKey` (l'app branche `safeStorage`). Si le fournisseur est indisponible (VM pas prête, clé absente) : essai des `fallbacks`, sinon message « Recherche indisponible, configure Brave ou Ollama dans les Réglages d'Atelier ».
-- **`web_fetch`** (permission `conditional`, une fois par domaine : `scopeKey: web_fetch:<domaine>`, `kind: network`, redemandée si une redirection change de domaine) : http(s) seulement, adresses non publiques refusées avant la requête, à chaque redirection et à la connexion TCP (lookup filtré d'undici, anti DNS rebinding), délai 20 s, 5 Mo max, Readability + jsdom → turndown, 20 ko max.
+- **`web_fetch`** (permission `conditional`, une fois par domaine : `scopeKey: web_fetch:<domaine>`, `kind: network`, redemandée si une redirection change de domaine, délai suspendu pendant la modale) : http(s) seulement, adresses non publiques refusées avant la requête, à chaque redirection et à la connexion TCP (lookup filtré d'undici, anti DNS rebinding), délai 20 s, 5 Mo max, Readability + jsdom → turndown, 20 ko max.
 - Pour **UI / Lead** : `jsdom` et `undici` doivent rester externes au bundle du main (`externalizeDepsPlugin` d'electron-vite) ; `web_fetch` tourne dans le main uniquement. `SearxngProvider.isAvailable()` (via `/healthz`) peut alimenter l'indicateur des Réglages.
 - ⚠️ `@types/jsdom` volontairement absent (déclaration locale `packages/web/src/types/jsdom.d.ts`) : jsdom étant un pair optionnel de Vitest, ses types injectaient `lib.dom` dans tous les packages (casse `scripts/fetch-lima.ts`).
 
@@ -85,7 +85,6 @@ _Format : date, agent, type proposé, raison, packages impactés._
 
 ## Points ouverts / risques
 
-- **web_fetch** : la demande de permission sur redirection inter-domaines s'écoule pendant le délai de 20 s du téléchargement ; un utilisateur lent fait échouer la lecture. À traiter (suspendre le délai pendant la modale) si observé en démo.
 - **MCP `readOnlyHint`** : annotation déclarée par le serveur, non vérifiable ; on fait confiance aux serveurs installés par l'utilisateur (voir README du bridge).
 
 - `Caddyfile` validé syntaxiquement à la main seulement (pas de daemon Docker en local) : à valider au premier déploiement (`docker compose up -d && ./healthcheck.sh`).
