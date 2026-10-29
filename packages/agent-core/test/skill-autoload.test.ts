@@ -1,5 +1,5 @@
 /** Skill chargé d'office quand la demande contient un déclencheur (critère 2). */
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { SkillInfo } from '@atelier/shared';
 import { describe, expect, it } from 'vitest';
@@ -11,6 +11,7 @@ import {
   matchesTrigger,
   SKILL_AUTOLOAD_MAX_BYTES,
   skillAutoloadMessages,
+  triggeredSkills,
 } from '../src/index.js';
 import type { ModelMessage } from 'ai';
 import { collect, permissions, promptText, scriptedModel, withTempDir } from './helpers.js';
@@ -143,5 +144,40 @@ describe('prompt : scripts nommés', () => {
       'Script à lancer avec bash dans la machine isolée : /skills/xlsx/scripts/build-workbook.cjs',
     );
     expect(prompt).toContain('fichiers intermédiaires');
+  });
+});
+
+/** Skills d'exemple livrés (packages/skills/examples), déclencheurs lus dans le frontmatter. */
+async function exampleSkills(): Promise<SkillInfo[]> {
+  const root = path.resolve(import.meta.dirname, '../../skills/examples');
+  const skills: SkillInfo[] = [];
+  for (const name of await readdir(root)) {
+    const text = await readFile(path.join(root, name, 'SKILL.md'), 'utf8');
+    const list = /^triggers: \[(.*)\]$/m.exec(text)?.[1] ?? '';
+    skills.push({
+      name,
+      description: name,
+      path: path.join(root, name, 'SKILL.md'),
+      triggers: list.split(',').map((t) => t.trim().toLowerCase()),
+    });
+  }
+  return skills;
+}
+
+describe('anti-régression : demandes des critères d’acceptation', () => {
+  it('critère 2 ne déclenche que xlsx ; critère 4 ne déclenche aucun skill', async () => {
+    const skills = await exampleSkills();
+    expect(skills.map((s) => s.name).sort()).toEqual(['rapport-markdown', 'xlsx']);
+    const names = (request: string): string[] =>
+      triggeredSkills(request, skills).map((t) => t.skill.name);
+    expect(
+      names(
+        'Fais-moi un Excel récapitulatif par mois avec un graphique, puis un résumé en markdown',
+      ),
+    ).toEqual(['xlsx']);
+    expect(
+      names('Résume le rapport et fais un tableau des montants de la facture et du ticket'),
+    ).toEqual([]);
+    expect(names('Rédige un rapport en Markdown sur ces ventes')).toEqual(['rapport-markdown']);
   });
 });

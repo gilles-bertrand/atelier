@@ -194,7 +194,12 @@ describe('skills d’exemple : déclencheurs', () => {
     const rapport = skills.find((s) => s.name === 'rapport-markdown');
     expect(xlsx?.triggers).toEqual(['excel', 'xlsx', 'classeur', 'tableur', 'spreadsheet']);
     expect(xlsx?.scripts).toEqual(['/skills/xlsx/scripts/build-workbook.cjs']);
-    expect(rapport?.triggers).toContain('compte rendu');
+    expect(rapport?.triggers).toEqual([
+      'compte rendu',
+      'note de synthèse',
+      'rapport markdown',
+      'rapport en markdown',
+    ]);
     expect(rapport?.scripts).toEqual(['/skills/rapport-markdown/scripts/csv_to_markdown.py']);
   });
 });
