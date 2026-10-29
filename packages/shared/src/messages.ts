@@ -90,6 +90,8 @@ export interface ToolCallPart {
   output?: string;
   /** Affichage riche (carte de fichier, résultats web…). */
   display?: ToolDisplay;
+  /** Fichiers produits par l'outil sans carte propre (événement `tool_files`). */
+  files?: FileCard[];
 }
 
 /** Partie de message : pièce jointe déposée par l'utilisateur. */

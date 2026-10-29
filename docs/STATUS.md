@@ -103,6 +103,8 @@ _Dernière mise à jour : 2026-10-28, Lead._
 
 _Format : date, agent, type proposé, raison, packages impactés._
 
+- ✅ **Livrée par le Lead (PR `feat/lead-shared-tool-files`), à brancher par l'UI (#44)**. **2026-10-29, UI** (impact : `shared`, main, renderer, CLI d'agent-core) : événement **`ToolFilesEvent`** (`type: 'tool_files'`, `toolCallId`, `files: FileCard[]`) et `ToolCallPart.files?: FileCard[]`. Raison : les fichiers produits par bash, les skills ou un connecteur MCP n'ont pas de carte ; le main les détecte par diff du dossier de travail et les rattache à l'appel d'outil. Le reducer commun les fusionne déjà (un chemin repris remplace le précédent).
+
 - ✅ **Livrée par le Lead (PR #34) et branchée par l'UI (PR `feat/ui-history-banner`)**. **2026-10-28, UI** (impact : `shared`, main, renderer) : canal **`'app:health'`** (invoke, `request: undefined`, `response: AppHealth`) avec `AppHealth = { historyPersistent: boolean; historyError?: string }` (extensible : d'autres dégradations de démarrage pourront s'y ajouter). Raison : quand la base d'historique est inutilisable, le main se replie en mémoire ; l'UI doit afficher un bandeau « L'historique ne sera pas conservé » (demande du Lead sur #33). Un event n'est pas nécessaire : l'état est fixé au démarrage.
 
 - ✅ **Livrées par le Lead (PR #21) et adoptées par l'UI (PR `feat/ui-chat`)** : n° 1 sous la forme `AtelierApi.importDroppedFiles(sessionId, files)` (chemins résolus par le preload, `attachment:import` réservé au preload), n° 2 `mcp:status` (invoke + event, branchés dans le main), n° 3 `dialog:choose-directory` (branché), n° 4 codes `agent/busy`, `session/not_found`, `settings/invalid` (utilisés par le main). Demande d'origine, **2026-10-28, UI** :
