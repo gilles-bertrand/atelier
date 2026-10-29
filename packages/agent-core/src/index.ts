@@ -10,8 +10,12 @@ export {
   Agent,
   AgentSession,
   continuationPrompt,
+  isStreamCut,
   MAX_CONTINUATIONS,
   MAX_STEPS,
+  MAX_STREAM_CUT_RETRIES,
+  streamCutError,
+  streamCutPrompt,
 } from './loop/agent.js';
 export type { AgentOptions, RunTurnOptions, SendOptions, TurnResult } from './loop/agent.js';
 export {
