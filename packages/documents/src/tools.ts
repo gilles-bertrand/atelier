@@ -13,8 +13,9 @@ import {
 } from '@atelier/shared';
 import {
   estimateTokens,
-  resolveWorkspacePath,
+  resolveReadablePath,
   truncateToTokens,
+  type ReadRoot,
   type ResolvedWorkspacePath,
 } from '@atelier/agent-core';
 import { findAttachment } from './attachments.js';
@@ -71,6 +72,12 @@ export interface DocumentToolsOptions {
    * outils) ; une valeur invalide retombe sur le défaut.
    */
   maxOutputTokens?: number | (() => number);
+  /**
+   * Dossiers lisibles par `read_file` en lecture seule hors du dossier de
+   * travail : la racine des skills (`skillReadRoots` d'agent-core, #60). Relu à
+   * chaque appel. `look_at` reste limité au dossier de travail.
+   */
+  readRoots?: () => readonly ReadRoot[];
 }
 
 /** Budget de sortie effectif d'un appel (option, getter relu, ou défaut). */
@@ -154,8 +161,13 @@ function notFound(input: string, available: readonly string[]): ToolOutput {
 async function openTarget(
   context: ToolExecutionContext,
   input: string,
+  readRoots: readonly ReadRoot[] = [],
 ): Promise<Target | ToolOutput> {
-  let resolved = await resolveWorkspacePath(context.workspace, input);
+  let resolved: ResolvedWorkspacePath = await resolveReadablePath(
+    context.workspace,
+    input,
+    readRoots,
+  );
   let note: string | undefined;
   if (!resolved.exists) {
     // Chemin déformé par le modèle (« .ratelier/uploads/x.pdf », « .x.pdf »…) :
@@ -534,7 +546,7 @@ export function createReadFileTool(options: DocumentToolsOptions = {}) {
     source: 'documents',
     execute: (input, context) =>
       guarded(async () => {
-        const target = await openTarget(context, input.path);
+        const target = await openTarget(context, input.path, options.readRoots?.() ?? []);
         if (isOutput(target)) return target;
         const ctx: ReadContext = {
           options,

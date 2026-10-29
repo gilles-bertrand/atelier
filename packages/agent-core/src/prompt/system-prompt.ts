@@ -83,14 +83,19 @@ Tu travailles dans un dossier choisi par l'utilisateur : tu peux y lire, créer 
   }
 
   if (options.skills && options.skills.length > 0) {
+    // Un seul chemin par usage : le chemin hôte se lit avec read_file (racine des
+    // skills ouverte en lecture seule), le chemin VM sert à lancer les scripts (#60).
     const list = options.skills
-      .map(
-        (s) =>
-          `- ${s.name} : ${s.description}${s.guestPath ? ` (${s.guestPath})` : ` (${s.path})`}`,
-      )
+      .map((s) => {
+        const vm =
+          s.guestPath !== undefined
+            ? `\n  Dans la machine isolée (scripts à lancer avec bash) : ${posixDirname(s.guestPath)}/`
+            : '';
+        return `- ${s.name} : ${s.description}\n  SKILL.md (à lire avec read_file) : ${s.path}${vm}`;
+      })
       .join('\n');
     sections.push(`# Skills
-Des savoir-faire sont disponibles sous forme de fichiers SKILL.md, souvent avec des scripts prêts à l'emploi (dossier scripts/ à côté du SKILL.md). Avant une tâche couverte par un skill, lis d'abord son SKILL.md en entier, puis suis ses étapes et lance son script : n'écris pas toi-même de code équivalent (par exemple ton propre code openpyxl ou exceljs pour un classeur Excel).
+Des savoir-faire sont disponibles sous forme de fichiers SKILL.md, souvent avec des scripts prêts à l'emploi (dossier scripts/ à côté du SKILL.md). Avant une tâche couverte par un skill, lis d'abord son SKILL.md en entier avec read_file et le chemin indiqué ci-dessous (les skills sont en lecture seule), puis suis ses étapes et lance son script : n'écris pas toi-même de code équivalent (par exemple ton propre code openpyxl ou exceljs pour un classeur Excel). Écris les résultats dans le dossier de travail.
 ${list}`);
   }
 
@@ -105,4 +110,10 @@ ${list}`);
   }
 
   return sections.join('\n\n');
+}
+
+/** Dossier parent d'un chemin POSIX (chemins de la VM). */
+function posixDirname(p: string): string {
+  const i = p.lastIndexOf('/');
+  return i <= 0 ? '/' : p.slice(0, i);
 }

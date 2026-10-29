@@ -110,3 +110,102 @@ export async function tryResolveWorkspacePath(
     throw error;
   }
 }
+
+/**
+ * Dossier lisible hors du dossier de travail, en **lecture seule** : la racine
+ * des skills (#60). `guest` est le même dossier vu depuis la VM (`/skills`) :
+ * un chemin VM est ramené au chemin hôte correspondant.
+ */
+export interface ReadRoot {
+  /** Chemin absolu côté hôte. */
+  host: string;
+  /** Chemin absolu dans la VM (POSIX), s'il existe. */
+  guest?: string;
+}
+
+/** Résolution pour la lecture : dans le dossier de travail, ou sous une {@link ReadRoot}. */
+export interface ResolvedReadablePath extends ResolvedWorkspacePath {
+  /** Vrai si le chemin est sous une racine en lecture seule (hors dossier de travail). */
+  readOnly: boolean;
+}
+
+/** Racines de lecture des skills : dossier parent de chaque `<skill>/SKILL.md` (dédoublonné). */
+export function skillReadRoots(
+  skills: readonly { path: string; guestPath?: string }[],
+): ReadRoot[] {
+  const roots = new Map<string, ReadRoot>();
+  for (const skill of skills) {
+    const host = path.dirname(path.dirname(skill.path));
+    if (roots.has(host)) continue;
+    roots.set(host, {
+      host,
+      ...(skill.guestPath !== undefined
+        ? { guest: path.posix.dirname(path.posix.dirname(skill.guestPath)) }
+        : {}),
+    });
+  }
+  return [...roots.values()];
+}
+
+/** Chemins hôtes candidats de `input` sous `root` : absolu, chemin VM, ou `skills/…` relatif. */
+function readRootCandidates(root: ReadRoot, input: string): string[] {
+  const candidates: string[] = [];
+  if (path.isAbsolute(input)) {
+    candidates.push(path.resolve(input));
+    if (root.guest !== undefined) {
+      const rel = path.posix.relative(root.guest, path.posix.normalize(input));
+      if (rel === '' || (!rel.startsWith('..') && !path.posix.isAbsolute(rel))) {
+        candidates.push(path.join(root.host, ...rel.split('/')));
+      }
+    }
+    return candidates;
+  }
+  // Relatif : seulement « skills/xlsx/SKILL.md » (nom du dossier racine en tête),
+  // ce que Qwen tente quand il ne retrouve pas le chemin absolu (#60).
+  const segments = path.normalize(input).split(path.sep);
+  if (segments[0] === path.basename(root.host)) {
+    candidates.push(path.join(root.host, ...segments.slice(1)));
+  }
+  return candidates;
+}
+
+/**
+ * Comme {@link resolveWorkspacePath}, pour un outil de **lecture** : accepte en
+ * plus, en lecture seule, un chemin sous l'une des `readRoots` (racine des
+ * skills), désigné par son chemin hôte, son chemin VM ou un chemin relatif
+ * `skills/<nom>/…` introuvable dans le dossier de travail. La vérification se
+ * fait sur le chemin canonique (`realpath`) : ni `..` ni lien symbolique ne
+ * permettent de sortir de la racine. Les outils d'écriture n'utilisent jamais
+ * cette fonction.
+ *
+ * @throws AtelierError `tool/path_outside_workspace` si le chemin n'est ni dans le
+ *   dossier de travail ni sous une racine de lecture.
+ */
+export async function resolveReadablePath(
+  workspace: string,
+  input: string,
+  readRoots: readonly ReadRoot[] = [],
+): Promise<ResolvedReadablePath> {
+  let inWorkspace: ResolvedWorkspacePath | undefined;
+  let refusal: unknown;
+  try {
+    inWorkspace = await resolveWorkspacePath(workspace, input);
+    if (inWorkspace.exists || readRoots.length === 0) return { ...inWorkspace, readOnly: false };
+  } catch (error) {
+    if (!(error instanceof AtelierError) || error.code !== 'tool/path_outside_workspace') {
+      throw error;
+    }
+    refusal = error;
+  }
+  const trimmed = input.trim();
+  for (const root of readRoots) {
+    const rootCanonical = (await canonicalize(path.resolve(root.host))).canonical;
+    for (const candidate of readRootCandidates(root, trimmed)) {
+      const { canonical, exists } = await canonicalize(candidate);
+      if (!exists || !isInside(rootCanonical, canonical)) continue;
+      return { absolutePath: canonical, relativePath: canonical, exists, readOnly: true };
+    }
+  }
+  if (inWorkspace !== undefined) return { ...inWorkspace, readOnly: false };
+  throw refusal;
+}
