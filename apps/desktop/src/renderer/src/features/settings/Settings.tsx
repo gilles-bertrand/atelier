@@ -4,6 +4,7 @@ import { ArrowLeft } from 'lucide-react';
 import { ServerStatusBadge } from '@renderer/components/status/ServerStatusBadge';
 import { Button } from '@renderer/components/ui/button';
 import { cn } from '@renderer/lib/utils';
+import { headerInset, SidebarOpenButton, useShellChrome } from '../sidebar/shell-chrome';
 import { useApp } from '@renderer/state/app-state';
 import { McpSettings, SkillsSettings } from './ExtensionsSettings';
 import { SandboxSettings } from './SandboxSettings';
@@ -22,6 +23,7 @@ type SectionId = (typeof SECTIONS)[number]['id'];
 
 export function Settings({ onClose }: { onClose: () => void }) {
   const { state } = useApp();
+  const { sidebarOpen } = useShellChrome();
   const [section, setSection] = useState<SectionId>('server');
   const heading = useRef<HTMLHeadingElement>(null);
 
@@ -36,8 +38,14 @@ export function Settings({ onClose }: { onClose: () => void }) {
         if (e.key === 'Escape' && !(e.target instanceof HTMLTextAreaElement)) onClose();
       }}
     >
-      <header className="flex h-12 shrink-0 items-center gap-2 border-b pl-20 pr-4 [-webkit-app-region:drag]">
+      <header
+        className={cn(
+          'flex h-12 shrink-0 items-center gap-2 border-b pr-4 [-webkit-app-region:drag]',
+          headerInset(sidebarOpen),
+        )}
+      >
         <div className="flex flex-1 items-center gap-2 [-webkit-app-region:no-drag]">
+          <SidebarOpenButton />
           <Button variant="ghost" size="icon" aria-label="Fermer les réglages" onClick={onClose}>
             <ArrowLeft className="size-4" aria-hidden />
           </Button>

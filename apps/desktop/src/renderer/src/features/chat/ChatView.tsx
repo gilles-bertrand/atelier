@@ -1,9 +1,9 @@
 /**
- * Écran de conversation : en-tête (retour, titre, dossier, état du serveur),
- * fil des messages, saisie, et dépôt de fichiers sur toute la zone.
+ * Écran de conversation : en-tête (titre, dossier, état du serveur, panneau de
+ * suivi), fil des messages, saisie, et dépôt de fichiers sur toute la zone.
  */
 import { useEffect, useId, useRef, useState, type DragEvent } from 'react';
-import { ArrowLeft, Folder, PanelRight, Plus, Settings, Upload } from 'lucide-react';
+import { Folder, PanelRight, Upload } from 'lucide-react';
 import type { SessionSummary } from '@atelier/shared';
 import { ServerStatusBadge } from '@renderer/components/status/ServerStatusBadge';
 import { Button } from '@renderer/components/ui/button';
@@ -11,10 +11,12 @@ import { Alert } from '@renderer/components/ui/primitives';
 import { atelier, toSerializedError } from '@renderer/lib/api';
 import { errorMessage } from '@renderer/lib/error-messages';
 import { fileName } from '@renderer/lib/tool-labels';
+import { cn } from '@renderer/lib/utils';
 import { useApp } from '@renderer/state/app-state';
 import { isRunning } from '@renderer/state/chat-reducer';
 import { useChat, useSessionView } from '@renderer/state/chat-store';
 import { deriveSessionTitle } from '../../../../common/chat-reducer';
+import { headerInset, SidebarOpenButton, useShellChrome } from '../sidebar/shell-chrome';
 import { Composer, type PendingAttachment } from './Composer';
 import { MessageList } from './MessageList';
 import { SidePanel } from './SidePanel';
@@ -25,16 +27,14 @@ function hasFiles(event: DragEvent): boolean {
 
 export function ChatView({
   session,
-  onBack,
-  onNewConversation,
-  onOpenSettings,
+  onTitleChange,
 }: {
   session: SessionSummary;
-  onBack: () => void;
-  onNewConversation: () => void;
-  onOpenSettings: () => void;
+  /** Titre dérivé du premier message (la colonne de gauche le reprend aussitôt). */
+  onTitleChange?: (title: string) => void;
 }) {
   const { state } = useApp();
+  const { sidebarOpen } = useShellChrome();
   const { actions } = useChat();
   const view = useSessionView(session.id);
   const [draft, setDraft] = useState('');
@@ -102,7 +102,9 @@ export function ChatView({
     if (text === '' && attachments.length === 0) return;
     setError(undefined);
     if (!view.messages.some((m) => m.role === 'user')) {
-      setTitle(deriveSessionTitle(text, attachments[0]?.name));
+      const next = deriveSessionTitle(text, attachments[0]?.name);
+      setTitle(next);
+      onTitleChange?.(next);
     }
     setDraft('');
     for (const p of pending) revoke(p.previewUrl);
@@ -143,11 +145,14 @@ export function ChatView({
         void importFiles(Array.from(e.dataTransfer.files));
       }}
     >
-      <header className="flex h-12 shrink-0 items-center gap-2 border-b pl-20 pr-4 [-webkit-app-region:drag]">
+      <header
+        className={cn(
+          'flex h-12 shrink-0 items-center gap-2 border-b pr-4 [-webkit-app-region:drag]',
+          headerInset(sidebarOpen),
+        )}
+      >
         <div className="flex min-w-0 flex-1 items-center gap-2 [-webkit-app-region:no-drag]">
-          <Button variant="ghost" size="icon" aria-label="Retour à l’accueil" onClick={onBack}>
-            <ArrowLeft className="size-4" aria-hidden />
-          </Button>
+          <SidebarOpenButton />
           <div className="min-w-0">
             <h1 className="truncate text-sm font-medium">{title}</h1>
             <p
@@ -161,10 +166,6 @@ export function ChatView({
         </div>
         <div className="flex items-center gap-2 [-webkit-app-region:no-drag]">
           <ServerStatusBadge status={state.server} />
-          <Button variant="ghost" size="sm" onClick={onNewConversation}>
-            <Plus className="size-4" aria-hidden />
-            Nouvelle conversation
-          </Button>
           <Button
             variant="ghost"
             size="icon"
@@ -177,9 +178,6 @@ export function ChatView({
             }}
           >
             <PanelRight className="size-4" aria-hidden />
-          </Button>
-          <Button variant="ghost" size="icon" aria-label="Réglages" onClick={onOpenSettings}>
-            <Settings className="size-4" aria-hidden />
           </Button>
         </div>
       </header>
@@ -229,16 +227,7 @@ export function ChatView({
             importing={importing}
           />
         </div>
-        {panelOpen ? (
-          <SidePanel
-            id={panelId}
-            session={session}
-            view={view}
-            sandbox={state.sandbox}
-            server={state.server}
-            model={state.settings.llm.model}
-          />
-        ) : null}
+        {panelOpen ? <SidePanel id={panelId} view={view} /> : null}
       </div>
 
       {dragging ? (

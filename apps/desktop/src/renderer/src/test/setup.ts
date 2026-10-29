@@ -7,7 +7,11 @@ import { afterEach } from 'vitest';
 if (typeof document !== 'undefined') {
   await import('@testing-library/jest-dom/vitest');
   const { cleanup } = await import('@testing-library/react');
+  // Fenêtre d'Atelier par défaut (1280 px) : la colonne de gauche est affichée.
+  Object.defineProperty(window, 'innerWidth', { value: 1280, writable: true, configurable: true });
   afterEach(() => {
     cleanup();
+    window.localStorage.clear();
+    window.innerWidth = 1280;
   });
 }
