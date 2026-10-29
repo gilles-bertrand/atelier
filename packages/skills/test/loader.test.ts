@@ -32,7 +32,17 @@ describe('parseSkillFrontmatter', () => {
       parseSkillFrontmatter(
         '---\nname: xlsx\ndescription: >\n  Créer un\n  classeur\n---\n# Corps',
       ),
-    ).toEqual({ name: 'xlsx', description: 'Créer un classeur' });
+    ).toEqual({ name: 'xlsx', description: 'Créer un classeur', triggers: [], scripts: [] });
+  });
+  it('lit triggers (liste ou texte, en minuscules, dédoublonnés) et scripts', () => {
+    expect(
+      parseSkillFrontmatter(
+        '---\nname: x\ndescription: d\ntriggers: [Excel, xlsx, excel]\nscripts: [scripts/a.cjs]\n---\n',
+      ),
+    ).toMatchObject({ triggers: ['excel', 'xlsx'], scripts: ['scripts/a.cjs'] });
+    expect(
+      parseSkillFrontmatter('---\nname: x\ndescription: d\ntriggers: Compte rendu, PV\n---\n'),
+    ).toMatchObject({ triggers: ['compte rendu', 'pv'] });
   });
   it('renvoie undefined si le YAML est invalide', () => {
     expect(parseSkillFrontmatter('---\nname: [oups\n---\n')).toBeUndefined();
@@ -143,5 +153,53 @@ describe("skills d'exemple", () => {
     expect(skills.find((s) => s.name === 'xlsx')?.description).toBe('version modifiée');
     expect(await readdir(join(root, 'rapport-markdown'))).toContain('modele.md');
     expect(await installExampleSkills(bundledExamplesDir(), root)).toEqual([]);
+  });
+});
+
+describe('loadSkills : scripts et déclencheurs', () => {
+  it('remplit scripts depuis scripts/ (chemins VM) et triggers depuis le frontmatter', async () => {
+    await skill('xlsx', '---\nname: xlsx\ndescription: Excel\ntriggers: [excel, Tableur]\n---\n');
+    await mkdir(join(root, 'xlsx', 'scripts'), { recursive: true });
+    await writeFile(join(root, 'xlsx', 'scripts', 'build.cjs'), '');
+    await writeFile(join(root, 'xlsx', 'scripts', '.cache'), '');
+    const [loaded] = await loadSkills(root);
+    expect(loaded).toMatchObject({
+      scripts: ['/skills/xlsx/scripts/build.cjs'],
+      triggers: ['excel', 'tableur'],
+    });
+  });
+
+  it('sans VM : chemins hôtes ; sans scripts ni triggers : champs absents', async () => {
+    await skill('a', '---\nname: a\ndescription: A\n---\n');
+    await mkdir(join(root, 'a', 'scripts'), { recursive: true });
+    await writeFile(join(root, 'a', 'scripts', 'run.py'), '');
+    await skill('b', '---\nname: b\ndescription: B\n---\n');
+    const [a, b] = await loadSkills(root, { guestRoot: null });
+    expect(a?.scripts).toEqual([join(root, 'a', 'scripts', 'run.py')]);
+    expect(b).not.toHaveProperty('scripts');
+    expect(b).not.toHaveProperty('triggers');
+  });
+
+  it('un script déclaré qui sort du skill est ignoré', async () => {
+    await skill('c', '---\nname: c\ndescription: C\nscripts: [../x.sh, run.sh]\n---\n');
+    const [c] = await loadSkills(root);
+    expect(c?.scripts).toEqual(['/skills/c/run.sh']);
+  });
+});
+
+describe('skills d’exemple : déclencheurs', () => {
+  it('xlsx et rapport-markdown ont des déclencheurs et leurs scripts', async () => {
+    const skills = await loadSkills(bundledExamplesDir());
+    const xlsx = skills.find((s) => s.name === 'xlsx');
+    const rapport = skills.find((s) => s.name === 'rapport-markdown');
+    expect(xlsx?.triggers).toEqual(['excel', 'xlsx', 'classeur', 'tableur', 'spreadsheet']);
+    expect(xlsx?.scripts).toEqual(['/skills/xlsx/scripts/build-workbook.cjs']);
+    expect(rapport?.triggers).toEqual([
+      'compte rendu',
+      'note de synthèse',
+      'rapport markdown',
+      'rapport en markdown',
+    ]);
+    expect(rapport?.scripts).toEqual(['/skills/rapport-markdown/scripts/csv_to_markdown.py']);
   });
 });

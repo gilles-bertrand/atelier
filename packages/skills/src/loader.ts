@@ -11,6 +11,8 @@ import { GUEST_SKILLS, type SkillInfo } from '@atelier/shared';
 
 /** Nom du fichier décrivant un skill. */
 export const SKILL_FILE = 'SKILL.md';
+/** Dossier des scripts d'un skill. */
+export const SCRIPTS_DIR = 'scripts';
 /** Taille maximale d'un SKILL.md (au-delà, il est ignoré). */
 export const MAX_SKILL_FILE_BYTES = 256 * 1024;
 /** Longueur maximale d'une description injectée dans le prompt. */
@@ -42,17 +44,45 @@ function singleLine(value: unknown): string {
   return typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : '';
 }
 
+/** Liste de chaînes du frontmatter (liste YAML ou texte séparé par des virgules). */
+function stringList(value: unknown): string[] {
+  const items = Array.isArray(value) ? value : typeof value === 'string' ? value.split(',') : [];
+  return items
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => singleLine(item))
+    .filter((item) => item !== '');
+}
+
 /** Parse le frontmatter d'un SKILL.md ; `undefined` si invalide. */
 export function parseSkillFrontmatter(
   content: string,
-): { name: string; description: string } | undefined {
+): { name: string; description: string; triggers: string[]; scripts: string[] } | undefined {
   let data: Record<string, unknown>;
   try {
     data = matter(content).data;
   } catch {
     return undefined;
   }
-  return { name: singleLine(data['name']), description: singleLine(data['description']) };
+  return {
+    name: singleLine(data['name']),
+    description: singleLine(data['description']),
+    // Déclencheurs en minuscules, dédoublonnés (chargement d'office du skill).
+    triggers: [...new Set(stringList(data['triggers']).map((t) => t.toLowerCase()))],
+    scripts: stringList(data['scripts']),
+  };
+}
+
+/** Fichiers de `<skill>/scripts/` (non cachés), triés ; liste vide si absent. */
+async function scriptFiles(dir: string): Promise<string[]> {
+  try {
+    const entries = await readdir(join(dir, SCRIPTS_DIR), { withFileTypes: true });
+    return entries
+      .filter((e) => e.isFile() && !e.name.startsWith('.'))
+      .map((e) => `${SCRIPTS_DIR}/${e.name}`)
+      .sort();
+  } catch {
+    return [];
+  }
 }
 
 async function isFile(path: string): Promise<boolean> {
@@ -128,11 +158,23 @@ export async function loadSkills(
       description = `${description.slice(0, MAX_DESCRIPTION_LENGTH - 1)}…`;
       warn(dir, 'description tronquée (trop longue pour le prompt système).');
     }
+    // Scripts : champ `scripts` du frontmatter (relatifs au skill, sans sortie du
+    // dossier), sinon le contenu de `scripts/`. Chemins VM quand ils existent.
+    const declared = parsed.scripts.filter((p) => {
+      const normalized = posix.normalize(p);
+      return !normalized.startsWith('..') && !posix.isAbsolute(normalized);
+    });
+    const relScripts = declared.length > 0 ? declared : await scriptFiles(dir);
+    const scripts = relScripts.map((p) =>
+      guestRoot === null ? join(dir, ...p.split('/')) : posix.join(guestRoot, entry, p),
+    );
     skills.push({
       name,
       description,
       path: file,
       ...(guestRoot === null ? {} : { guestPath: posix.join(guestRoot, entry, SKILL_FILE) }),
+      ...(scripts.length > 0 ? { scripts } : {}),
+      ...(parsed.triggers.length > 0 ? { triggers: parsed.triggers } : {}),
     });
   }
   return skills.sort((a, b) => a.name.localeCompare(b.name));

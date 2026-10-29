@@ -62,6 +62,16 @@ export type { CompactOptions, CompactResult, InjectedKind } from './loop/compact
 export { chatMessagesToModelMessages, stripReasoning } from './loop/history.js';
 export { createToolCallRepair, repairToolInput } from './loop/repair.js';
 export {
+  capBytes,
+  matchesTrigger,
+  normalizeForMatch,
+  requestText,
+  SKILL_AUTOLOAD_MAX_BYTES,
+  skillAutoloadMessages,
+  skillAutoloadPrompt,
+  triggeredSkills,
+} from './loop/skill-autoload.js';
+export {
   CORRECTION_PREFIX,
   extractNumbers,
   MIN_CHECKED_AMOUNT,

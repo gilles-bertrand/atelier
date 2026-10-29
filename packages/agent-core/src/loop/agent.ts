@@ -47,6 +47,7 @@ import {
 import { hasReasoning, stripReasoning } from './history.js';
 import { sourceText, unverifiedAmounts, verificationPrompt } from './numbers.js';
 import { createToolCallRepair } from './repair.js';
+import { skillAutoloadMessages } from './skill-autoload.js';
 
 /** Nombre maximal d'étapes par tour (brief §1). */
 export const MAX_STEPS = 50;
@@ -155,11 +156,17 @@ export class Agent {
     return typeof sandbox === 'function' ? sandbox() : sandbox;
   }
 
+  /** Skills disponibles pour ce tour (getter relu). */
+  currentSkills(): readonly SkillInfo[] {
+    const skills = this.#options.skills;
+    return (typeof skills === 'function' ? skills() : skills) ?? [];
+  }
+
   /** Prompt système effectif. */
   systemPrompt(sandbox: Sandbox | undefined = this.currentSandbox()): string {
     const o = this.#options;
     if (o.instructions !== undefined) return o.instructions;
-    const skills = typeof o.skills === 'function' ? o.skills() : o.skills;
+    const skills = this.currentSkills();
     const extra =
       typeof o.extraInstructions === 'function' ? o.extraInstructions() : o.extraInstructions;
     return buildSystemPrompt({
@@ -167,7 +174,7 @@ export class Agent {
       now: o.now?.() ?? new Date(),
       toolNames: o.registry.list().map((t) => t.name),
       sandboxAvailable: sandbox !== undefined,
-      ...(skills ? { skills } : {}),
+      ...(skills.length > 0 ? { skills } : {}),
       ...(extra !== undefined && extra !== '' ? { extra } : {}),
     });
   }
@@ -186,9 +193,15 @@ export class Agent {
     turn.abortSignal?.addEventListener('abort', onAbort, { once: true });
     const signal = controller.signal;
 
+    // Skill chargé d'office si la demande contient l'un de ses déclencheurs (critère 2).
+    const skillMessages = await skillAutoloadMessages(turn.input, this.currentSkills(), {
+      onLoad: (info) => o.log?.('skill-autoload', info),
+      onError: (info) => o.log?.('skill-autoload:error', info),
+    });
     let base: ModelMessage[] = [
       ...stripReasoning(turn.history),
       { role: 'user', content: turn.input },
+      ...skillMessages,
     ];
     let responseOffset = 0;
     let lastInputTokens: number | undefined;

@@ -1,6 +1,7 @@
 ---
 name: xlsx
 description: Créer un classeur Excel (.xlsx) propre avec plusieurs feuilles, des formules, une ligne de totaux et des graphiques (histogramme, barres, courbe, camembert), à partir de données (CSV, tableaux, résultats d'analyse). À utiliser dès qu'on demande un fichier Excel, un tableur ou un récapitulatif chiffré avec graphique.
+triggers: [excel, xlsx, classeur, tableur, spreadsheet]
 ---
 
 # Skill xlsx : créer un classeur Excel
