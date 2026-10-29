@@ -586,8 +586,8 @@ export function streamCutError(
 ): AtelierError {
   const message =
     reason === 'tool_call_parse'
-      ? "Le serveur n'a pas pu lire un appel d'outil du modèle, même après une nouvelle tentative. Cela arrive surtout quand le modèle écrit un très long fichier d'un seul bloc : demande-lui de le produire en plusieurs parties, ou découpe la demande."
-      : "Le serveur a interrompu la réponse du modèle avant la fin. Cela arrive quand le texte contient une balise réservée du modèle (<tool_call>) : reformule la demande sans cette balise, ou demande de l'écrire « < tool_call> ».";
+      ? "Le serveur n'a pas pu lire un appel d'outil du modèle, même après une nouvelle tentative. Cela arrive surtout quand le modèle écrit un très long fichier d'un seul bloc : demandez-lui de le produire en plusieurs parties, ou découpez la demande."
+      : "Le serveur a interrompu la réponse du modèle avant la fin. Cela arrive quand le texte contient une balise réservée du modèle (<tool_call>) : reformulez la demande sans cette balise, ou demandez au modèle de l'écrire « < tool_call> ».";
   return new AtelierError('llm/bad_response', message, {
     retryable: false,
     cause,
