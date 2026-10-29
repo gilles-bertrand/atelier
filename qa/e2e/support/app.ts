@@ -147,7 +147,11 @@ export async function send(page: Page, text: string): Promise<void> {
   const box = page.getByRole('textbox', { name: 'Votre message' });
   await box.fill(text);
   await page.getByRole('button', { name: 'Envoyer' }).click();
-  await expect(page.getByRole('button', { name: 'Arrêter' })).toBeVisible();
+  // Pas d'attente sur « Arrêter » : avec un modèle rapide (mock en CI), le tour peut
+  // déjà être fini. Le message envoyé apparaît dans la conversation dans tous les cas.
+  await expect(
+    page.getByRole('log', { name: 'Conversation' }).getByText(text, { exact: true }).first(),
+  ).toBeVisible();
 }
 
 /**
