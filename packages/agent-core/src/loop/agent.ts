@@ -3,6 +3,7 @@
  * `fullStream` est traduit en {@link AgentEvent} typés.
  */
 import {
+  APICallError,
   InvalidResponseDataError,
   stepCountIs,
   streamText,
@@ -276,7 +277,7 @@ export class Agent {
         const maxSteps = o.maxSteps ?? MAX_STEPS;
         let todos: readonly TodoItem[] | undefined; // liste mise à jour pendant ce tour
         let continuations = 0;
-        let cutRetries = 0;
+        const cutRetries = new Map<StreamCutReason, number>();
         let usedTools = false;
         let verified = false;
         let lastText = '';
@@ -433,15 +434,17 @@ export class Agent {
           if (streamError !== undefined) {
             // Flux coupé sans fin (Ollama, jeton réservé <tool_call> recopié) : une
             // relance qui demande de reprendre en écrivant la balise autrement.
-            if (!isStreamCut(streamError) || cutRetries >= MAX_STREAM_CUT_RETRIES) break;
-            cutRetries += 1;
-            o.log?.('stream-cut:retry', { attempt: cutRetries, partialChars: lastText.length });
+            const cut = streamCutReason(streamError);
+            const attempt = cut === undefined ? 0 : (cutRetries.get(cut) ?? 0) + 1;
+            if (cut === undefined || attempt > MAX_STREAM_CUT_RETRIES) break;
+            cutRetries.set(cut, attempt);
+            o.log?.('stream-cut:retry', { reason: cut, attempt, partialChars: lastText.length });
             if (lastText.trim() !== '') emit({ type: 'text_delta', delta: '\n\n' });
             const partial: ModelMessage[] =
               lastText.trim() !== '' && !endsWithText(messages, lastText)
                 ? [{ role: 'assistant', content: [{ type: 'text', text: lastText }] }]
                 : [];
-            base = [...messages, ...partial, injectedMessage('stream_cut', streamCutPrompt())];
+            base = [...messages, ...partial, injectedMessage(cut, streamCutPrompt(cut))];
             responseOffset = 0;
             streamError = undefined;
             continue;
@@ -484,9 +487,10 @@ export class Agent {
           return { messages, usage: usage(), reason: 'aborted' };
         }
         if (streamError !== undefined) {
+          const cut = streamCutReason(streamError);
           const error = (
-            isStreamCut(streamError)
-              ? streamCutError(streamError)
+            cut !== undefined
+              ? streamCutError(streamError, cut)
               : toLlmError(streamError, o.serverUrl)
           ).toJSON();
           emit({ type: 'error', error });
@@ -531,32 +535,66 @@ export class Agent {
   }
 }
 
-/** Relances max. après un flux coupé sans `finish_reason` (#42). */
+/** Relances max., par nature de coupure, dans un même tour (#42, #69). */
 export const MAX_STREAM_CUT_RETRIES = 1;
 
 /**
- * Vrai pour un flux terminé sans `finish_reason` ni `[DONE]` : c'est ce que fait
- * Ollama (parseur Qwen) quand le modèle émet le jeton réservé `<tool_call>` dans
- * du texte, par exemple en recopiant une documentation.
+ * Coupures du serveur qui justifient une relance (`details.reason` de l'erreur finale) :
+ * - `stream_cut` : flux terminé sans `finish_reason` ni `[DONE]` ; Ollama (parseur
+ *   Qwen) le fait quand le modèle écrit le jeton réservé `<tool_call>` dans du texte (#42) ;
+ * - `tool_call_parse` : HTTP 500 d'Ollama dont le journal dit `tool call parsing
+ *   failed error=EOF` ; le parseur n'a pas pu décoder l'appel d'outil que le modèle
+ *   venait d'ouvrir (#69). Le client ne reçoit qu'un corps « EOF ».
  */
-export function isStreamCut(error: unknown): boolean {
-  return (
-    InvalidResponseDataError.isInstance(error) && /without a finish reason/i.test(error.message)
-  );
+export type StreamCutReason = 'stream_cut' | 'tool_call_parse';
+
+const TOOL_CALL_PARSE = /tool call parsing failed|\bEOF\b/i;
+
+/** Nature de la coupure, ou `undefined` si l'erreur n'en est pas une. */
+export function streamCutReason(error: unknown): StreamCutReason | undefined {
+  if (
+    InvalidResponseDataError.isInstance(error) &&
+    /without a finish reason/i.test(error.message)
+  ) {
+    return 'stream_cut';
+  }
+  if (
+    APICallError.isInstance(error) &&
+    error.statusCode === 500 &&
+    (TOOL_CALL_PARSE.test(error.message) || TOOL_CALL_PARSE.test(error.responseBody ?? ''))
+  ) {
+    return 'tool_call_parse';
+  }
+  return undefined;
 }
 
-/** Message de relance après un flux coupé (invisible dans l'UI). */
-export function streamCutPrompt(): string {
+/** Vrai si l'erreur est une coupure du serveur qui justifie une relance. */
+export function isStreamCut(error: unknown): boolean {
+  return streamCutReason(error) !== undefined;
+}
+
+/** Message de relance après une coupure (invisible dans l'UI). */
+export function streamCutPrompt(reason: StreamCutReason = 'stream_cut'): string {
+  if (reason === 'tool_call_parse') {
+    return `${APP_MESSAGE_PREFIX} Le serveur n'a pas pu lire ton dernier appel d'outil : il était incomplet ou mal formé. Refais un seul appel d'outil, complet, avec des arguments JSON valides. Si tu écrivais un long fichier, découpe-le : crée-le avec write_file et une première partie courte, puis complète-le par des appels plus courts (edit_file, ou un script dans la machine isolée).`;
+  }
   return `${APP_MESSAGE_PREFIX} Ta réponse a été coupée par le serveur : <tool_call> est une balise réservée du modèle, qui ne peut pas être écrite telle quelle. Continue ta réponse exactement là où elle s'est arrêtée, sans répéter ce qui précède, en écrivant chaque balise réservée (<tool_call>, </tool_call>, <tool_response>) avec une espace après le chevron : < tool_call>, < /tool_call>. Si un fichier doit contenir ces balises, écris-le avec un script qui assemble la balise (par exemple '<' + 'tool_call>').`;
 }
 
-/** Erreur finale si la relance est coupée à son tour : pas de « Réessayer » en boucle. */
-export function streamCutError(cause: unknown): AtelierError {
-  return new AtelierError(
-    'llm/bad_response',
-    "Le serveur a interrompu la réponse du modèle avant la fin. Cela arrive quand le texte contient une balise réservée du modèle (<tool_call>) : reformule la demande sans cette balise, ou demande de l'écrire « < tool_call> ».",
-    { retryable: false, cause, details: { reason: 'stream_cut' } },
-  );
+/** Erreur finale si la relance échoue à son tour : pas de « Réessayer » en boucle. */
+export function streamCutError(
+  cause: unknown,
+  reason: StreamCutReason = 'stream_cut',
+): AtelierError {
+  const message =
+    reason === 'tool_call_parse'
+      ? "Le serveur n'a pas pu lire un appel d'outil du modèle, même après une nouvelle tentative. Cela arrive surtout quand le modèle écrit un très long fichier d'un seul bloc : demande-lui de le produire en plusieurs parties, ou découpe la demande."
+      : "Le serveur a interrompu la réponse du modèle avant la fin. Cela arrive quand le texte contient une balise réservée du modèle (<tool_call>) : reformule la demande sans cette balise, ou demande de l'écrire « < tool_call> ».";
+  return new AtelierError('llm/bad_response', message, {
+    retryable: false,
+    cause,
+    details: { reason },
+  });
 }
 
 function endsWithText(messages: readonly ModelMessage[], text: string): boolean {
