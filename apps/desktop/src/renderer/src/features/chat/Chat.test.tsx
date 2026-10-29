@@ -235,6 +235,30 @@ describe('conversation', () => {
     expect(api.callsTo('agent:retry')).toEqual([{ sessionId: 's1' }]);
   });
 
+  it('flux coupé sur une balise réservée : message clair, pas de « Réessayer », saisie prête', async () => {
+    const user = await openSession();
+    await user.type(
+      screen.getByLabelText('Votre message'),
+      'Écris un exemple de <tool_call>{Enter}',
+    );
+    emit({
+      type: 'error',
+      error: {
+        code: 'llm/bad_response',
+        message: 'technique',
+        retryable: false,
+        details: { reason: 'stream_cut' },
+      },
+    });
+    expect(screen.getByRole('alert')).toHaveTextContent(/balise réservée/);
+    expect(screen.queryByRole('button', { name: 'Réessayer' })).not.toBeInTheDocument();
+    expect(screen.getByText('Reformulez votre demande ci-dessous.')).toBeInTheDocument();
+    const input = screen.getByLabelText('Votre message');
+    expect(input).toBeEnabled();
+    await user.type(input, 'Autrement{Enter}');
+    expect(api.callsTo('agent:send').at(-1)).toEqual({ sessionId: 's1', text: 'Autrement' });
+  });
+
   it('arrête le tour en cours', async () => {
     const user = await openSession();
     await user.type(screen.getByLabelText('Votre message'), 'Long{Enter}');

@@ -49,9 +49,36 @@ const KIND_MESSAGES: Record<string, string> = {
     'Par sécurité, Atelier n’ouvre directement que les documents (PDF, images, textes, tableurs…). Utilisez « Afficher dans le Finder ».',
 };
 
+/** Messages propres à une cause précise (`details.reason`), prioritaires sur le code. */
+const REASON_MESSAGES: Record<string, string> = {
+  stream_cut:
+    'Le serveur a interrompu la réponse avant la fin. Cela arrive quand le texte contient une balise réservée du modèle (<tool_call>). Reformulez la demande sans cette balise, ou demandez de l’écrire « < tool_call> ».',
+};
+
+/** Causes pour lesquelles relancer le même tour échouerait de la même façon. */
+const NOT_RETRYABLE_REASONS = new Set(['stream_cut']);
+
+function detail(error: Pick<SerializedAtelierError, 'details'>, key: string): string | undefined {
+  const value = error.details?.[key];
+  return typeof value === 'string' ? value : undefined;
+}
+
 /** Message lisible pour une erreur sérialisée. */
 export function errorMessage(error: Pick<SerializedAtelierError, 'code' | 'details'>): string {
-  const kind = error.details?.['kind'];
-  if (typeof kind === 'string' && KIND_MESSAGES[kind]) return KIND_MESSAGES[kind];
+  const kind = detail(error, 'kind');
+  if (kind !== undefined && KIND_MESSAGES[kind]) return KIND_MESSAGES[kind];
+  const reason = detail(error, 'reason');
+  if (reason !== undefined && REASON_MESSAGES[reason]) return REASON_MESSAGES[reason];
   return MESSAGES[error.code];
+}
+
+/**
+ * « Réessayer » a-t-il un sens ? Non quand la même demande échouerait à
+ * l'identique (flux coupé sur une balise réservée) : il faut reformuler. Les
+ * autres erreurs gardent le bouton, même non `retryable` : après avoir corrigé
+ * le jeton ou le modèle dans les Réglages, rejouer le tour est utile.
+ */
+export function canRetry(error: Pick<SerializedAtelierError, 'details'>): boolean {
+  const reason = detail(error, 'reason');
+  return reason === undefined || !NOT_RETRYABLE_REASONS.has(reason);
 }

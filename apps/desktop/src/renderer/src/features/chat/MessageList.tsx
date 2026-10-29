@@ -7,7 +7,7 @@ import { Loader2, RotateCcw } from 'lucide-react';
 import type { ChatMessage } from '@atelier/shared';
 import { Button } from '@renderer/components/ui/button';
 import { Alert } from '@renderer/components/ui/primitives';
-import { errorMessage } from '@renderer/lib/error-messages';
+import { canRetry, errorMessage } from '@renderer/lib/error-messages';
 import type { SessionView, TurnView } from '@renderer/state/chat-reducer';
 import { Markdown } from './Markdown';
 import { AttachmentChip, ReasoningBlock, SourcesBadge, ToolCallBlock } from './MessageParts';
@@ -106,10 +106,14 @@ function TurnStatus({
         <Alert tone="error" title="La réponse n’a pas pu aboutir">
           {errorMessage(turn.error)}
         </Alert>
-        <Button variant="outline" size="sm" onClick={onRetry}>
-          <RotateCcw className="size-3.5" aria-hidden />
-          Réessayer
-        </Button>
+        {canRetry(turn.error) ? (
+          <Button variant="outline" size="sm" onClick={onRetry}>
+            <RotateCcw className="size-3.5" aria-hidden />
+            Réessayer
+          </Button>
+        ) : (
+          <p className="text-sm text-muted-foreground">Reformulez votre demande ci-dessous.</p>
+        )}
       </div>
     );
   }

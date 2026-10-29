@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import type { AgentEvent, ChatMessage, SessionSummary } from '@atelier/shared';
 import { App } from '@renderer/App';
-import { errorMessage } from '@renderer/lib/error-messages';
+import { canRetry, errorMessage } from '@renderer/lib/error-messages';
 import { defaultTestSettings, installFakeApi, type FakeApi } from '@renderer/test/fake-api';
 import { changedFiles } from './SidePanel';
 
@@ -181,5 +181,14 @@ describe('errorMessage', () => {
       /Afficher dans le Finder/,
     );
     expect(errorMessage({ code: 'tool/failed' })).toBe('L’action a échoué.');
+  });
+
+  it('explique un flux coupé et retire « Réessayer » pour cette seule cause', () => {
+    const cut = { code: 'llm/bad_response' as const, details: { reason: 'stream_cut' } };
+    expect(errorMessage(cut)).toMatch(/balise réservée/);
+    expect(canRetry(cut)).toBe(false);
+    expect(errorMessage({ code: 'llm/bad_response' })).toMatch(/Ollama/);
+    expect(canRetry({})).toBe(true);
+    expect(canRetry({ details: { kind: 'server_not_configured' } })).toBe(true);
   });
 });
