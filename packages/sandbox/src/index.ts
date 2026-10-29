@@ -12,7 +12,13 @@ export {
   MIN_FREE_BYTES_FOR_CREATE,
   type LimaSandboxOptions,
 } from './lima-sandbox.js';
-export { Limactl, parseLimaList, type LimaInstance, type LimaMount } from './limactl.js';
+export {
+  isSshMuxFailure,
+  Limactl,
+  parseLimaList,
+  type LimaInstance,
+  type LimaMount,
+} from './limactl.js';
 export { classifyLimaFailure } from './errors.js';
 export { defaultLimaHome, defaultSkillsDir, guestToHost, hostToGuest } from './paths.js';
 export { DEFAULT_MAX_OUTPUT_BYTES, OutputCollector } from './output.js';
