@@ -1,7 +1,8 @@
 /**
  * Critère d'acceptation 5 (docs/BRIEF.md) : `curl https://example.com` lancé
  * par l'agent dans la VM échoue tant que le réseau n'est pas autorisé, puis
- * réussit une fois l'interrupteur « Internet pour les commandes » activé.
+ * réussit une fois l'interrupteur « Internet pour les commandes » activé (pied de la
+ * colonne de gauche, section Environnement).
  *
  * Mode réel uniquement : sans VM (CI), il n'y a rien à bloquer. En mock, on
  * vérifie seulement que la commande n'est jamais exécutée hors VM.
@@ -55,7 +56,12 @@ test('critère 5 : curl échoue dans la VM tant que le réseau est coupé', asyn
   expect(blocked.length).toBeGreaterThan(0);
   for (const call of blocked) expect(call.output ?? '').not.toContain('Example Domain');
 
-  // 2. Interrupteur du panneau latéral activé : la même commande réussit.
+  // 2. Interrupteur de l'Environnement (pied de la colonne de gauche, à déplier)
+  //    activé : la même commande réussit.
+  const environment = page
+    .getByRole('navigation', { name: 'Barre latérale' })
+    .getByRole('button', { name: /Environnement/ });
+  if ((await environment.getAttribute('aria-expanded')) !== 'true') await environment.click();
   const toggle = page.getByRole('switch', { name: 'Internet pour les commandes' });
   await expect(toggle).toBeEnabled();
   await toggle.click();

@@ -38,7 +38,8 @@ function setup(sandboxWorkspace = session.workspace): FakeApi {
 async function open(api: FakeApi) {
   const user = userEvent.setup();
   render(<App />);
-  await user.click(await screen.findByText('Récap'));
+  const recent = await screen.findByRole('list', { name: 'Conversations récentes' });
+  await user.click(within(recent).getByText('Récap'));
   await screen.findByRole('complementary', { name: 'Suivi de la conversation' });
   const emit = (event: Partial<AgentEvent> & { type: AgentEvent['type'] }): void => {
     api.emit('agent:event', { sessionId: 's1', turnId: 't1', ...event } as AgentEvent);
@@ -83,9 +84,23 @@ describe('panneau latéral', () => {
     expect(within(panel).getByText(/Créé/)).toBeInTheDocument();
   });
 
-  it('active internet pour les commandes de cette conversation', async () => {
+  it('n’affiche plus l’environnement : il est en pied de colonne gauche', async () => {
+    const api = setup();
+    await open(api);
+    const panel = screen.getByRole('complementary', { name: 'Suivi de la conversation' });
+    expect(within(panel).queryByText('Environnement')).not.toBeInTheDocument();
+    expect(within(panel).queryByRole('switch')).not.toBeInTheDocument();
+  });
+});
+
+describe('environnement (pied de colonne gauche)', () => {
+  it('active internet pour les commandes de la conversation ouverte', async () => {
     const api = setup();
     const { user } = await open(api);
+    const summary = screen.getByRole('button', { name: /Environnement/ });
+    expect(summary).toHaveAttribute('aria-expanded', 'false');
+    expect(summary).toHaveTextContent('Prêt');
+    await user.click(summary);
     const toggle = screen.getByRole('switch', { name: 'Internet pour les commandes' });
     expect(toggle).toHaveAttribute('aria-checked', 'false');
     await user.click(toggle);
@@ -96,12 +111,13 @@ describe('panneau latéral', () => {
       networkEnabled: true,
     });
     expect(toggle).toHaveAttribute('aria-checked', 'true');
-    expect(screen.getByText('Prêt')).toBeInTheDocument();
+    expect(summary).toHaveTextContent('Internet autorisé');
   });
 
-  it('désactive l’interrupteur si la VM sert un autre dossier, et se masque', async () => {
+  it('désactive l’interrupteur si la VM sert un autre dossier ; le suivi se masque', async () => {
     const api = setup('/Users/test/Autre');
     const { user } = await open(api);
+    await user.click(screen.getByRole('button', { name: /Environnement/ }));
     expect(screen.getByRole('switch', { name: 'Internet pour les commandes' })).toBeDisabled();
     expect(screen.getByText(/sera monté au prochain message/)).toBeInTheDocument();
     const button = screen.getByRole('button', { name: 'Panneau de suivi' });

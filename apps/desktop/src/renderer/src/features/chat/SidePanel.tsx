@@ -1,20 +1,10 @@
 /**
- * Panneau latéral de la conversation : tâches en direct, fichiers créés ou
- * modifiés, état de l'environnement d'exécution (VM, réseau) et du serveur.
+ * Panneau de suivi de la conversation : tâches en direct, fichiers créés ou
+ * modifiés. L'environnement (VM, réseau, serveur) est en pied de colonne gauche.
  */
-import { useId, useState, type ReactNode } from 'react';
-import { Cpu, FileText, Globe, ListChecks, Loader2, Server } from 'lucide-react';
-import type {
-  ChatMessage,
-  FileCard as FileCardData,
-  SandboxStatus,
-  ServerStatus,
-  SessionSummary,
-} from '@atelier/shared';
-import { serverStatusText } from '@renderer/components/status/ServerStatusBadge';
-import { call, toSerializedError } from '@renderer/lib/api';
-import { errorMessage } from '@renderer/lib/error-messages';
-import { cn } from '@renderer/lib/utils';
+import { useId, type ReactNode } from 'react';
+import { FileText, ListChecks, type LucideIcon } from 'lucide-react';
+import type { ChatMessage, FileCard as FileCardData } from '@atelier/shared';
 import type { SessionView } from '@renderer/state/chat-reducer';
 import { FileCard, TodoList } from './ToolDisplays';
 
@@ -48,33 +38,13 @@ export function changedFiles(messages: readonly ChatMessage[]): FileCardData[] {
   return [...byPath.values()].reverse();
 }
 
-const VM_LABELS: Record<SandboxStatus['state'], string> = {
-  absent: 'Pas encore préparé',
-  stopped: 'Arrêté',
-  starting: 'Démarrage…',
-  provisioning: 'Préparation…',
-  ready: 'Prêt',
-  restarting: 'Changement de dossier…',
-  error: 'Indisponible',
-};
-
-const VM_DOTS: Record<SandboxStatus['state'], string> = {
-  absent: 'bg-muted-foreground/50',
-  stopped: 'bg-muted-foreground/50',
-  starting: 'bg-amber-500',
-  provisioning: 'bg-amber-500',
-  ready: 'bg-emerald-500',
-  restarting: 'bg-amber-500',
-  error: 'bg-red-500',
-};
-
 function Section({
   title,
   icon: Icon,
   children,
 }: {
   title: string;
-  icon: typeof Cpu;
+  icon: LucideIcon;
   children: ReactNode;
 }) {
   const id = useId();
@@ -92,129 +62,7 @@ function Section({
   );
 }
 
-function EnvironmentSection({
-  session,
-  sandbox,
-  server,
-  model,
-}: {
-  session: SessionSummary;
-  sandbox: SandboxStatus;
-  server: ServerStatus;
-  model: string;
-}) {
-  const switchId = useId();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | undefined>();
-  const mountedHere = sandbox.workspace === session.workspace;
-  const busyState = ['starting', 'provisioning', 'restarting'].includes(sandbox.state);
-
-  const toggleNetwork = async (enabled: boolean): Promise<void> => {
-    setBusy(true);
-    setError(undefined);
-    try {
-      await call('sandbox:set-network', { sessionId: session.id, enabled });
-    } catch (e) {
-      setError(errorMessage(toSerializedError(e)));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Section title="Environnement" icon={Cpu}>
-      <dl className="space-y-2 text-sm">
-        <div className="flex items-center justify-between gap-2">
-          <dt className="text-muted-foreground">Machine isolée</dt>
-          <dd className="flex items-center gap-2">
-            {busyState ? (
-              <Loader2 className="size-3.5 animate-spin text-muted-foreground" aria-hidden />
-            ) : (
-              <span className={cn('size-2 rounded-full', VM_DOTS[sandbox.state])} aria-hidden />
-            )}
-            {VM_LABELS[sandbox.state]}
-          </dd>
-        </div>
-        {sandbox.state === 'error' && sandbox.error ? (
-          <p className="text-xs text-destructive">{sandbox.error}</p>
-        ) : null}
-        {sandbox.state === 'ready' && !mountedHere ? (
-          <p className="text-xs text-muted-foreground">
-            Le dossier de cette conversation sera monté au prochain message.
-          </p>
-        ) : null}
-        <div className="flex items-center justify-between gap-2">
-          <dt className="text-muted-foreground">
-            <Server className="mr-1 inline size-3.5 align-[-2px]" aria-hidden />
-            Serveur
-          </dt>
-          <dd className="truncate text-right" title={model}>
-            {serverStatusText(server)}
-          </dd>
-        </div>
-        <div className="flex items-center justify-between gap-2">
-          <dt className="text-muted-foreground">Modèle</dt>
-          <dd className="truncate font-mono text-xs" title={model}>
-            {model}
-          </dd>
-        </div>
-      </dl>
-
-      <div className="flex items-start justify-between gap-3 rounded-lg border px-3 py-2.5">
-        <div className="space-y-0.5">
-          <label htmlFor={switchId} className="flex items-center gap-1.5 text-sm font-medium">
-            <Globe className="size-3.5" aria-hidden />
-            Internet pour les commandes
-          </label>
-          <p id={`${switchId}-hint`} className="text-xs text-muted-foreground">
-            Coupé par défaut. La recherche web de l’assistant reste disponible.
-          </p>
-        </div>
-        <button
-          id={switchId}
-          type="button"
-          role="switch"
-          aria-checked={sandbox.networkEnabled && mountedHere}
-          aria-describedby={`${switchId}-hint`}
-          disabled={busy || sandbox.state !== 'ready' || !mountedHere}
-          onClick={() => void toggleNetwork(!(sandbox.networkEnabled && mountedHere))}
-          className={cn(
-            'relative mt-0.5 inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50',
-            sandbox.networkEnabled && mountedHere ? 'bg-primary' : 'bg-input',
-          )}
-        >
-          <span
-            className={cn(
-              'inline-block size-4 rounded-full bg-background shadow transition-transform',
-              sandbox.networkEnabled && mountedHere ? 'translate-x-4' : 'translate-x-0.5',
-            )}
-          />
-        </button>
-      </div>
-      {error ? (
-        <p role="alert" className="text-xs text-destructive">
-          {error}
-        </p>
-      ) : null}
-    </Section>
-  );
-}
-
-export function SidePanel({
-  id,
-  session,
-  view,
-  sandbox,
-  server,
-  model,
-}: {
-  id: string;
-  session: SessionSummary;
-  view: SessionView;
-  sandbox: SandboxStatus;
-  server: ServerStatus;
-  model: string;
-}) {
+export function SidePanel({ id, view }: { id: string; view: SessionView }) {
   const files = changedFiles(view.live ? [...view.messages, view.live] : view.messages);
   return (
     <aside
@@ -249,8 +97,6 @@ export function SidePanel({
           </p>
         )}
       </Section>
-
-      <EnvironmentSection session={session} sandbox={sandbox} server={server} model={model} />
     </aside>
   );
 }

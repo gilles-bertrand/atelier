@@ -30,6 +30,8 @@ uv run --with reportlab --with pillow fixtures/generate-demo-fixtures.py
 
 ## Critères
 
+**Navigation.** Tout part de la colonne de gauche. « ＋ Nouvelle conversation » (⌘N) ouvre une conversation dans le dossier de la conversation en cours ; depuis l'accueil, il demande de choisir un dossier. Les conversations passées sont dans « Récentes » et dans « Dossiers », et ⌘K les cherche par titre. Les Réglages sont en pied de colonne ; ⌘B masque ou affiche la colonne. Jouer chaque critère dans sa propre conversation.
+
 ### 1. Installation et connexion sans terminal
 
 Sur un Mac Apple Silicon neuf : installer le `.dmg`, lancer Atelier, puis suivre l'onboarding (serveur : URL et token, test de connexion, puis provisionnement de la VM).
@@ -112,7 +114,7 @@ Glisser dans le chat `rapport-annuel-2025.pdf`, `facture-scannee.pdf` et `ticket
 
 > Lance `curl https://example.com` dans la VM
 
-- **Attendu :** la commande échoue tant que le réseau de la VM n'est pas autorisé dans le panneau latéral. Une fois l'interrupteur activé, la même commande réussit.
+- **Attendu :** la commande échoue tant que le réseau de la VM n'est pas autorisé. L'interrupteur « Internet pour les commandes » se trouve en pied de la colonne de gauche : déplier « Environnement ». Une fois l'interrupteur activé, la même commande réussit.
 
 ### 6. Qualité
 

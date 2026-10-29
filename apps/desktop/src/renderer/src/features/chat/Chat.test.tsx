@@ -54,7 +54,8 @@ const emit = (event: Omit<AgentEvent, 'sessionId' | 'turnId'> & Partial<AgentEve
 async function openSession(): Promise<ReturnType<typeof userEvent.setup>> {
   const user = userEvent.setup();
   render(<App />);
-  await user.click(await screen.findByText('Récap des ventes'));
+  const recent = await screen.findByRole('list', { name: 'Conversations récentes' });
+  await user.click(within(recent).getByText('Récap des ventes'));
   await screen.findByText('Que puis-je faire pour vous ?');
   return user;
 }
@@ -64,11 +65,14 @@ beforeEach(() => {
 });
 
 describe('accueil', () => {
-  it('liste les conversations récentes et crée une conversation dans un dossier', async () => {
+  it('ne garde que « Choisir un dossier » ; les conversations sont dans la colonne', async () => {
     const user = userEvent.setup();
     render(<App />);
-    expect(await screen.findByText('Récap des ventes')).toBeInTheDocument();
-    expect(screen.getByText(/Ventes ·/)).toBeInTheDocument();
+    const recent = await screen.findByRole('list', { name: 'Conversations récentes' });
+    expect(within(recent).getByText('Récap des ventes')).toBeInTheDocument();
+    expect(within(recent).getByText(/Ventes ·/)).toBeInTheDocument();
+    const main = screen.getByRole('main');
+    expect(within(main).queryByText('Récap des ventes')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Choisir un dossier' }));
     expect(api.callsTo('session:create')).toEqual([{ workspace: '/Users/test/Projets' }]);
     expect(
@@ -76,14 +80,16 @@ describe('accueil', () => {
     ).toBeInTheDocument();
   });
 
-  it('demande confirmation avant de supprimer', async () => {
+  it('demande confirmation avant de supprimer (menu « … » de la conversation)', async () => {
     const user = userEvent.setup();
     api.handlers['session:delete'] = () => undefined;
     render(<App />);
     await user.click(
-      await screen.findByRole('button', { name: 'Supprimer la conversation « Récap des ventes »' }),
+      await screen.findByRole('button', { name: 'Actions pour « Récap des ventes »' }),
     );
+    await user.click(screen.getByRole('menuitem', { name: 'Supprimer' }));
     expect(api.callsTo('session:delete')).toEqual([]);
+    expect(screen.getByText(/Les fichiers du dossier sont conservés/)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Supprimer' }));
     expect(api.callsTo('session:delete')).toEqual([{ sessionId: 's1' }]);
     expect(await screen.findByText('Aucune conversation pour l’instant.')).toBeInTheDocument();
