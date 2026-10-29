@@ -351,3 +351,23 @@ export function describeCalls(calls: ToolCallRecord[]): string {
     .map((c) => `${c.status.padEnd(9)} ${c.toolName} ${JSON.stringify(c.input).slice(0, 200)}`)
     .join('\n');
 }
+
+/** Texte des réponses de l'assistant (sans les sorties d'outils) de la conversation la plus récente. */
+export async function assistantText(page: Page): Promise<string> {
+  return page.evaluate(async () => {
+    type Result<T> = { ok: boolean; value?: T };
+    const api = (
+      window as unknown as { atelier: { invoke: (c: string, r?: unknown) => Promise<unknown> } }
+    ).atelier;
+    const list = (await api.invoke('session:list', { limit: 1 })) as Result<{ id: string }[]>;
+    const id = list.value?.[0]?.id;
+    if (!id) return '';
+    const opened = (await api.invoke('session:open', { sessionId: id })) as Result<{
+      messages: { role: string; parts?: { type: string; text?: string }[] }[];
+    }>;
+    return (opened.value?.messages ?? [])
+      .filter((m) => m.role === 'assistant')
+      .flatMap((m) => (m.parts ?? []).filter((p) => p.type === 'text').map((p) => p.text ?? ''))
+      .join('\n');
+  });
+}

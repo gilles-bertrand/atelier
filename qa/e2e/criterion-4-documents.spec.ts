@@ -40,6 +40,16 @@ function pagesOf(spec: unknown): number[] {
   });
 }
 
+/**
+ * Pages réellement renvoyées par un `read_file` PDF, lues dans l'en-tête de sa sortie
+ * (`[PDF : …, 30 pages au total ; pages 1-11 ci-dessous …]`). Une lecture sans
+ * `pages` renvoie une première tranche : elle compte aussi.
+ */
+function pagesShown(output: string | undefined): number[] {
+  const match = /pages ([\d,\s-]+) ci-dessous/.exec(output ?? '');
+  return pagesOf(match?.[1]?.replace(/\s/g, ''));
+}
+
 test('critère 4 : rapport par tranches, facture et ticket par la vision, tableau des montants', async ({
   atelier,
   llm,
@@ -71,15 +81,17 @@ test('critère 4 : rapport par tranches, facture et ticket par la vision, tablea
 
   // 1. Le rapport est lu par tranches de pages (20 pages max par appel), en entier.
   const reportReads = calls.filter(
-    (c) => c.toolName === 'read_file' && String(c.input['path']).includes('rapport-annuel-2025'),
+    (c) =>
+      c.toolName === 'read_file' &&
+      c.status === 'success' &&
+      String(c.input['path']).includes('rapport-annuel-2025'),
   );
   expect(
     reportReads.length,
     'le rapport doit être lu en plusieurs tranches',
   ).toBeGreaterThanOrEqual(2);
-  for (const read of reportReads)
-    expect(pagesOf(read.input['pages']).length).toBeLessThanOrEqual(20);
-  const covered = new Set(reportReads.flatMap((r) => pagesOf(r.input['pages'])));
+  for (const read of reportReads) expect(pagesShown(read.output).length).toBeLessThanOrEqual(20);
+  const covered = new Set(reportReads.flatMap((r) => pagesShown(r.output)));
   expect(covered.size, 'les 30 pages doivent être lues').toBeGreaterThanOrEqual(30);
 
   // 2. Facture et ticket passent par la vision (look_at, ou read_file qui délègue à la vision).
@@ -93,8 +105,9 @@ test('critère 4 : rapport par tranches, facture et ticket par la vision, tablea
   expect(visual('ticket-de-caisse').length).toBeGreaterThan(0);
 
   const answer = await conversationText(page);
-  const table = page.getByRole('log', { name: 'Conversation' }).getByRole('table').last();
-  await expect(table).toBeVisible();
+  // Un tableau unique ou un tableau par document : les deux répondent à la demande.
+  const tables = page.getByRole('log', { name: 'Conversation' }).getByRole('table');
+  await expect(tables.last()).toBeVisible();
 
   if (!IS_REAL) {
     // Le ticket a bien été envoyé au modèle vision sous forme d'image.
@@ -113,7 +126,7 @@ test('critère 4 : rapport par tranches, facture et ticket par la vision, tablea
     .join('\n');
   expect(visionOutputs).toMatch(/439[,.]23/);
   expect(visionOutputs).toMatch(/27[,.]50/);
-  const tableText = (await table.textContent()) ?? '';
+  const tableText = (await tables.allTextContents()).join('\n');
   expect(tableText).toMatch(/439[,.]23/);
   expect(tableText).toMatch(/27[,.]5/);
   for (const amount of [/90[,.]00/, /186[,.]00/, /87[,.]00/, /363[,.]00/, /76[,.]23/]) {

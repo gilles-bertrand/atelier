@@ -6,15 +6,15 @@ _Dernière mise à jour : 2026-10-28, Lead._
 
 ## État par jalon
 
-| Jalon                                                       | État                                                                                                                                                                                                           | Responsable(s)                |
-| ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
-| M0 : squelette monorepo + `packages/shared` + `server/`     | ✅ fait                                                                                                                                                                                                        | Lead                          |
-| M1 : boucle AI SDK en CLI, outils fichiers, bash local, web | ✅ fait                                                                                                                                                                                                        | Core, MCP & Web               |
-| M2 : sandbox Lima + permissions                             | ✅ fait                                                                                                                                                                                                        | Sandbox, Core                 |
-| M3 : app Electron fonctionnelle                             | ✅ fait (chat, panneau latéral, onboarding, ouverture sécurisée des fichiers)                                                                                                                                  | UI                            |
-| M4 : skills + MCP + SearXNG + documents                     | ✅ fait (pièces jointes et vision comprises)                                                                                                                                                                   | Sandbox, MCP & Web, Documents |
-| M5 : historique, compaction, réglages, packaging signé      | 🟡 historique (node:sqlite), compaction et réglages faits ; build arm64 non signé vérifié (`.dmg`, icône) ; **signature et notarisation en attente du certificat Developer ID et de la clé App Store Connect** | UI, Core, Lead                |
-| Démo finale (critères d'acceptation)                        | 🟡 scénario et fichiers prêts (`docs/DEMO.md`, `fixtures/`) ; e2e automatisés (`qa/`) : critères 3 et 5 ✅ en réel, critères 2 et 4 ❌ en réel (#39, #40, #44, #45) ; rapport `docs/QA.md`                     | Lead                          |
+| Jalon                                                       | État                                                                                                                                                                                                                                                   | Responsable(s)                |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------- |
+| M0 : squelette monorepo + `packages/shared` + `server/`     | ✅ fait                                                                                                                                                                                                                                                | Lead                          |
+| M1 : boucle AI SDK en CLI, outils fichiers, bash local, web | ✅ fait                                                                                                                                                                                                                                                | Core, MCP & Web               |
+| M2 : sandbox Lima + permissions                             | ✅ fait                                                                                                                                                                                                                                                | Sandbox, Core                 |
+| M3 : app Electron fonctionnelle                             | ✅ fait (chat, panneau latéral, onboarding, ouverture sécurisée des fichiers)                                                                                                                                                                          | UI                            |
+| M4 : skills + MCP + SearXNG + documents                     | ✅ fait (pièces jointes et vision comprises)                                                                                                                                                                                                           | Sandbox, MCP & Web, Documents |
+| M5 : historique, compaction, réglages, packaging signé      | 🟡 historique (node:sqlite), compaction et réglages faits ; build arm64 non signé vérifié (`.dmg`, icône) ; **signature et notarisation en attente du certificat Developer ID et de la clé App Store Connect**                                         | UI, Core, Lead                |
+| Démo finale (critères d'acceptation)                        | 🟡 scénario et fichiers prêts (`docs/DEMO.md`, `fixtures/`) ; e2e automatisés (`qa/`) : critères 3, 4 et 5 ✅ en réel ; critère 2 : livrables justes mais skill `xlsx` non utilisé (#60) et total inventé dans la réponse (#61) ; rapport `docs/QA.md` | Lead                          |
 
 ## Ce que contient le squelette
 
@@ -107,16 +107,19 @@ _Dernière mise à jour : 2026-10-28, Lead._
 - **Fixtures** déplacées de `demo/fixtures/` vers `fixtures/demo-ventes/` et `fixtures/demo-documents/` ; générateur `fixtures/generate-demo-fixtures.py`, désormais reproductible octet pour octet (dates des PDF figées).
 - **Bugs ouverts, par agent concerné** :
 
-| Issue | Sujet                                                                                  | Agent(s)        | Effet sur les critères       |
-| ----- | -------------------------------------------------------------------------------------- | --------------- | ---------------------------- |
-| #39   | La compaction en cours de tour résume la demande et garde les gros résultats           | Core            | critère 2 en réel            |
-| #40   | Aucun budget de contexte par étape (78 000 tokens dans une étape)                      | Core, Documents | critère 2 en réel, lenteur   |
-| #41   | Le runner MLX d'Ollama ignore `num_ctx` du Modelfile `atelier`                         | Lead, Core      | démo locale ≠ production     |
-| #42   | Un texte contenant `<tool_call>` coupe le flux Ollama (erreur serveur)                 | Core, Lead      | robustesse                   |
-| #43   | Le repli texte → outil exécute un `<tool_call>` cité depuis des données (§8)           | Core            | sécurité (vLLM, autres)      |
-| #44   | Les fichiers créés dans la VM n'ont pas de carte cliquable                             | Core, UI        | critère 2 (carte du `.xlsx`) |
-| #45   | Un PDF de 30 pages n'est lu qu'à moitié                                                | Documents, Core | critère 4                    |
-| #46   | La VM ne se crée pas si le nom d'utilisateur macOS dépasse 21 caractères (socket Lima) | Sandbox         | critère 1 (Mac neuf)         |
+| Issue | Sujet                                                                                  | Agent(s)            | Effet sur les critères                             |
+| ----- | -------------------------------------------------------------------------------------- | ------------------- | -------------------------------------------------- |
+| #39   | La compaction en cours de tour résume la demande et garde les gros résultats           | Core                | ✅ corrigé (#54) ; critère 2 en réel               |
+| #40   | Aucun budget de contexte par étape (78 000 tokens dans une étape)                      | Core, Documents     | ✅ corrigé (#50, #55) ; critère 2 en réel, lenteur |
+| #41   | Le runner MLX d'Ollama ignore `num_ctx` du Modelfile `atelier`                         | Lead, Core          | démo locale ≠ production                           |
+| #42   | Un texte contenant `<tool_call>` coupe le flux Ollama (erreur serveur)                 | Core, Lead          | ✅ corrigé (#56) ; robustesse                      |
+| #43   | Le repli texte → outil exécute un `<tool_call>` cité depuis des données (§8)           | Core                | ✅ corrigé (#53) ; sécurité (vLLM, autres)         |
+| #44   | Les fichiers créés dans la VM n'ont pas de carte cliquable                             | Core, UI            | ✅ corrigé (#51) ; critère 2 (carte du `.xlsx`)    |
+| #45   | Un PDF de 30 pages n'est lu qu'à moitié                                                | Documents, Core     | ✅ corrigé (#52, #55) ; critère 4                  |
+| #46   | La VM ne se crée pas si le nom d'utilisateur macOS dépasse 21 caractères (socket Lima) | Sandbox             | critère 1 (Mac neuf)                               |
+| #59   | Le modèle déforme le chemin des pièces jointes (`.atelier/uploads`, dossier caché)     | Documents, Core, UI | critère 4 (détour, 2 runs sur 4)                   |
+| #60   | Le modèle n'utilise pas le skill `xlsx`                                                | Core                | critère 2                                          |
+| #61   | La réponse finale cite un total inventé (fichiers justes)                              | Core                | critère 2                                          |
 
 ## Demandes d'évolution de `packages/shared`
 
