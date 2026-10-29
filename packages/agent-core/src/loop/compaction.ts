@@ -53,12 +53,14 @@ function userText(message: ModelMessage): string {
 }
 
 /** Nature d'un message `user` injecté par l'app (et non tapé par l'utilisateur). */
-export type InjectedKind = 'summary' | 'continuation' | 'stream_cut' | 'verification';
+export type InjectedKind =
+  'summary' | 'continuation' | 'stream_cut' | 'tool_call_parse' | 'verification';
 
 const INJECTED_KINDS: ReadonlySet<string> = new Set<InjectedKind>([
   'summary',
   'continuation',
   'stream_cut',
+  'tool_call_parse',
   'verification',
 ]);
 
