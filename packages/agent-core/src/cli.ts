@@ -120,6 +120,9 @@ function createRenderer(): (event: AgentEvent) => void {
       case 'tool_display':
         // L'affichage final arrive avec tool_result ; rien à afficher en terminal.
         break;
+      case 'tool_files':
+        // Émis par l'app (diff du dossier), jamais par la boucle en CLI.
+        break;
       case 'llm_retry':
         switchTo('none');
         process.stdout.write(

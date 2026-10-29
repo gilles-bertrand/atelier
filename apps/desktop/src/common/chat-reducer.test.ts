@@ -29,6 +29,32 @@ describe('applyAgentEvent', () => {
     ]);
   });
 
+  it('ajoute les fichiers produits par un outil (tool_files), sans doublon de chemin', () => {
+    const created = {
+      path: 'recap.xlsx',
+      absolutePath: '/w/recap.xlsx',
+      action: 'created',
+    } as const;
+    const message = reduce([
+      { ...base, type: 'tool_start', toolCallId: 'c1', toolName: 'bash', input: {} },
+      { ...base, type: 'tool_files', toolCallId: 'c1', files: [created] },
+      {
+        ...base,
+        type: 'tool_files',
+        toolCallId: 'c1',
+        files: [
+          { ...created, action: 'modified' },
+          { path: 'resume.md', absolutePath: '/w/resume.md', action: 'created' },
+        ],
+      },
+    ]);
+    const part = message.parts[0];
+    expect(part?.type === 'tool_call' ? part.files : undefined).toEqual([
+      { ...created, action: 'modified' },
+      { path: 'resume.md', absolutePath: '/w/resume.md', action: 'created' },
+    ]);
+  });
+
   it('suit un appel d’outil du début au résultat (display final prioritaire)', () => {
     const message = reduce([
       {

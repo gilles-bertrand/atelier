@@ -76,9 +76,9 @@ Dans l'app, l'URL `http://100.x.y.z:11434` (ou `http://<machine>.<tailnet>.ts.ne
 1. `OLLAMA_CONTEXT_LENGTH=32768` (s'applique à tous les modèles) ;
 2. le modèle dérivé `atelier` (`server/Modelfile`, `PARAMETER num_ctx 32768`), recommandé, car explicite et visible dans `/api/show`.
 
-⚠️ **Mac Apple Silicon (démo locale) : le moteur MLX d'Ollama ignore `num_ctx`** (constaté avec Ollama 0.40.12, `qwen3.5:35b` en nvfp4, issue #41). `/api/show` annonce bien 32 768, mais une requête de 77 931 tokens a été traitée sans troncature ni refus (4 min 10 s de préremplissage, pic de 38,7 Gio). La vraie limite est alors celle du modèle (262 144). Sur le serveur de production (GPU NVIDIA, moteur llama.cpp ou vLLM), la limite est appliquée : une requête trop longue y serait tronquée ou refusée.
-
-**Décision (Gilles, 29/10/2026)** : la démo locale garde le moteur MLX (104 tokens/s sur M4 Max). Ne pas compter sur le serveur pour borner le contexte : c'est l'app qui doit rester sous la fenêtre annoncée (budget par étape #40, compaction #39).
+> **Ollama sur Apple Silicon (runner MLX) : `num_ctx` n'est pas appliqué** (#41). Avec Ollama 0.40.x, les modèles en quantification MLX (`nvfp4`, `"runner":"mlx"` dans `/api/tags`) traitent des prompts au-delà de `num_ctx`. Mesure QA : 77 931 tokens traités pour `num_ctx 32768`, avec 4 min 10 s de préremplissage et un pic de 38,7 Gio ; `/api/show` renvoie pourtant toujours `32768`. La vraie limite devient celle du modèle (262 144). Sur le serveur de production (GPU NVIDIA, runner llama.cpp), c'est l'inverse : Ollama **tronque sans prévenir** un prompt trop long, en commençant par le début (prompt système, demande).
+>
+> Dans les deux cas, la fenêtre annoncée est un **plafond, pas une garantie** : c'est l'app qui borne ce qu'elle envoie (budget de contexte par étape #40, compaction #39, dans agent-core). **Décision (Gilles et le Lead, 29/10/2026)** : la démo locale garde le runner MLX (104 tokens/s pour `qwen3.5:35b` sur un M4 Max, mesure `docs/QA.md`). Prévoyez au moins 64 Go de RAM si la VM tourne en même temps.
 
 ## 4. Dimensionnement GPU / VRAM
 
