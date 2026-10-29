@@ -28,14 +28,20 @@ export type {
   VisionRequest,
 } from './vision.js';
 export {
+  findAttachment,
   importAttachment,
   importAttachments,
+  listAttachments,
   toAttachment,
   sanitizeFileName,
   MAX_ATTACHMENT_BYTES,
   UPLOADS_DIR,
 } from './attachments.js';
-export type { ImportAttachmentOptions, ImportedAttachment } from './attachments.js';
+export type {
+  AttachmentLookup,
+  ImportAttachmentOptions,
+  ImportedAttachment,
+} from './attachments.js';
 export { CACHE_DIR, cacheKey, createWorkspaceCache, noCache, sha256 } from './cache.js';
 export type { CacheKeyParts, ExtractionCache } from './cache.js';
 export { detectType, readSample } from './detect.js';

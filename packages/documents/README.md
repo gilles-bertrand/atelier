@@ -64,6 +64,10 @@ Une tranche s'arrête à 20 pages ou au budget `maxOutputTokens`, compté avec `
 
 La taille de la tranche suggérée est estimée d'après la taille des pages déjà lues. La dernière tranche se termine par `[Fin du document : page 30 sur 30 lue.]`. `INCOMPLETE_READ_MARKER` (« LECTURE INCOMPLÈTE ») est exporté pour qu'agent-core puisse détecter une lecture partielle.
 
+### Chemin de pièce jointe déformé
+
+Si le chemin donné est introuvable et que son nom de base (sans points initiaux, casse ignorée) correspond à **un seul** fichier de `.atelier/uploads/`, `read_file` et `look_at` lisent ce fichier et le signalent en tête de sortie : `[Atelier : « .ratelier/uploads/rapport.pdf » introuvable, pièce jointe « .atelier/uploads/rapport.pdf » utilisée.]` (#59 : qwen3.5:35b déforme parfois le dossier caché). Sinon, l'erreur liste les pièces jointes disponibles. Seuls les fichiers ordinaires de `.atelier/uploads/` sont candidats (pas de lien symbolique, pas d'autre dossier) ; un chemin hors du dossier de travail reste refusé.
+
 ## `look_at({ path, question, page? })`
 
 Envoie l'image (ou la page PDF rendue dans la VM) au modèle vision avec la question et renvoie la réponse texte seule.

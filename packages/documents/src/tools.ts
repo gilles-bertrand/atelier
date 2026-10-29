@@ -17,6 +17,7 @@ import {
   truncateToTokens,
   type ResolvedWorkspacePath,
 } from '@atelier/agent-core';
+import { findAttachment } from './attachments.js';
 import { createWorkspaceCache, noCache, sha256, type ExtractionCache } from './cache.js';
 import { detectType, readSample, type DetectedType } from './detect.js';
 import { decodeText } from './encoding.js';
@@ -87,6 +88,8 @@ const SUPPORTED_FORMATS =
 interface Target {
   resolved: ResolvedWorkspacePath;
   type: DetectedType;
+  /** Note à placer en tête de la sortie (chemin corrigé vers une pièce jointe). */
+  note?: string;
 }
 
 function isErrno(error: unknown): error is NodeJS.ErrnoException {
@@ -132,14 +135,49 @@ function rethrowAbort(error: unknown, signal: AbortSignal): void {
   if (error instanceof AtelierError && error.code === 'agent/aborted') throw error;
 }
 
+/** Pièces jointes citées au plus dans un message d'erreur. */
+const MAX_LISTED_ATTACHMENTS = 20;
+
+function notFound(input: string, available: readonly string[]): ToolOutput {
+  if (available.length === 0) return { ok: false, content: `Fichier introuvable : ${input}` };
+  const shown = available.slice(0, MAX_LISTED_ATTACHMENTS).join(', ');
+  const more =
+    available.length > MAX_LISTED_ATTACHMENTS
+      ? ` (et ${available.length - MAX_LISTED_ATTACHMENTS} autres)`
+      : '';
+  return {
+    ok: false,
+    content: `Fichier introuvable : ${input}. Pièces jointes disponibles : ${shown}${more}. Utilise le chemin exact.`,
+  };
+}
+
 async function openTarget(
   context: ToolExecutionContext,
   input: string,
 ): Promise<Target | ToolOutput> {
-  const resolved = await resolveWorkspacePath(context.workspace, input);
-  if (!resolved.exists) return { ok: false, content: `Fichier introuvable : ${input}` };
+  let resolved = await resolveWorkspacePath(context.workspace, input);
+  let note: string | undefined;
+  if (!resolved.exists) {
+    // Chemin déformé par le modèle (« .ratelier/uploads/x.pdf », « .x.pdf »…) :
+    // on ne cherche que dans les pièces jointes, par nom de base (#59).
+    const lookup = await findAttachment(context.workspace, input);
+    if (!lookup.match) return notFound(input, lookup.available);
+    resolved = lookup.match;
+    note = `[Atelier : « ${input} » introuvable, pièce jointe « ${resolved.relativePath} » utilisée.]`;
+  }
   const sample = await readSample(resolved.absolutePath);
-  return { resolved, type: await detectType(resolved.absolutePath, sample) };
+  return {
+    resolved,
+    type: await detectType(resolved.absolutePath, sample),
+    ...(note !== undefined ? { note } : {}),
+  };
+}
+
+/** Place la note de {@link openTarget} en tête de la sortie. */
+function withNote(target: Target, output: ToolOutput): ToolOutput {
+  return target.note === undefined
+    ? output
+    : { ...output, content: `${target.note}\n\n${output.content}` };
 }
 
 function isOutput(value: Target | ToolOutput): value is ToolOutput {
@@ -504,21 +542,29 @@ export function createReadFileTool(options: DocumentToolsOptions = {}) {
           cache: resolveCache(options, context.workspace),
           maxTokens: bodyBudget(resolveOutputTokens(options.maxOutputTokens)),
         };
-        switch (target.type.kind) {
-          case 'text':
-            return readText(ctx, target, input);
-          case 'pdf':
-            return readPdf(ctx, target, input);
-          case 'image':
-            return readImage(ctx, target);
-          case 'docx':
-          case 'xlsx':
-            return readOffice(ctx, target, input, target.type.kind);
-          case 'unsupported':
-            return unsupported(target);
-        }
+        return withNote(target, await readTarget(ctx, target, input));
       }),
   });
+}
+
+async function readTarget(
+  ctx: ReadContext,
+  target: Target,
+  input: ReadFileInput,
+): Promise<ToolOutput> {
+  switch (target.type.kind) {
+    case 'text':
+      return readText(ctx, target, input);
+    case 'pdf':
+      return readPdf(ctx, target, input);
+    case 'image':
+      return readImage(ctx, target);
+    case 'docx':
+    case 'xlsx':
+      return readOffice(ctx, target, input, target.type.kind);
+    case 'unsupported':
+      return unsupported(target);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -547,75 +593,78 @@ export function createLookAtTool(options: DocumentToolsOptions = {}) {
       guarded(async () => {
         const target = await openTarget(context, input.path);
         if (isOutput(target)) return target;
-        const { vision } = options;
-        if (target.type.kind !== 'image' && target.type.kind !== 'pdf') {
-          return {
-            ok: false,
-            content: `look_at examine les images et les pages de PDF ; « ${target.resolved.relativePath} » est un fichier ${target.type.label} : utilise read_file.`,
+        return withNote(target, await lookAt(target));
+        async function lookAt(target: Target): Promise<ToolOutput> {
+          const { vision } = options;
+          if (target.type.kind !== 'image' && target.type.kind !== 'pdf') {
+            return {
+              ok: false,
+              content: `look_at examine les images et les pages de PDF ; « ${target.resolved.relativePath} » est un fichier ${target.type.label} : utilise read_file.`,
+            };
+          }
+          if (!vision) {
+            return {
+              ok: false,
+              content:
+                "Aucun modèle vision n'est configuré : l'utilisateur peut en choisir un dans les Réglages.",
+            };
+          }
+          const cache = resolveCache(options, context.workspace);
+          const data = await readRegularFile(target.resolved.absolutePath, MAX_BINARY_BYTES);
+          const fileHash = sha256(data);
+          const page = target.type.kind === 'pdf' ? (input.page ?? 1) : undefined;
+          let label = `image ${target.resolved.relativePath}`;
+          if (page !== undefined) {
+            const { totalPages } = await extractPdfText(data, (total) => {
+              if (page > total) {
+                throw new AtelierError(
+                  'tool/invalid_input',
+                  `Page ${page} inexistante : le PDF compte ${total} page${total > 1 ? 's' : ''}.`,
+                );
+              }
+              return [];
+            });
+            label = `page ${page}/${totalPages} de ${target.resolved.relativePath}`;
+          }
+          const key = {
+            kind: 'look_at',
+            file: fileHash,
+            page,
+            question: input.question,
+            vision: vision.id,
           };
-        }
-        if (!vision) {
-          return {
-            ok: false,
-            content:
-              "Aucun modèle vision n'est configuré : l'utilisateur peut en choisir un dans les Réglages.",
-          };
-        }
-        const cache = resolveCache(options, context.workspace);
-        const data = await readRegularFile(target.resolved.absolutePath, MAX_BINARY_BYTES);
-        const fileHash = sha256(data);
-        const page = target.type.kind === 'pdf' ? (input.page ?? 1) : undefined;
-        let label = `image ${target.resolved.relativePath}`;
-        if (page !== undefined) {
-          const { totalPages } = await extractPdfText(data, (total) => {
-            if (page > total) {
-              throw new AtelierError(
-                'tool/invalid_input',
-                `Page ${page} inexistante : le PDF compte ${total} page${total > 1 ? 's' : ''}.`,
-              );
+          let answer = await cache.get(key);
+          if (answer === undefined) {
+            let image;
+            if (page === undefined) {
+              image = await prepareImage(data, target.type.imageFormat ?? 'png');
+            } else {
+              if (!context.sandbox) {
+                return {
+                  ok: false,
+                  content:
+                    "La VM n'est pas prête : impossible de rendre la page PDF en image. Réessaie dans un instant.",
+                };
+              }
+              const png = await renderPdfPage({
+                sandbox: context.sandbox,
+                workspace: context.workspace,
+                relativePath: target.resolved.relativePath,
+                fileHash,
+                page,
+                signal: context.abortSignal,
+              });
+              image = await prepareImage(png, 'png');
             }
-            return [];
-          });
-          label = `page ${page}/${totalPages} de ${target.resolved.relativePath}`;
-        }
-        const key = {
-          kind: 'look_at',
-          file: fileHash,
-          page,
-          question: input.question,
-          vision: vision.id,
-        };
-        let answer = await cache.get(key);
-        if (answer === undefined) {
-          let image;
-          if (page === undefined) {
-            image = await prepareImage(data, target.type.imageFormat ?? 'png');
-          } else {
-            if (!context.sandbox) {
-              return {
-                ok: false,
-                content:
-                  "La VM n'est pas prête : impossible de rendre la page PDF en image. Réessaie dans un instant.",
-              };
-            }
-            const png = await renderPdfPage({
-              sandbox: context.sandbox,
-              workspace: context.workspace,
-              relativePath: target.resolved.relativePath,
-              fileHash,
-              page,
+            answer = await analyzeImage(vision, {
+              image,
+              prompt: input.question,
               signal: context.abortSignal,
             });
-            image = await prepareImage(png, 'png');
+            await cache.set(key, answer);
           }
-          answer = await analyzeImage(vision, {
-            image,
-            prompt: input.question,
-            signal: context.abortSignal,
-          });
-          await cache.set(key, answer);
+          return { ok: true, content: `[Modèle vision, ${label}]\n\n${answer}` };
         }
-        return { ok: true, content: `[Modèle vision, ${label}]\n\n${answer}` };
       }),
   });
 }
