@@ -16,9 +16,11 @@ import {
   type AgentEventSink,
   type Attachment,
   type ChatMessage,
+  type FileCard,
   type PermissionHandler,
   type SerializedAtelierError,
   type SessionSummary,
+  type ToolDisplay,
 } from '@atelier/shared';
 import type { ModelMessage } from 'ai';
 import {
@@ -31,6 +33,7 @@ import {
 } from '../../common/chat-reducer.js';
 import type { PermissionBroker } from './permission-broker.js';
 import { sessionNotFound, type SessionStore } from './session-store.js';
+import { WorkspaceChangeTracker } from './workspace-changes.js';
 
 /** Ce que le gestionnaire utilise d'une `AgentSession` d'agent-core. */
 export interface AgentSessionLike {
@@ -73,8 +76,16 @@ export interface ChatManagerOptions {
   emit: (event: AgentEvent) => void;
   /** Erreur de tour liée au serveur (pour revérifier l'indicateur). */
   onLlmError?: (error: SerializedAtelierError) => void;
+  /** Suivi des fichiers produits pendant le tour (défaut : photo du dossier de travail). */
+  trackChanges?: (workspace: string) => ChangeTracker;
   newId?: () => string;
   now?: () => Date;
+}
+
+/** Ce que le gestionnaire utilise du suivi des fichiers (voir `WorkspaceChangeTracker`). */
+export interface ChangeTracker {
+  start(): Promise<void>;
+  afterTool(display: ToolDisplay | undefined): Promise<FileCard[]>;
 }
 
 interface PendingInput {
@@ -212,14 +223,31 @@ export class ChatManager {
     await Promise.resolve();
     const sessionId = session.id;
     let assistant = createAssistantMessage({ id: this.#id(), sessionId, createdAt: this.#now() });
-    const emit = (event: AgentEvent): void => {
+    const forward = (event: AgentEvent): void => {
       assistant = applyAgentEvent(assistant, event);
       this.#o.emit(event);
+    };
+    const tracker = (this.#o.trackChanges ?? defaultTracker)(session.workspace);
+    // File d'attente : l'ordre des événements est conservé pendant la photo du
+    // dossier qui suit chaque outil (cartes des fichiers produits dans la VM…).
+    let queue = Promise.resolve();
+    const emit = (event: AgentEvent): void => {
+      queue = queue.then(async () => {
+        forward(event);
+        if (event.type !== 'tool_result' || event.denied) return;
+        const files = await tracker.afterTool(event.display).catch(() => []);
+        if (files.length > 0) {
+          forward({ type: 'tool_files', sessionId, turnId, toolCallId: event.toolCallId, files });
+        }
+      });
+      // Un relais en échec ne doit pas bloquer les événements suivants.
+      queue = queue.catch(() => undefined);
     };
     const historyBefore = resetHistory ?? this.#currentHistory(runtime, sessionId);
     let outcome: TurnResult['reason'] = 'error';
     try {
       await this.#o.agents.beforeTurn(sessionId, session.workspace);
+      await tracker.start().catch(() => undefined);
       const agent = await this.#agentSession(session, runtime, resetHistory);
       if (controller.signal.aborted) {
         outcome = 'aborted';
@@ -246,6 +274,7 @@ export class ChatManager {
         if (serialized.code.startsWith('llm/')) this.#o.onLlmError?.(serialized);
       }
     } finally {
+      await queue;
       assistant = settleRunningTools(assistant);
       if (assistant.parts.length > 0) this.#o.store.saveMessage(assistant);
       if (this.#o.store.get(sessionId)) this.#o.store.update(sessionId, { updatedAt: this.#now() });
@@ -326,4 +355,8 @@ export class ChatManager {
   #now(): string {
     return (this.#o.now?.() ?? new Date()).toISOString();
   }
+}
+
+function defaultTracker(workspace: string): ChangeTracker {
+  return new WorkspaceChangeTracker(workspace);
 }
