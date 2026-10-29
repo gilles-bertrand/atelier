@@ -25,8 +25,15 @@ export {
 } from './loop/budget.js';
 export type { TruncatedText } from './loop/budget.js';
 export {
+  APP_MESSAGE_PREFIX,
+  COMPACTION_TARGET_SHARE,
   compactMessages,
+  currentTurnStart,
+  estimateMessagesTokens,
   findCompactionSplit,
+  PRUNED_PREFIX,
+  prunedResult,
+  pruneToolResults,
   shouldCompact,
   SUMMARY_PREFIX,
   transcript,
