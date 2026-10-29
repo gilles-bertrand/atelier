@@ -34,7 +34,13 @@ import type { PermissionDescriber } from '../tools/permission.js';
 import { isToolOutput, toAiSdkTools, type ToolRuntime } from '../tools/registry.js';
 import { withRetryListener, type RetryInfo } from '../llm/retry-fetch.js';
 import { ToolOutputBudget } from './budget.js';
-import { compactMessages, shouldCompact } from './compaction.js';
+import {
+  APP_MESSAGE_PREFIX,
+  COMPACTION_TARGET_SHARE,
+  compactMessages,
+  estimateMessagesTokens,
+  shouldCompact,
+} from './compaction.js';
 import { hasReasoning, stripReasoning } from './history.js';
 import { createToolCallRepair } from './repair.js';
 
@@ -191,17 +197,29 @@ export class Agent {
       outputTokens,
       contextWindow: o.contextWindow,
     });
-    const compact = async (messages: ModelMessage[]): Promise<ModelMessage[] | null> => {
+    /**
+     * `requestTokens` : taille (réelle ou estimée) de la requête qui a déclenché
+     * la compaction. L'écart avec l'estimation de l'historique est le surcoût fixe
+     * (prompt système, schémas d'outils), retranché de la cible.
+     */
+    const compact = async (
+      messages: ModelMessage[],
+      requestTokens: number,
+    ): Promise<ModelMessage[] | null> => {
+      const overhead = Math.max(0, requestTokens - estimateMessagesTokens(messages));
       const result = await compactMessages({
         model: o.fastModel ?? o.model,
         messages,
         keepRecent: o.keepRecentOnCompaction ?? 6,
         abortSignal: signal,
         maxTranscriptChars: Math.floor(o.contextWindow * 1.5),
+        // Réduit d'abord les anciens résultats d'outils, puis résume les tours précédents.
+        targetTokens: Math.max(0, Math.floor(o.contextWindow * COMPACTION_TARGET_SHARE) - overhead),
       });
-      if (result.replaced === 0) return null;
-      o.log?.('compaction', { replaced: result.replaced });
-      emit({ type: 'compaction', replacedMessages: result.replaced });
+      const touched = result.replaced + result.pruned;
+      if (touched === 0) return null;
+      o.log?.('compaction', { replaced: result.replaced, pruned: result.pruned });
+      emit({ type: 'compaction', replacedMessages: touched });
       return result.messages;
     };
 
@@ -212,8 +230,11 @@ export class Agent {
     return withRetryListener(onRetry, async (): Promise<TurnResult> => {
       try {
         // Compaction préalable, sur la base de la consommation du tour précédent.
-        if (shouldCompact(turn.lastInputTokens, o.contextWindow)) {
-          base = (await compact(base)) ?? base;
+        if (
+          turn.lastInputTokens !== undefined &&
+          shouldCompact(turn.lastInputTokens, o.contextWindow)
+        ) {
+          base = (await compact(base, turn.lastInputTokens)) ?? base;
         }
 
         const sandbox = this.currentSandbox();
@@ -283,8 +304,8 @@ export class Agent {
                 last?.usage.inputTokens !== undefined
                   ? last.usage.inputTokens + (last.usage.outputTokens ?? 0) + budget.usedThisStep
                   : undefined;
-              if (shouldCompact(estimate, o.contextWindow)) {
-                const compacted = await compact(next);
+              if (estimate !== undefined && shouldCompact(estimate, o.contextWindow)) {
+                const compacted = await compact(next, estimate);
                 if (compacted) {
                   next = compacted;
                   changed = true;
@@ -473,7 +494,7 @@ function openTodos(todos: readonly TodoItem[] | undefined): TodoItem[] {
 /** Message de relance (invisible dans l'UI, conservé dans l'historique modèle). */
 export function continuationPrompt(open: readonly TodoItem[]): string {
   const list = open.map((t) => `- ${t.title} (${t.status})`).join('\n');
-  return `[Atelier] Ta réponse s'est arrêtée alors que des tâches de ta liste ne sont pas terminées :\n${list}\nContinue maintenant avec les appels d'outils nécessaires, sans attendre de réponse. Si une tâche n'est plus utile, mets la liste à jour avec todo_write ; si tu as besoin de l'utilisateur, pose-lui ta question.`;
+  return `${APP_MESSAGE_PREFIX} Ta réponse s'est arrêtée alors que des tâches de ta liste ne sont pas terminées :\n${list}\nContinue maintenant avec les appels d'outils nécessaires, sans attendre de réponse. Si une tâche n'est plus utile, mets la liste à jour avec todo_write ; si tu as besoin de l'utilisateur, pose-lui ta question.`;
 }
 
 function describeToolError(error: unknown): string {
