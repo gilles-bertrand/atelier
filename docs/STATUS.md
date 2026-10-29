@@ -2,7 +2,7 @@
 
 **Tous les lots sont mergés ; reste la signature et la répétition de la démo (voir `docs/DEMO.md`).**
 
-_Dernière mise à jour : 2026-10-28, Lead._
+_Dernière mise à jour : 2026-10-29, Lead._
 
 ## État par jalon
 
@@ -11,7 +11,7 @@ _Dernière mise à jour : 2026-10-28, Lead._
 | M0 : squelette monorepo + `packages/shared` + `server/`     | ✅ fait                                                                                                                                                                                                                                                                                                                                                                                                   | Lead                          |
 | M1 : boucle AI SDK en CLI, outils fichiers, bash local, web | ✅ fait                                                                                                                                                                                                                                                                                                                                                                                                   | Core, MCP & Web               |
 | M2 : sandbox Lima + permissions                             | ✅ fait                                                                                                                                                                                                                                                                                                                                                                                                   | Sandbox, Core                 |
-| M3 : app Electron fonctionnelle                             | ✅ fait (chat, panneau latéral, onboarding, ouverture sécurisée des fichiers)                                                                                                                                                                                                                                                                                                                             | UI                            |
+| M3 : app Electron fonctionnelle                             | ✅ fait (chat, panneau latéral, onboarding, ouverture sécurisée des fichiers) ; colonne de gauche (#8, PR #87 : récentes, dossiers, recherche ⌘K, environnement en pied, ⌘B / ⌘N)                                                                                                                                                                                                                         | UI                            |
 | M4 : skills + MCP + SearXNG + documents                     | ✅ fait (pièces jointes et vision comprises)                                                                                                                                                                                                                                                                                                                                                              | Sandbox, MCP & Web, Documents |
 | M5 : historique, compaction, réglages, packaging signé      | 🟡 historique (node:sqlite), compaction et réglages faits ; build arm64 non signé vérifié (`.dmg`, icône) ; **démo sans certificat : `pnpm dist:mac:adhoc`** (signature ad hoc du bundle, app lancée et `codesign --verify --deep --strict` OK, procédure « Ouvrir quand même » dans `docs/DEMO.md`) ; **signature et notarisation en attente du certificat Developer ID et de la clé App Store Connect** | UI, Core, Lead                |
 | Démo finale (critères d'acceptation)                        | 🟡 scénario et fichiers prêts (`docs/DEMO.md`, `fixtures/`) ; e2e automatisés (`qa/`) : critères 2, 3, 4 et 5 ✅ en réel ; critère 2 ✅ 2/2 sur `21799f2` (skill `xlsx` chargé d'office, #83) ; rapport `docs/QA.md`                                                                                                                                                                                      | Lead                          |
@@ -117,17 +117,20 @@ _Dernière mise à jour : 2026-10-28, Lead._
 | #43   | Le repli texte → outil exécute un `<tool_call>` cité depuis des données (§8)           | Core                | ✅ corrigé (#53), 3/3 en réel ; sécurité           |
 | #44   | Les fichiers créés dans la VM n'ont pas de carte cliquable                             | Core, UI            | ✅ corrigé (#51) ; critère 2 (carte du `.xlsx`)    |
 | #45   | Un PDF de 30 pages n'est lu qu'à moitié                                                | Documents, Core     | ✅ corrigé (#52, #55) ; critère 4                  |
-| #46   | La VM ne se crée pas si le nom d'utilisateur macOS dépasse 21 caractères (socket Lima) | Sandbox             | critère 1 (Mac neuf)                               |
+| #46   | La VM ne se crée pas si le nom d'utilisateur macOS dépasse 21 caractères (socket Lima) | Sandbox, Documents  | ✅ corrigé (#89, `~/.atelier-lima`) ; critère 1    |
 | #59   | Le modèle déforme le chemin des pièces jointes (`.atelier/uploads`, dossier caché)     | Documents, Core, UI | ✅ corrigé (#64, #65) ; critère 4                  |
 | #60   | Le modèle n'utilise pas le skill `xlsx`                                                | Core                | ✅ corrigé (#75) ; critère 2                       |
 | #61   | La réponse finale cite un total inventé (fichiers justes)                              | Core                | ✅ corrigé (#67, #68, #77)                         |
 | #69   | Ollama répond 500 « tool call parsing failed: EOF » : tour arrêté, message trompeur    | Core, UI            | ✅ corrigé (#70, #71) ; critère 4                  |
 | #73   | Le tour s'arrête sans réponse ni erreur après un appel d'outil en échec                | Core                | ✅ corrigé (#76, #81) ; critère 2                  |
 | #79   | Le tour s'arrête sur un texte qui annonce la suite, sans appel d'outil                 | Core                | ✅ corrigé (#81) ; critère 2                       |
+| #85   | `limactl shell` sort en 255 sur une erreur de multiplexage SSH (`mm_send_fd`)          | Core                | ✅ corrigé (#88, relance unique) ; critère 2       |
 
 ## Demandes d'évolution de `packages/shared`
 
 _Format : date, agent, type proposé, raison, packages impactés._
+
+- **2026-10-29, architect (cadrage #7)** (impact : `shared`, main, renderer) : canaux **`session:rename`** et **`session:pin`** dans `IPC_INVOKE_CHANNELS`, **`pinned?: boolean`** dans `SessionSummary`. Raison : Renommer et Épingler une conversation dans la colonne de gauche (ticket suivant le socle #8). ✅ Accepté sur le principe par le Lead ; PR `feat/lead-shared-session-rename-pin` au démarrage de ce ticket.
 
 - **2026-10-29, Core** (impact : `shared`, `agent-core`, main, renderer) : **`TextRetractEvent`** (`type: 'text_retract'`, `turnId`, `reason: 'verification'`), membre d'`AgentEvent`. Émis par la boucle juste avant la relance de vérification (#61) : le texte du dernier pas (réponse qui cite un montant introuvable) est déjà streamé ; l'UI le barre ou le replie (« Réponse corrigée ») et affiche la nouvelle à la suite. Le texte retiré se situe entre le dernier `tool_result` du tour et l'event : pas besoin d'offsets. En attendant, la relance demande au modèle d'ouvrir sa nouvelle réponse par une ligne « Correction : … » (PR `feat/core-verification-correction`). ⚠️ `switch` exhaustifs sur `event.type` à compléter (UI, persistance).
 
