@@ -100,6 +100,7 @@ function applyEvent(session: SessionView, event: AgentEvent): SessionView {
     case 'reasoning_delta':
     case 'tool_start':
     case 'tool_display':
+    case 'tool_files':
     case 'sources':
       // Le serveur répond : plus de « reconnexion » affichée.
       return turn.retry ? { ...next, turn: withoutRetry(turn) } : next;

@@ -72,6 +72,13 @@ export function applyAgentEvent(message: ChatMessage, event: AgentEvent): ChatMe
         ...part,
         display: event.display,
       }));
+    case 'tool_files':
+      return updateToolCall(message, event.toolCallId, (part) => {
+        // Un fichier déjà listé est remplacé (créé puis modifié dans le même outil).
+        const paths = new Set(event.files.map((f) => f.path));
+        const kept = (part.files ?? []).filter((f) => !paths.has(f.path));
+        return { ...part, files: [...kept, ...event.files] };
+      });
     case 'tool_result':
       return updateToolCall(message, event.toolCallId, (part) => {
         const display = event.display ?? part.display;

@@ -6,7 +6,7 @@
  * discriminée par `type`, entièrement sérialisable.
  */
 import type { SerializedAtelierError } from './errors.js';
-import type { ToolDisplay, TokenUsage, WebSearchResult } from './messages.js';
+import type { FileCard, ToolDisplay, TokenUsage, WebSearchResult } from './messages.js';
 import type { PermissionRequest } from './permissions.js';
 import type { TodoItem } from './todo.js';
 
@@ -67,6 +67,17 @@ export interface ToolDisplayEvent extends AgentEventBase {
   type: 'tool_display';
   toolCallId: string;
   display: ToolDisplay;
+}
+
+/**
+ * Fichiers créés ou modifiés pendant l'outil `toolCallId` sans carte propre
+ * (bash, skills, connecteurs MCP) : détectés par l'app en comparant le dossier
+ * de travail avant et après l'appel. S'ajoutent au `display` de l'outil.
+ */
+export interface ToolFilesEvent extends AgentEventBase {
+  type: 'tool_files';
+  toolCallId: string;
+  files: FileCard[];
 }
 
 /** Nouvelle liste de tâches (après `todo_write`). */
@@ -135,6 +146,7 @@ export type AgentEvent =
   | ToolStartEvent
   | ToolResultEvent
   | ToolDisplayEvent
+  | ToolFilesEvent
   | TodoUpdateEvent
   | PermissionRequestEvent
   | SourcesEvent
