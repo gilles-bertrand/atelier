@@ -5,11 +5,15 @@
  */
 import { createReadStream } from 'node:fs';
 import { constants } from 'node:fs';
-import { copyFile, mkdir, stat } from 'node:fs/promises';
+import { copyFile, mkdir, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { AtelierError, type Attachment } from '@atelier/shared';
-import { resolveWorkspacePath } from '@atelier/agent-core';
+import {
+  resolveWorkspacePath,
+  tryResolveWorkspacePath,
+  type ResolvedWorkspacePath,
+} from '@atelier/agent-core';
 import { detectType, extensionOf, readSample } from './detect.js';
 import { formatBytes } from './fs.js';
 
@@ -209,4 +213,59 @@ export async function importAttachments(
     attachments.push(toAttachment(await importAttachment(hostPath, workspace, options)));
   }
   return attachments;
+}
+
+// ---------------------------------------------------------------------------
+// Retrouver une pièce jointe dont le modèle a déformé le chemin (#59)
+
+/** Nom de base comparable : dernier segment, sans points initiaux, NFC, minuscules. */
+function comparableName(input: string): string {
+  const base = input.replace(/\\/g, '/').split('/').pop() ?? '';
+  return base
+    .normalize('NFC')
+    .replace(/^[.\s]+/, '')
+    .trim()
+    .toLowerCase();
+}
+
+/**
+ * Pièces jointes présentes (`.atelier/uploads/<nom>`, fichiers ordinaires
+ * seulement, liens symboliques exclus), triées. Vide si le dossier n'existe pas
+ * ou sort du dossier de travail.
+ */
+export async function listAttachments(workspace: string): Promise<string[]> {
+  const dir = await tryResolveWorkspacePath(workspace, UPLOADS_DIR);
+  if (!dir?.exists) return [];
+  try {
+    const entries = await readdir(dir.absolutePath, { withFileTypes: true });
+    return entries
+      .filter((e) => e.isFile())
+      .map((e) => `${UPLOADS_DIR}/${e.name}`)
+      .sort((a, b) => a.localeCompare(b));
+  } catch {
+    return [];
+  }
+}
+
+/** Résultat de {@link findAttachment}. */
+export interface AttachmentLookup {
+  /** Pièce jointe retenue, si un seul fichier correspond. */
+  match?: ResolvedWorkspacePath;
+  /** Pièces jointes disponibles (pour le message d'erreur). */
+  available: string[];
+}
+
+/**
+ * Cherche dans `.atelier/uploads/` le fichier dont le nom de base (sans points
+ * initiaux, casse ignorée) correspond à celui de `input`. Seul un candidat
+ * unique est retenu ; son chemin repasse par `resolveWorkspacePath`.
+ */
+export async function findAttachment(workspace: string, input: string): Promise<AttachmentLookup> {
+  const available = await listAttachments(workspace);
+  const wanted = comparableName(input);
+  if (wanted === '') return { available };
+  const candidates = available.filter((p) => comparableName(p) === wanted);
+  if (candidates.length !== 1 || candidates[0] === undefined) return { available };
+  const resolved = await resolveWorkspacePath(workspace, candidates[0]);
+  return resolved.exists ? { match: resolved, available } : { available };
 }
