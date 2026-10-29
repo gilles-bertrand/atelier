@@ -117,10 +117,14 @@ export class LimaSandbox implements Sandbox {
 
   constructor(options: LimaSandboxOptions) {
     this.runner = options.runner ?? spawnRunner;
+    this.log = options.log ?? (() => undefined);
     this.limactl = new Limactl({
       limactlPath: options.limactlPath,
       limaHome: options.limaHome ?? defaultLimaHome(),
       runner: this.runner,
+      log: (message) => {
+        this.log(message);
+      },
     });
     this.name = options.instanceName ?? DEFAULT_INSTANCE_NAME;
     this.templatesDir = options.templatesDir;
@@ -130,7 +134,6 @@ export class LimaSandbox implements Sandbox {
     this.startTimeout = options.startTimeout ?? '30m';
     this.freeDiskBytes = options.freeDiskBytes ?? defaultFreeDiskBytes;
     this.platform = options.platform ?? { os: process.platform, arch: process.arch };
-    this.log = options.log ?? (() => undefined);
   }
 
   /** `LIMA_HOME` utilisé. */

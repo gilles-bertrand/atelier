@@ -133,6 +133,8 @@ export interface LimactlOptions {
   runner?: CommandRunner;
   /** Environnement de base (défaut : `process.env`). */
   baseEnv?: NodeJS.ProcessEnv;
+  /** Journal des avertissements (relance de `limactl shell`, #85). */
+  log?: (message: string) => void;
 }
 
 /** Options des commandes longues (create/start). */
@@ -153,11 +155,13 @@ export class Limactl {
   readonly limaHome: string;
   private readonly runner: CommandRunner;
   private readonly env: NodeJS.ProcessEnv;
+  private readonly log: (message: string) => void;
 
   constructor(options: LimactlOptions) {
     this.limactlPath = options.limactlPath;
     this.limaHome = options.limaHome;
     this.runner = options.runner ?? spawnRunner;
+    this.log = options.log ?? (() => undefined);
     // Pas de couleurs ni d'interaction : sorties analysables.
     this.env = { ...(options.baseEnv ?? process.env), LIMA_HOME: options.limaHome, NO_COLOR: '1' };
   }
@@ -272,12 +276,52 @@ export class Limactl {
   /**
    * `limactl shell [--workdir W] <name> -- <args…>` : les arguments sont échappés par
    * limactl avant d'être passés au shell de la VM.
+   *
+   * Relancée une seule fois sur une erreur de multiplexage SSH (#85) : la session
+   * n'a pas été ouverte, la commande ne s'est donc pas exécutée. Si la seconde
+   * tentative échoue aussi, son résultat est renvoyé tel quel.
    */
-  shell(name: string, args: readonly string[], options: LimaShellOptions = {}): Promise<RunResult> {
+  async shell(
+    name: string,
+    args: readonly string[],
+    options: LimaShellOptions = {},
+  ): Promise<RunResult> {
     const { workdir, ...runOptions } = options;
-    return this.run(
-      ['shell', '--tty=false', ...(workdir ? [`--workdir=${workdir}`] : []), name, '--', ...args],
-      runOptions,
+    const shellArgs = [
+      'shell',
+      '--tty=false',
+      ...(workdir ? [`--workdir=${workdir}`] : []),
+      name,
+      '--',
+      ...args,
+    ];
+    const first = await this.run(shellArgs, runOptions);
+    if (!isSshMuxFailure(first) || runOptions.signal?.aborted === true) return first;
+    this.log(
+      `[warn] limactl shell : échec du multiplexage SSH avant exécution (code 255), relance unique. ${lastLine(first.stderr.render().text)}`,
     );
+    return this.run(shellArgs, runOptions);
   }
+}
+
+/** Motifs de stderr d'OpenSSH quand le canal maître refuse la session (#85). */
+const SSH_MUX_FAILURE = /mux_client|mm_send_fd/;
+
+/**
+ * Vrai si `limactl shell` a échoué avant d'exécuter la commande, sur une erreur de
+ * multiplexage SSH (code 255 et motif `mux_client` / `mm_send_fd`). Un code 255
+ * seul ne suffit pas : une vraie commande peut sortir en 255.
+ */
+export function isSshMuxFailure(result: RunResult): boolean {
+  return (
+    result.exitCode === 255 &&
+    !result.timedOut &&
+    !result.aborted &&
+    SSH_MUX_FAILURE.test(result.stderr.render().text)
+  );
+}
+
+function lastLine(text: string): string {
+  const lines = text.trim().split('\n');
+  return lines[lines.length - 1] ?? '';
 }

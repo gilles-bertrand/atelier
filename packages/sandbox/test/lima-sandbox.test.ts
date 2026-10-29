@@ -279,6 +279,30 @@ describe('LimaSandbox.setWorkspace', () => {
 });
 
 describe('LimaSandbox.exec', () => {
+  it('relance une fois une commande refusée par le multiplexage SSH (#85)', async () => {
+    const logs: string[] = [];
+    let attempts = 0;
+    const { fake, sandbox } = await readySandbox(
+      {
+        onExec: () => {
+          attempts += 1;
+          return attempts === 1
+            ? {
+                exitCode: 255,
+                stderr:
+                  'mm_send_fd: sendmsg(0): Message too long\nmux_client_request_session: send fds failed\n',
+              }
+            : { stdout: 'ok\n' };
+        },
+      },
+      { log: (message) => logs.push(message) },
+    );
+    const result = await sandbox.exec('echo ok');
+    expect(result).toMatchObject({ exitCode: 0, stdout: 'ok\n' });
+    expect(fake.verbs()).toEqual(['shell:exec', 'shell:exec']);
+    expect(logs.some((m) => m.includes('relance unique'))).toBe(true);
+  });
+
   it('exécute la commande en tant que agent dans /workspace', async () => {
     const { fake, sandbox } = await readySandbox({
       onExec: () => ({ exitCode: 3, stdout: 'bonjour\n', stderr: 'attention\n' }),
