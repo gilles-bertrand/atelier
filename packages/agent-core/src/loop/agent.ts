@@ -33,6 +33,7 @@ import { buildSystemPrompt } from '../prompt/system-prompt.js';
 import type { PermissionDescriber } from '../tools/permission.js';
 import { isToolOutput, toAiSdkTools, type ToolRuntime } from '../tools/registry.js';
 import { withRetryListener, type RetryInfo } from '../llm/retry-fetch.js';
+import { ToolOutputBudget } from './budget.js';
 import { compactMessages, shouldCompact } from './compaction.js';
 import { hasReasoning, stripReasoning } from './history.js';
 import { createToolCallRepair } from './repair.js';
@@ -216,6 +217,8 @@ export class Agent {
         }
 
         const sandbox = this.currentSandbox();
+        // Sorties d'outils bornées par étape selon la fenêtre (num_ctx = plafond, pas garantie).
+        const budget = new ToolOutputBudget(o.contextWindow);
         const runtime: ToolRuntime = {
           sessionId: turn.sessionId,
           workspace: o.workspace,
@@ -226,6 +229,12 @@ export class Agent {
           },
           ...(sandbox ? { sandbox } : {}),
           ...(o.describePermission ? { describePermission: o.describePermission } : {}),
+          limitOutput: (toolName, output) => {
+            const fitted = budget.fit(toolName, output.content);
+            if (!fitted.truncated) return output;
+            o.log?.('tool-output:truncated', { toolName, stepLimit: budget.stepLimit });
+            return { ...output, content: fitted.content };
+          },
         };
         const tools: ToolSet = toAiSdkTools(o.registry, runtime);
         const lazy = o.lazyTools
@@ -268,13 +277,21 @@ export class Agent {
               let next = messages;
               let changed = false;
               const last = done.at(-1);
-              if (last && shouldCompact(last.usage.inputTokens, o.contextWindow)) {
+              // Taille estimée de la prochaine requête : entrée et sortie de l'étape
+              // précédente, plus les résultats d'outils qu'elle a ajoutés.
+              let estimate =
+                last?.usage.inputTokens !== undefined
+                  ? last.usage.inputTokens + (last.usage.outputTokens ?? 0) + budget.usedThisStep
+                  : undefined;
+              if (shouldCompact(estimate, o.contextWindow)) {
                 const compacted = await compact(next);
                 if (compacted) {
                   next = compacted;
                   changed = true;
+                  estimate = undefined;
                 }
               }
+              budget.startStep(estimate);
               if (hasReasoning(next)) {
                 next = stripReasoning(next);
                 changed = true;

@@ -119,22 +119,23 @@ await checkServerHealth({ baseUrl, token });
 
 ## Contenu
 
-| Module                    | Rôle                                                                                                                                                                      |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `loop/agent.ts`           | `Agent.runTurn` : `streamText` + `stopWhen: stepCountIs(50)` + `abortSignal`, mapping du `stream` (ex-`fullStream`) vers `AgentEvent`. `AgentSession` garde l'historique. |
-| `llm/provider.ts`         | `createOpenAICompatible` vers `<url>/v1`, Bearer, thinking on/off (`reasoning_effort: "none"` + `chat_template_kwargs.enable_thinking`), middlewares.                     |
-| `llm/retry-fetch.ts`      | Nouvelles tentatives avec backoff exponentiel + gigue (réseau, 429, 502-504, `Retry-After`).                                                                              |
-| `llm/context-window.ts`   | Contexte réel via `/api/show` (`num_ctx`), repli vLLM `/v1/models`.                                                                                                       |
-| `llm/server.ts`           | `listModels`, `testConnection`, `checkServerHealth` : Ollama, repli vLLM `/v1/models`.                                                                                    |
-| `llm/errors.ts`           | Erreurs explicites : `llm/unreachable`, `llm/unauthorized`, `llm/model_not_found`, `llm/timeout`…                                                                         |
-| `loop/repair.ts`          | `repairToolCall` : nom d'outil approximatif, JSON abîmé, arguments enveloppés.                                                                                            |
-| `loop/text-tool-calls.ts` | Middleware de repli : appels écrits dans le texte (`<tool_call>`, XML Qwen, JSON) → vrais appels.                                                                         |
-| `loop/compaction.ts`      | Résumé des anciens messages au-delà de 75 % du contexte (avant le tour et entre deux étapes).                                                                             |
-| `prompt/system-prompt.ts` | Prompt système généraliste (rôle, dossier, date, skills, sécurité, recherche web).                                                                                        |
-| `paths.ts`                | `resolveWorkspacePath` : vérification stricte des chemins, symlinks compris (réutilisé par `documents`).                                                                  |
-| `tools/*`                 | `read_file` (texte, M1), `write_file`, `edit_file`, `list_dir`, `glob`, `grep`, `todo_write`, `present_file`, `bash`, adaptateur registre → `tools` AI SDK.               |
-| `runtime.ts`              | `createAgentRuntime` : LLM + contexte une fois, puis `createSession` (registre par session, permissions mémorisées).                                                      |
-| `local-sandbox.ts`        | `Sandbox` temporaire via `child_process` (M1, sans isolation).                                                                                                            |
+| Module                    | Rôle                                                                                                                                                                                                                |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `loop/agent.ts`           | `Agent.runTurn` : `streamText` + `stopWhen: stepCountIs(50)` + `abortSignal`, mapping du `stream` (ex-`fullStream`) vers `AgentEvent`. `AgentSession` garde l'historique.                                           |
+| `llm/provider.ts`         | `createOpenAICompatible` vers `<url>/v1`, Bearer, thinking on/off (`reasoning_effort: "none"` + `chat_template_kwargs.enable_thinking`), middlewares.                                                               |
+| `llm/retry-fetch.ts`      | Nouvelles tentatives avec backoff exponentiel + gigue (réseau, 429, 502-504, `Retry-After`).                                                                                                                        |
+| `llm/context-window.ts`   | Contexte réel via `/api/show` (`num_ctx`), repli vLLM `/v1/models`.                                                                                                                                                 |
+| `llm/server.ts`           | `listModels`, `testConnection`, `checkServerHealth` : Ollama, repli vLLM `/v1/models`.                                                                                                                              |
+| `llm/errors.ts`           | Erreurs explicites : `llm/unreachable`, `llm/unauthorized`, `llm/model_not_found`, `llm/timeout`…                                                                                                                   |
+| `loop/repair.ts`          | `repairToolCall` : nom d'outil approximatif, JSON abîmé, arguments enveloppés.                                                                                                                                      |
+| `loop/text-tool-calls.ts` | Middleware de repli : appels écrits dans le texte (`<tool_call>`, XML Qwen, JSON) → vrais appels.                                                                                                                   |
+| `loop/compaction.ts`      | Résumé des anciens messages au-delà de 75 % du contexte (avant le tour et entre deux étapes).                                                                                                                       |
+| `loop/budget.ts`          | Budget de contexte par étape : une sortie d'outil ≤ 25 % de la fenêtre, une étape ≤ 50 % (moins si la fenêtre est pleine), troncature expliquée au modèle. `num_ctx` est un plafond, pas une garantie (runner MLX). |
+| `prompt/system-prompt.ts` | Prompt système généraliste (rôle, dossier, date, skills, sécurité, recherche web).                                                                                                                                  |
+| `paths.ts`                | `resolveWorkspacePath` : vérification stricte des chemins, symlinks compris (réutilisé par `documents`).                                                                                                            |
+| `tools/*`                 | `read_file` (texte, M1), `write_file`, `edit_file`, `list_dir`, `glob`, `grep`, `todo_write`, `present_file`, `bash`, adaptateur registre → `tools` AI SDK.                                                         |
+| `runtime.ts`              | `createAgentRuntime` : LLM + contexte une fois, puis `createSession` (registre par session, permissions mémorisées).                                                                                                |
+| `local-sandbox.ts`        | `Sandbox` temporaire via `child_process` (M1, sans isolation).                                                                                                                                                      |
 
 ## Permissions
 
