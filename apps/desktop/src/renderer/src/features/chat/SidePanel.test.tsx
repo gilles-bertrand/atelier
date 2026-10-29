@@ -191,4 +191,28 @@ describe('errorMessage', () => {
     expect(canRetry({})).toBe(true);
     expect(canRetry({ details: { kind: 'server_not_configured' } })).toBe(true);
   });
+
+  it('appel d’outil illisible par Ollama : message d’agent-core, pas de « Réessayer »', () => {
+    const parse = {
+      code: 'llm/bad_response' as const,
+      message: 'Le serveur n’a pas pu lire un appel d’outil du modèle.',
+      details: { reason: 'tool_call_parse' },
+    };
+    expect(errorMessage(parse)).toBe('Le serveur n’a pas pu lire un appel d’outil du modèle.');
+    expect(canRetry(parse)).toBe(false);
+  });
+
+  it('jamais « Est-ce bien un serveur Ollama ? » pour une réponse à cause connue', () => {
+    for (const message of [undefined, '', '  ']) {
+      const text = errorMessage({
+        code: 'llm/bad_response',
+        ...(message === undefined ? {} : { message }),
+        details: { reason: 'cause_future' },
+      });
+      expect(text).not.toMatch(/Ollama/);
+      expect(text).toMatch(/interrompu/);
+    }
+    // Sans cause connue, le texte générique reste (vrai doute sur le serveur).
+    expect(errorMessage({ code: 'llm/bad_response', message: 'HTML reçu' })).toMatch(/Ollama/);
+  });
 });

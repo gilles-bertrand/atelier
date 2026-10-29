@@ -259,6 +259,26 @@ describe('conversation', () => {
     expect(api.callsTo('agent:send').at(-1)).toEqual({ sessionId: 's1', text: 'Autrement' });
   });
 
+  it('appel d’outil illisible (#69) : message d’agent-core, pas de « Réessayer »', async () => {
+    const user = await openSession();
+    await user.type(screen.getByLabelText('Votre message'), 'Écris le long rapport{Enter}');
+    emit({
+      type: 'error',
+      error: {
+        code: 'llm/bad_response',
+        message:
+          'Le serveur n’a pas pu lire un appel d’outil du modèle, même après une nouvelle tentative.',
+        retryable: false,
+        details: { reason: 'tool_call_parse' },
+      },
+    });
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent(/n’a pas pu lire un appel d’outil/);
+    expect(alert).not.toHaveTextContent(/Ollama/);
+    expect(screen.queryByRole('button', { name: 'Réessayer' })).not.toBeInTheDocument();
+    expect(screen.getByText('Reformulez votre demande ci-dessous.')).toBeInTheDocument();
+  });
+
   it('arrête le tour en cours', async () => {
     const user = await openSession();
     await user.type(screen.getByLabelText('Votre message'), 'Long{Enter}');
