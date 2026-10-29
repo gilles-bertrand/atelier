@@ -279,6 +279,25 @@ describe('conversation', () => {
     expect(screen.getByText('Reformulez votre demande ci-dessous.')).toBeInTheDocument();
   });
 
+  it('réponse finale vide (#73) : message d’agent-core, pas de « Réessayer »', async () => {
+    const user = await openSession();
+    await user.type(screen.getByLabelText('Votre message'), 'Résume le dossier{Enter}');
+    emit({
+      type: 'error',
+      error: {
+        code: 'llm/bad_response',
+        message: 'Le modèle s’est arrêté sans répondre, même après une nouvelle tentative.',
+        retryable: false,
+        details: { reason: 'empty_final' },
+      },
+    });
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent(/arrêté sans répondre/);
+    expect(alert).not.toHaveTextContent(/Ollama/);
+    expect(screen.queryByRole('button', { name: 'Réessayer' })).not.toBeInTheDocument();
+    expect(screen.getByText('Reformulez votre demande ci-dessous.')).toBeInTheDocument();
+  });
+
   it('arrête le tour en cours', async () => {
     const user = await openSession();
     await user.type(screen.getByLabelText('Votre message'), 'Long{Enter}');

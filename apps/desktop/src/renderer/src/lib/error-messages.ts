@@ -66,9 +66,10 @@ const BAD_RESPONSE_WITH_REASON = 'Le serveur a interrompu la réponse de façon 
  * Causes pour lesquelles relancer le même tour échouerait de la même façon
  * (agent-core a déjà fait une relance adaptée) : il faut reformuler.
  * - `stream_cut` : flux coupé sur la balise réservée `<tool_call>` (#42) ;
- * - `tool_call_parse` : 500 « EOF » du parseur d'appels d'outils d'Ollama (#69).
+ * - `tool_call_parse` : 500 « EOF » du parseur d'appels d'outils d'Ollama (#69) ;
+ * - `empty_final` : le modèle s'arrête sans répondre, même après une relance (#73).
  */
-const NOT_RETRYABLE_REASONS = new Set(['stream_cut', 'tool_call_parse']);
+const NOT_RETRYABLE_REASONS = new Set(['stream_cut', 'tool_call_parse', 'empty_final']);
 
 function detail(error: Pick<SerializedAtelierError, 'details'>, key: string): string | undefined {
   const value = error.details?.[key];
