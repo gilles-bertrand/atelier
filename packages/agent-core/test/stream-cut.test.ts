@@ -9,7 +9,9 @@ import {
   createDefaultRegistry,
   injectedKind,
   isStreamCut,
+  LOGGED_RESPONSE_BODY_CHARS,
   streamCutReason,
+  streamErrorLog,
 } from '../src/index.js';
 import { collect, permissions, promptText, streamOf, usage, withTempDir } from './helpers.js';
 
@@ -211,5 +213,21 @@ describe('500 « tool call parsing failed: EOF » d’Ollama (#69)', () => {
       expect(result.reason).toBe('stop');
       expect(model.doStreamCalls).toHaveLength(3);
     });
+  });
+});
+
+describe('journal stream-error', () => {
+  it('ajoute le statut et le début du corps pour une erreur HTTP', () => {
+    const error = new APICallError({
+      message: 'EOF',
+      url: 'u',
+      requestBodyValues: {},
+      statusCode: 500,
+      responseBody: 'x'.repeat(2_000),
+    });
+    const log = streamErrorLog(error);
+    expect(log).toMatchObject({ message: 'EOF', status: 500 });
+    expect(log['responseBody']).toBe(`${'x'.repeat(LOGGED_RESPONSE_BODY_CHARS)}…`);
+    expect(streamErrorLog(new Error('autre'))).toEqual({ message: 'autre' });
   });
 });

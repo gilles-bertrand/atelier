@@ -299,9 +299,7 @@ export class Agent {
             // Erreurs du flux : traitées plus bas (event `error`) ; sans ce rappel,
             // l'AI SDK les écrit aussi sur la console.
             onError: ({ error }) => {
-              o.log?.('stream-error', {
-                message: error instanceof Error ? error.message : String(error),
-              });
+              o.log?.('stream-error', streamErrorLog(error));
             },
             // Une seule permission à la fois dans l'UI : exécution séquentielle.
             toolCallConcurrency: 1,
@@ -595,6 +593,31 @@ export function streamCutError(
     cause,
     details: { reason },
   });
+}
+
+/** Taille max. du corps de réponse HTTP recopié dans le journal `stream-error`. */
+export const LOGGED_RESPONSE_BODY_CHARS = 500;
+
+/**
+ * Données du journal `stream-error` : le message, et pour une erreur HTTP du
+ * serveur son statut et le début du corps (diagnostic d'un 500 d'Ollama, #69).
+ */
+export function streamErrorLog(error: unknown): Record<string, unknown> {
+  const message = error instanceof Error ? error.message : String(error);
+  if (!APICallError.isInstance(error)) return { message };
+  const body = error.responseBody;
+  return {
+    message,
+    ...(error.statusCode !== undefined ? { status: error.statusCode } : {}),
+    ...(body !== undefined && body !== ''
+      ? {
+          responseBody:
+            body.length > LOGGED_RESPONSE_BODY_CHARS
+              ? `${body.slice(0, LOGGED_RESPONSE_BODY_CHARS)}…`
+              : body,
+        }
+      : {}),
+  };
 }
 
 function endsWithText(messages: readonly ModelMessage[], text: string): boolean {
