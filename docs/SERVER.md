@@ -76,6 +76,10 @@ Dans l'app, l'URL `http://100.x.y.z:11434` (ou `http://<machine>.<tailnet>.ts.ne
 1. `OLLAMA_CONTEXT_LENGTH=32768` (s'applique à tous les modèles) ;
 2. le modèle dérivé `atelier` (`server/Modelfile`, `PARAMETER num_ctx 32768`), recommandé, car explicite et visible dans `/api/show`.
 
+⚠️ **Mac Apple Silicon (démo locale) : le moteur MLX d'Ollama ignore `num_ctx`** (constaté avec Ollama 0.40.12, `qwen3.5:35b` en nvfp4, issue #41). `/api/show` annonce bien 32 768, mais une requête de 77 931 tokens a été traitée sans troncature ni refus (4 min 10 s de préremplissage, pic de 38,7 Gio). La vraie limite est alors celle du modèle (262 144). Sur le serveur de production (GPU NVIDIA, moteur llama.cpp ou vLLM), la limite est appliquée : une requête trop longue y serait tronquée ou refusée.
+
+**Décision (Gilles, 29/10/2026)** : la démo locale garde le moteur MLX (104 tokens/s sur M4 Max). Ne pas compter sur le serveur pour borner le contexte : c'est l'app qui doit rester sous la fenêtre annoncée (budget par étape #40, compaction #39).
+
 ## 4. Dimensionnement GPU / VRAM
 
 Ordres de grandeur pour une quantification Q4_K_M (valeur par défaut d'Ollama), contexte 32k, cache KV `q8_0`, `NUM_PARALLEL=1`. Ajoutez environ 1 à 3 Go par slot parallèle supplémentaire. Vérifiez sur place avec `docker compose exec ollama ollama ps` (colonne `PROCESSOR` : `100% GPU` attendu).

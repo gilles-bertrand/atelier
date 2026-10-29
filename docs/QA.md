@@ -67,16 +67,16 @@ Agent assemblé comme dans l'app (outils natifs + documents + web, VM réelle) ;
 
 ## Bugs ouverts
 
-| Issue | Sujet                                                                                 | Agent(s)        |
-| ----- | ------------------------------------------------------------------------------------- | --------------- |
-| #39   | La compaction en cours de tour résume la demande et garde les gros résultats d'outils | Core            |
-| #40   | Aucun budget de contexte par étape                                                    | Core, Documents |
-| #41   | Le runner MLX d'Ollama ignore `num_ctx` du Modelfile `atelier`                        | Lead, Core      |
-| #42   | Un texte contenant `<tool_call>` coupe le flux Ollama                                 | Core, Lead      |
-| #43   | Le repli texte → outil exécute un `<tool_call>` cité depuis des données               | Core            |
-| #44   | Les fichiers créés dans la VM n'ont pas de carte cliquable                            | Core, UI        |
-| #45   | Un PDF de 30 pages n'est lu qu'à moitié                                               | Documents, Core |
-| #46   | La VM ne se crée pas si le nom d'utilisateur macOS dépasse 21 caractères              | Sandbox         |
+| Issue | Sujet                                                                                                                                | Agent(s)        |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------ | --------------- |
+| #39   | La compaction en cours de tour résume la demande et garde les gros résultats d'outils                                                | Core            |
+| #40   | Aucun budget de contexte par étape                                                                                                   | Core, Documents |
+| #41   | Le runner MLX d'Ollama ignore `num_ctx` du Modelfile `atelier` (décision : garder MLX pour la démo, documenté dans `docs/SERVER.md`) | Lead, Core      |
+| #42   | Un texte contenant `<tool_call>` coupe le flux Ollama                                                                                | Core, Lead      |
+| #43   | Le repli texte → outil exécute un `<tool_call>` cité depuis des données                                                              | Core            |
+| #44   | Les fichiers créés dans la VM n'ont pas de carte cliquable                                                                           | Core, UI        |
+| #45   | Un PDF de 30 pages n'est lu qu'à moitié                                                                                              | Documents, Core |
+| #46   | La VM ne se crée pas si le nom d'utilisateur macOS dépasse 21 caractères                                                             | Sandbox         |
 
 Corrigé directement par QA : le générateur des fichiers de démo n'était pas déterministe (dates des PDF), contrairement à ce qu'annonçait `docs/DEMO.md`.
 
