@@ -280,7 +280,8 @@ export class Agent {
         const cutRetries = new Map<StreamCutReason, number>();
         let usedTools = false;
         let verified = false;
-        let emptyRetries = 0;
+        // Relances d'un tour qui cale (pas vide #73, annonce sans action #79) : budget commun.
+        let stallRetries = 0;
         let emptyFinal = false;
         let lastText = '';
         let finishReason: string | undefined;
@@ -467,9 +468,9 @@ export class Agent {
           // Dernier pas vide (#73) : ni texte ni appel d'outil, alors que le tour a
           // utilisé des outils. Une relance, puis une erreur claire.
           if (usedTools && lastText.trim() === '') {
-            if (emptyRetries < MAX_EMPTY_FINAL_RETRIES) {
-              emptyRetries += 1;
-              o.log?.('empty-final', { attempt: emptyRetries });
+            if (stallRetries < MAX_EMPTY_FINAL_RETRIES) {
+              stallRetries += 1;
+              o.log?.('empty-final', { attempt: stallRetries });
               base = [
                 ...withoutEmptyAssistant(messages),
                 injectedMessage('empty_final', emptyFinalPrompt()),
@@ -477,9 +478,19 @@ export class Agent {
               responseOffset = 0;
               continue;
             }
-            o.log?.('empty-final', { attempt: emptyRetries + 1, gaveUp: true });
+            o.log?.('empty-final', { attempt: stallRetries + 1, gaveUp: true });
             emptyFinal = true;
             break;
+          }
+          // Annonce sans action (#79) : « Commençons par… ensuite je vais… », sans appel
+          // d'outil. Même budget que le pas vide ; au second échec, le texte reste.
+          if (usedTools && stallRetries < MAX_EMPTY_FINAL_RETRIES && announcesAction(lastText)) {
+            stallRetries += 1;
+            o.log?.('announce-only', { attempt: stallRetries, tail: lastText.trim().slice(-120) });
+            emit({ type: 'text_delta', delta: '\n\n' });
+            base = [...messages, injectedMessage('announce_only', announceOnlyPrompt())];
+            responseOffset = 0;
+            continue;
           }
           // Réponse finale d'un tour qui a utilisé des outils : un montant cité doit
           // figurer dans les données du tour (#61). Une seule vérification par tour.
@@ -650,6 +661,39 @@ export const MAX_EMPTY_FINAL_RETRIES = 1;
 /** Message de relance après un dernier pas vide (invisible dans l'UI). */
 export function emptyFinalPrompt(): string {
   return `${APP_MESSAGE_PREFIX} Ta dernière réponse est vide : ni texte ni appel d'outil. Continue la tâche avec les appels d'outils nécessaires ; si elle est terminée, donne ta réponse finale à l'utilisateur ; si quelque chose te bloque, explique-le.`;
+}
+
+// Annonce d'une action à venir, en fin de réponse (français et anglais).
+// Bornes Unicode : `\b` ne reconnaît pas les lettres accentuées (« passons à »).
+const ANNOUNCE =
+  /(?<!\p{L})(?:je vais|j['’]?vais|commençons|commencons|je commence|laisse[- ]moi|laissez[- ]moi|maintenant,? je|ensuite,? (?:je|j['’]|nous)|passons (?:à|au|aux)|je m['’]apprête|voyons|i['’]ll|i will|i am going to|i['’]m going to|let me|let['’]s|now,? i|next,? i)(?!\p{L})/iu;
+
+/** Dernière phrase non vide d'un texte (ce qui reste « en suspens » à la fin). */
+function lastSentence(text: string): string {
+  const lines = text
+    .trim()
+    .split('\n')
+    .filter((l) => l.trim() !== '');
+  const line = lines.at(-1)?.trim() ?? '';
+  const sentences = line.split(/(?<=[.!])\s+/);
+  return sentences.at(-1) ?? line;
+}
+
+/**
+ * Vrai si la réponse s'arrête sur l'annonce d'une action non faite (#79) :
+ * « Commençons par examiner les autres fichiers et ensuite je vais… », ou une
+ * phrase qui finit par « : ». Une question finale n'en est pas une.
+ */
+export function announcesAction(text: string): boolean {
+  const trimmed = text.trim();
+  if (trimmed === '' || trimmed.endsWith('?')) return false;
+  if (trimmed.endsWith(':')) return true;
+  return ANNOUNCE.test(lastSentence(trimmed));
+}
+
+/** Message de relance après une annonce sans action (invisible dans l'UI). */
+export function announceOnlyPrompt(): string {
+  return `${APP_MESSAGE_PREFIX} Tu as annoncé une action sans la faire : ta réponse ne contient aucun appel d'outil. Fais-la maintenant avec les appels d'outils nécessaires, sans la réannoncer ; si la tâche est en fait terminée, donne directement ta réponse finale à l'utilisateur.`;
 }
 
 /** Erreur finale si le modèle rend encore une réponse vide après la relance. */

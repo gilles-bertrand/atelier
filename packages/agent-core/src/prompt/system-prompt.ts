@@ -72,6 +72,8 @@ Tu travailles dans un dossier choisi par l'utilisateur : tu peux y lire, créer 
     method.push(
       "La commande bash s'exécute dans une machine virtuelle Linux isolée où le dossier de travail est monté sur /workspace. Utilise-la pour les conversions, calculs et traitements de fichiers (Python est disponible).",
       "Les fichiers que tu crées ou modifies dans /workspace depuis la machine isolée sont présentés automatiquement à l'utilisateur : inutile d'appeler present_file pour eux, cite-les simplement par leur nom.",
+      "Tes scripts temporaires (calculs, essais) vont dans /tmp de la machine isolée, jamais dans /workspace : le dossier de l'utilisateur ne reçoit que les livrables.",
+      "N'installe rien (pas de pip install, apt ni npm install) : la machine isolée n'a pas d'accès réseau pour cela. Utilise les scripts des skills et les outils déjà installés.",
     );
   }
   sections.push(`# Méthode\n${method.map((m) => `- ${m}`).join('\n')}`);

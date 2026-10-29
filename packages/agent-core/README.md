@@ -102,6 +102,7 @@ const result = await session.send(
 - Si le modèle rend la main (`stop`) alors que sa liste `todo_write` du tour contient encore des tâches `pending`, la boucle le relance (au plus `MAX_CONTINUATIONS` = 2 fois, jamais s'il termine par une question). La relance est un message utilisateur `[Atelier] …` ajouté à l'historique modèle, sans event dédié : l'UI voit simplement le tour continuer.
 - Coupures du serveur (`streamCutReason`) : flux terminé sans `finish_reason` (jeton réservé `<tool_call>`, #42) et HTTP 500 « EOF » du parseur d'appels d'outils d'Ollama (#69). Une relance par nature et par tour (`MAX_STREAM_CUT_RETRIES`), avec une consigne adaptée, puis `llm/bad_response` non réessayable avec `details.reason` = `'stream_cut'` ou `'tool_call_parse'`.
 - Dernier pas vide (ni texte ni appel d'outil, `stop`) dans un tour qui a utilisé des outils : une relance (`MAX_EMPTY_FINAL_RETRIES` = 1, message marqué `empty_final`), puis `llm/bad_response` non réessayable avec `details.reason: 'empty_final'` (#73).
+- Annonce sans action (dernier pas `stop` sans appel d'outil qui finit par « je vais… », « commençons… », « : »…, `announcesAction`) dans un tour qui a utilisé des outils : une relance (`announce_only`), budget commun avec le pas vide ; au second échec, le texte reste affiché (#79).
 - `result.messages` est l'historique modèle à conserver pour le tour suivant (raisonnement retiré, compaction appliquée).
 
 ### Serveur LLM (Réglages, onboarding, indicateur)
