@@ -53,9 +53,18 @@ export interface TruncatedText {
   totalLines: number;
   /** Numéro de la dernière ligne gardée si la sortie est numérotée (`     12\t…`). */
   lastLineNumber?: number;
+  /** PDF de `documents` (en-têtes `--- page N ---`) : page coupée et dernière page de la sortie. */
+  pages?: { resumeAt: number; lastInOutput: number };
 }
 
 const NUMBERED_LINE = /^\s*(\d+)\t/;
+const PAGE_HEADER = /^--- page (\d+)\b/gm;
+
+function lastPageHeader(text: string): number | undefined {
+  let last: number | undefined;
+  for (const m of text.matchAll(PAGE_HEADER)) last = Number(m[1]);
+  return last;
+}
 
 /** Garde le début de `text` dans la limite de `maxTokens` (coupe en fin de ligne si possible). */
 export function truncateToTokens(text: string, maxTokens: number): TruncatedText {
@@ -88,13 +97,20 @@ export function truncateToTokens(text: string, maxTokens: number): TruncatedText
   }
   const lastKept = kept.at(-1) ?? '';
   const match = NUMBERED_LINE.exec(lastKept);
+  const keptText = kept.join('\n');
+  // La page en cours au moment de la coupe est incomplète : on reprend à elle.
+  const resumeAt = lastPageHeader(keptText);
+  const lastInOutput = lastPageHeader(text);
   return {
-    text: kept.join('\n'),
+    text: keptText,
     truncated: true,
     tokens,
     keptLines: kept.length,
     totalLines: lines.length,
     ...(match?.[1] !== undefined ? { lastLineNumber: Number(match[1]) } : {}),
+    ...(resumeAt !== undefined && lastInOutput !== undefined
+      ? { pages: { resumeAt, lastInOutput } }
+      : {}),
   };
 }
 
@@ -106,12 +122,20 @@ export function truncationNotice(info: {
   keptLines: number;
   totalLines: number;
   lastLineNumber?: number;
+  pages?: { resumeAt: number; lastInOutput: number };
 }): string {
+  // Le marqueur « LECTURE INCOMPLÈTE » est celui que read_file (documents) demande de suivre.
+  const head = `[Atelier : LECTURE INCOMPLÈTE. Sortie de ${info.toolName} tronquée pour tenir dans la fenêtre de contexte`;
+  if (info.pages) {
+    const { resumeAt, lastInOutput } = info.pages;
+    const range = lastInOutput > resumeAt ? `${resumeAt}-${lastInOutput}` : `${resumeAt}`;
+    return `${head} : page ${resumeAt} coupée (≈ ${info.keptTokens} tokens sur ≈ ${info.totalTokens}). Reprends avec read_file et pages: "${range}", puis continue par tranches jusqu'à la dernière page du document.]`;
+  }
   const resume =
     info.lastLineNumber !== undefined
       ? ` Suite à partir de la ligne ${info.lastLineNumber + 1} (offset: ${info.lastLineNumber + 1}).`
       : '';
-  return `[Atelier : sortie de ${info.toolName} tronquée pour tenir dans la fenêtre de contexte : ${info.keptLines} lignes affichées sur ${info.totalLines} (≈ ${info.keptTokens} tokens sur ≈ ${info.totalTokens}).${resume} Ne relis pas tout d'un bloc : lis une autre partie avec offset/limit, cherche avec grep, ou calcule sur le fichier entier avec un script (bash, Python) dans la machine isolée si elle est disponible.]`;
+  return `${head} : ${info.keptLines} lignes affichées sur ${info.totalLines} (≈ ${info.keptTokens} tokens sur ≈ ${info.totalTokens}).${resume} Ne relis pas tout d'un bloc : lis une autre partie avec offset/limit, cherche avec grep, ou calcule sur le fichier entier avec un script (bash, Python) dans la machine isolée si elle est disponible.]`;
 }
 
 /** Budget des sorties d'outils d'un tour, réinitialisé à chaque étape. */
@@ -174,6 +198,7 @@ export class ToolOutputBudget {
       keptLines: cut.keptLines,
       totalLines: cut.totalLines,
       ...(cut.lastLineNumber !== undefined ? { lastLineNumber: cut.lastLineNumber } : {}),
+      ...(cut.pages ? { pages: cut.pages } : {}),
     });
     this.#used += cut.tokens + estimateTokens(notice);
     return { content: `${cut.text}\n${notice}`, truncated: true };

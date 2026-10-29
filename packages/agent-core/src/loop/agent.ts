@@ -38,6 +38,7 @@ import { ToolOutputBudget } from './budget.js';
 import {
   APP_MESSAGE_PREFIX,
   COMPACTION_TARGET_SHARE,
+  injectedMessage,
   compactMessages,
   estimateMessagesTokens,
   shouldCompact,
@@ -436,7 +437,7 @@ export class Agent {
               lastText.trim() !== '' && !endsWithText(messages, lastText)
                 ? [{ role: 'assistant', content: [{ type: 'text', text: lastText }] }]
                 : [];
-            base = [...messages, ...partial, { role: 'user', content: streamCutPrompt() }];
+            base = [...messages, ...partial, injectedMessage('stream_cut', streamCutPrompt())];
             responseOffset = 0;
             streamError = undefined;
             continue;
@@ -455,7 +456,7 @@ export class Agent {
           }
           continuations += 1;
           o.log?.('continuation', { attempt: continuations, open: open.length });
-          base = [...messages, { role: 'user', content: continuationPrompt(open) }];
+          base = [...messages, injectedMessage('continuation', continuationPrompt(open))];
           responseOffset = 0;
         }
 
@@ -529,7 +530,7 @@ export function isStreamCut(error: unknown): boolean {
 
 /** Message de relance après un flux coupé (invisible dans l'UI). */
 export function streamCutPrompt(): string {
-  return `[Atelier] Ta réponse a été coupée par le serveur : <tool_call> est une balise réservée du modèle, qui ne peut pas être écrite telle quelle. Continue ta réponse exactement là où elle s'est arrêtée, sans répéter ce qui précède, en écrivant chaque balise réservée (<tool_call>, </tool_call>, <tool_response>) avec une espace après le chevron : < tool_call>, < /tool_call>. Si un fichier doit contenir ces balises, écris-le avec un script qui assemble la balise (par exemple '<' + 'tool_call>').`;
+  return `${APP_MESSAGE_PREFIX} Ta réponse a été coupée par le serveur : <tool_call> est une balise réservée du modèle, qui ne peut pas être écrite telle quelle. Continue ta réponse exactement là où elle s'est arrêtée, sans répéter ce qui précède, en écrivant chaque balise réservée (<tool_call>, </tool_call>, <tool_response>) avec une espace après le chevron : < tool_call>, < /tool_call>. Si un fichier doit contenir ces balises, écris-le avec un script qui assemble la balise (par exemple '<' + 'tool_call>').`;
 }
 
 /** Erreur finale si la relance est coupée à son tour : pas de « Réessayer » en boucle. */

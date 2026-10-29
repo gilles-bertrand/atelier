@@ -109,5 +109,6 @@ describe('buildSystemPrompt', () => {
     const p = buildSystemPrompt({ workspace: '/w', toolNames: ['read_file', 'look_at'] });
     expect(p).toMatch(/PDF.*docx.*xlsx/);
     expect(p).toContain('utilise look_at');
+    expect(p).toContain('LECTURE INCOMPLÈTE');
   });
 });
