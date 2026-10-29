@@ -9,6 +9,7 @@ export {
   createLookAtTool,
   createReadFileTool,
   describePages,
+  INCOMPLETE_READ_MARKER,
   MAX_BINARY_BYTES,
   MAX_TEXT_BYTES,
   MAX_VISION_PAGES_PER_CALL,
@@ -59,4 +60,4 @@ export {
 } from './pdf.js';
 export type { PdfExtraction, PdfPageText } from './pdf.js';
 export { PAGES_DIR, renderPdfPage, shellQuote } from './render.js';
-export { MAX_LINES, windowLines } from './text.js';
+export { MAX_LINES, MAX_OUTPUT_CHARS, outputCharsForContext, windowLines } from './text.js';
