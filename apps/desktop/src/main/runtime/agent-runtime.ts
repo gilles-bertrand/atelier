@@ -5,7 +5,11 @@
  * `ChatManager` la recrée (avec son historique) entre deux tours.
  */
 import { createAgentRuntime, createLlmModels, type AgentRuntime } from '@atelier/agent-core';
-import { createDocumentTools, createVisionAnalyzer } from '@atelier/documents';
+import {
+  createDocumentTools,
+  createVisionAnalyzer,
+  outputTokensForContext,
+} from '@atelier/documents';
 import { mcpPromptSection, toolSearchTool, type McpManager } from '@atelier/mcp-bridge';
 import { loadSkills } from '@atelier/skills';
 import { createSearchProvider, createWebTools } from '@atelier/web';
@@ -19,6 +23,9 @@ import {
 } from '@atelier/shared';
 import type { AgentSessionFactory, AgentSessionLike, NewAgentSession } from './chat-manager.js';
 import type { SandboxManager } from './sandbox-manager.js';
+
+/** Fenêtre supposée avant que le runtime ait lu celle du serveur (plancher d'agent-core). */
+const FALLBACK_CONTEXT_WINDOW = 32_768;
 
 type SecretGetter = (
   id: 'llm_token' | 'ollama_search_key' | 'brave_search_key',
@@ -155,7 +162,10 @@ export class AgentRuntimeHost implements AgentSessionFactory {
         ...(token ? { token } : {}),
       }).fastModel,
     });
-    return createAgentRuntime({
+    // Budget de sortie de read_file : relu à chaque appel, il suit la fenêtre de
+    // contexte résolue par le runtime (après sa création, et à chaque refresh).
+    let runtime: AgentRuntime | undefined;
+    const created = createAgentRuntime({
       llm: {
         baseUrl,
         model,
@@ -164,7 +174,11 @@ export class AgentRuntimeHost implements AgentSessionFactory {
         ...(numCtx !== undefined ? { numCtx } : {}),
       },
       tools: [
-        ...createDocumentTools({ vision }),
+        ...createDocumentTools({
+          vision,
+          maxOutputTokens: () =>
+            outputTokensForContext(runtime?.contextWindow ?? FALLBACK_CONTEXT_WINDOW),
+        }),
         ...this.#webTools,
         ...(this.#o.extraTools?.() ?? []),
       ],
@@ -175,5 +189,6 @@ export class AgentRuntimeHost implements AgentSessionFactory {
       extraInstructions: () => mcpPromptSection(mcp),
       ...(this.#o.log ? { log: this.#o.log } : {}),
     });
+    return created.then((value) => (runtime = value));
   }
 }
