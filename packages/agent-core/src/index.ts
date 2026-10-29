@@ -42,9 +42,12 @@ export type { CompactOptions, CompactResult } from './loop/compaction.js';
 export { chatMessagesToModelMessages, stripReasoning } from './loop/history.js';
 export { createToolCallRepair, repairToolInput } from './loop/repair.js';
 export {
+  isCallPreambleAllowed,
+  MAX_TEXT_CALL_PREAMBLE,
   matchToolName,
   parseLooseJson,
   parseTextToolCalls,
+  quotedCallSignatures,
   textToolCallMiddleware,
 } from './loop/text-tool-calls.js';
 export type { ParsedTextToolCalls, TextToolCall } from './loop/text-tool-calls.js';
