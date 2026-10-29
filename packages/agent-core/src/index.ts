@@ -48,6 +48,14 @@ export type { CompactOptions, CompactResult, InjectedKind } from './loop/compact
 export { chatMessagesToModelMessages, stripReasoning } from './loop/history.js';
 export { createToolCallRepair, repairToolInput } from './loop/repair.js';
 export {
+  extractNumbers,
+  MIN_CHECKED_AMOUNT,
+  numberValues,
+  sourceText,
+  unverifiedAmounts,
+  verificationPrompt,
+} from './loop/numbers.js';
+export {
   isCallPreambleAllowed,
   MAX_TEXT_CALL_PREAMBLE,
   matchToolName,
