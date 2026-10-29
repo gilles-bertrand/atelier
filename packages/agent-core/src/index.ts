@@ -11,12 +11,14 @@ export {
   AgentSession,
   continuationPrompt,
   isStreamCut,
+  LOGGED_RESPONSE_BODY_CHARS,
   MAX_CONTINUATIONS,
   MAX_STEPS,
   MAX_STREAM_CUT_RETRIES,
   streamCutError,
   streamCutPrompt,
   streamCutReason,
+  streamErrorLog,
 } from './loop/agent.js';
 export type {
   AgentOptions,

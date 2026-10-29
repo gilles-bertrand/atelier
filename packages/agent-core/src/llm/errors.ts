@@ -64,7 +64,7 @@ export function toLlmError(error: unknown, serverUrl?: string): AtelierError {
     if (status === 404) {
       return new AtelierError(
         'llm/model_not_found',
-        `Modèle introuvable sur le serveur${where}. Vérifie le nom du modèle (ollama list).`,
+        `Modèle introuvable sur le serveur${where}. Vérifiez le nom du modèle (ollama list).`,
         { cause: error, details: { status } },
       );
     }
@@ -99,7 +99,7 @@ function unreachable(where: string, cause: unknown): AtelierError {
   const code = networkErrorCode(cause);
   return new AtelierError(
     'llm/unreachable',
-    `Serveur LLM injoignable${where}${code !== undefined ? ` [${code}]` : ''}. Vérifie l'URL, le VPN/Tailscale et que le serveur tourne.`,
+    `Serveur LLM injoignable${where}${code !== undefined ? ` [${code}]` : ''}. Vérifiez l'URL, le VPN/Tailscale et que le serveur tourne.`,
     { retryable: true, cause, ...(code !== undefined ? { details: { networkCode: code } } : {}) },
   );
 }

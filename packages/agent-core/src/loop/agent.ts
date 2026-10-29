@@ -299,9 +299,7 @@ export class Agent {
             // Erreurs du flux : traitées plus bas (event `error`) ; sans ce rappel,
             // l'AI SDK les écrit aussi sur la console.
             onError: ({ error }) => {
-              o.log?.('stream-error', {
-                message: error instanceof Error ? error.message : String(error),
-              });
+              o.log?.('stream-error', streamErrorLog(error));
             },
             // Une seule permission à la fois dans l'UI : exécution séquentielle.
             toolCallConcurrency: 1,
@@ -588,13 +586,38 @@ export function streamCutError(
 ): AtelierError {
   const message =
     reason === 'tool_call_parse'
-      ? "Le serveur n'a pas pu lire un appel d'outil du modèle, même après une nouvelle tentative. Cela arrive surtout quand le modèle écrit un très long fichier d'un seul bloc : demande-lui de le produire en plusieurs parties, ou découpe la demande."
-      : "Le serveur a interrompu la réponse du modèle avant la fin. Cela arrive quand le texte contient une balise réservée du modèle (<tool_call>) : reformule la demande sans cette balise, ou demande de l'écrire « < tool_call> ».";
+      ? "Le serveur n'a pas pu lire un appel d'outil du modèle, même après une nouvelle tentative. Cela arrive surtout quand le modèle écrit un très long fichier d'un seul bloc : demandez-lui de le produire en plusieurs parties, ou découpez la demande."
+      : "Le serveur a interrompu la réponse du modèle avant la fin. Cela arrive quand le texte contient une balise réservée du modèle (<tool_call>) : reformulez la demande sans cette balise, ou demandez au modèle de l'écrire « < tool_call> ».";
   return new AtelierError('llm/bad_response', message, {
     retryable: false,
     cause,
     details: { reason },
   });
+}
+
+/** Taille max. du corps de réponse HTTP recopié dans le journal `stream-error`. */
+export const LOGGED_RESPONSE_BODY_CHARS = 500;
+
+/**
+ * Données du journal `stream-error` : le message, et pour une erreur HTTP du
+ * serveur son statut et le début du corps (diagnostic d'un 500 d'Ollama, #69).
+ */
+export function streamErrorLog(error: unknown): Record<string, unknown> {
+  const message = error instanceof Error ? error.message : String(error);
+  if (!APICallError.isInstance(error)) return { message };
+  const body = error.responseBody;
+  return {
+    message,
+    ...(error.statusCode !== undefined ? { status: error.statusCode } : {}),
+    ...(body !== undefined && body !== ''
+      ? {
+          responseBody:
+            body.length > LOGGED_RESPONSE_BODY_CHARS
+              ? `${body.slice(0, LOGGED_RESPONSE_BODY_CHARS)}…`
+              : body,
+        }
+      : {}),
+  };
 }
 
 function endsWithText(messages: readonly ModelMessage[], text: string): boolean {
