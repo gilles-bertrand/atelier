@@ -37,7 +37,11 @@ describe('read_file : texte', () => {
     await withWorkspace([], async (ws) => {
       const lines = Array.from({ length: 2500 }, (_, i) => `ligne ${i + 1}`).join('\n');
       await writeFile(path.join(ws, 'long.csv'), lines);
-      const tool = noCacheTool();
+      // Budget par défaut (24 000 caractères) : la fenêtre s'arrête avant 2000 lignes.
+      const bounded = okContent(await noCacheTool().execute({ path: 'long.csv' }, contextFor(ws)));
+      expect(bounded.length).toBeLessThanOrEqual(24_000 + 500); // corps + en-tête et rappel de fin
+      expect(bounded).toMatch(/^\[lignes 1-1\d{3} sur 2500 ; suite avec offset: 1\d{3}\]/);
+      const tool = noCacheTool({ maxOutputChars: 100_000 });
       const first = okContent(await tool.execute({ path: 'long.csv' }, contextFor(ws)));
       expect(first).toContain('[lignes 1-2000 sur 2500 ; suite avec offset: 2001]');
       expect(first).toContain('  2000\tligne 2000');
@@ -50,6 +54,7 @@ describe('read_file : texte', () => {
         '    10\tligne 10',
         '    11\tligne 11',
         '    12\tligne 12',
+        '[Sortie limitée : lignes 10-12 sur 2500. Suite : read_file({ path: "long.csv", offset: 13 }). Pour calculer sur tout le fichier (totaux, filtres, regroupements), préfère un script dans la VM (bash) plutôt que de le lire en entier.]',
       ]);
     });
   });
@@ -147,7 +152,11 @@ describe('read_file : PDF', () => {
     await withWorkspace(['rapport.pdf'], async (ws) => {
       const out = okContent(await noCacheTool().execute({ path: 'rapport.pdf' }, contextFor(ws)));
       expect(out.split('\n')[0]).toBe(
-        '[PDF : rapport.pdf, 25 pages au total ; pages 1-20 ci-dessous ; suite avec pages: "21-25"]',
+        '[PDF : rapport.pdf, 25 pages au total ; pages 1-20 ci-dessous]',
+      );
+      // La consigne de continuation vient en dernier, impossible à rater.
+      expect(out.split('\n\n').at(-1)).toBe(
+        '[LECTURE INCOMPLÈTE : pages 21-25 sur 25 pas encore lues. Pour résumer ou analyser ce document, lis la suite AVANT de répondre : read_file({ path: "rapport.pdf", pages: "21-25" }), puis les tranches suivantes jusqu\'à la page 25.]',
       );
       expect(out).toContain('--- page 1 ---\nRapport annuel - page 1');
       expect(out).toContain(
@@ -155,6 +164,46 @@ describe('read_file : PDF', () => {
       );
       expect(out).toContain('--- page 20 ---');
       expect(out).not.toContain('--- page 21 ---');
+    });
+  });
+
+  it('borne chaque tranche au budget de sortie et guide la lecture jusqu’à la fin', async () => {
+    await withWorkspace(['rapport.pdf'], async (ws) => {
+      // Budget serré : quelques pages par appel. On suit les consignes comme le ferait le modèle.
+      const tool = noCacheTool({ maxOutputChars: 300 });
+      const seen = new Set<number>();
+      let args: { path: string; pages?: string } = { path: 'rapport.pdf' };
+      let calls = 0;
+      for (;;) {
+        calls++;
+        const out = okContent(await tool.execute(args, contextFor(ws)));
+        expect(out.length).toBeLessThan(300 + 600);
+        for (const m of out.matchAll(/--- page (\d+) ---/g)) seen.add(Number(m[1]));
+        const next = /pages: "([^"]+)" \}\)/.exec(out.split('\n\n').at(-1) ?? '');
+        if (!next) {
+          expect(out.split('\n\n').at(-1)).toBe('[Fin du document : page 25 sur 25 lue.]');
+          break;
+        }
+        expect(out).toContain('LECTURE INCOMPLÈTE');
+        args = { path: 'rapport.pdf', pages: next[1] ?? '' };
+        expect(calls).toBeLessThan(25);
+      }
+      expect([...seen].sort((a, b) => a - b)).toEqual(Array.from({ length: 25 }, (_, i) => i + 1));
+      expect(calls).toBeGreaterThan(2);
+    });
+  });
+
+  it('signale les pages demandées mais coupées par le budget', async () => {
+    await withWorkspace(['rapport.pdf'], async (ws) => {
+      const out = okContent(
+        await noCacheTool({ maxOutputChars: 300 }).execute(
+          { path: 'rapport.pdf', pages: '2,4-12' },
+          contextFor(ws),
+        ),
+      );
+      const footer = out.split('\n\n').at(-1) ?? '';
+      expect(footer).toMatch(/^\[LECTURE INCOMPLÈTE : pages .* demandées mais non affichées/);
+      expect(footer).toMatch(/jusqu'à la page 12\.\]$/);
     });
   });
 
@@ -166,6 +215,8 @@ describe('read_file : PDF', () => {
       );
       expect(out).toMatch(/pages 21-25 ci-dessous\]/);
       expect(out).toContain('--- page 25 ---');
+      expect(out.split('\n\n').at(-1)).toBe('[Fin du document : page 25 sur 25 lue.]');
+      expect(out).not.toContain('LECTURE INCOMPLÈTE');
       const some = okContent(
         await tool.execute({ path: 'rapport.pdf', pages: '2,4-5' }, contextFor(ws)),
       );

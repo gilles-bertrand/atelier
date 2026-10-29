@@ -6,15 +6,24 @@ Lecture multi-format et vision pour l'agent (brief §2bis) : `read_file`, `look_
 
 ```ts
 import { createDefaultRegistry, createLlmModels } from '@atelier/agent-core';
-import { createDocumentTools, createVisionAnalyzer, importAttachment } from '@atelier/documents';
+import {
+  createDocumentTools,
+  createVisionAnalyzer,
+  outputCharsForContext,
+} from '@atelier/documents';
 
 const models = createLlmModels({ baseUrl, model, token, thinking });
 // Vision : modèle principal (multimodal) par défaut ; `fastModel` évite le thinking.
 // Modèle vision séparé (Réglages) : createLlmModels({ …, model: settings.visionModel }).model
 const vision = createVisionAnalyzer({ model: models.fastModel });
+// Budget de sortie d'un appel de read_file : 25 % de la fenêtre de contexte (≈ 24 000 car. pour 32 768 tokens).
+const maxOutputChars = outputCharsForContext(contextWindow);
 
 // `read_file` de documents remplace le read_file texte provisoire d'agent-core.
-const registry = createDefaultRegistry([...createDocumentTools({ vision }), ...webTools]);
+const registry = createDefaultRegistry([
+  ...createDocumentTools({ vision, maxOutputChars }),
+  ...webTools,
+]);
 ```
 
 Sans `vision`, les images et les pages scannées sont signalées au modèle sans transcription (message clair, pas d'exception). La VM (`ToolExecutionContext.sandbox`) n'est nécessaire que pour rendre les pages PDF en image.
@@ -33,15 +42,25 @@ Copie dans `<dossier>/.atelier/uploads/` (jamais d'écrasement : « facture (2).
 
 ## `read_file({ path, offset?, limit?, pages? })`
 
-| Type (magic bytes, puis extension)      | Traitement                                                                                                                                         |
-| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| texte, code, csv, json…                 | lignes numérotées, `offset`/`limit`, 2000 lignes et 100 000 caractères max ; UTF-8, UTF-16 (BOM), sinon latin-1 (windows-1252) signalé ; 20 Mo max |
-| PDF                                     | texte par page (unpdf, côté hôte), `--- page N ---`, nombre total de pages, `pages: "1-10,15"` (20 max par appel ; défaut : les 20 premières)      |
-| page PDF sans texte (< 30 car.)         | rendu PNG par `pdftoppm` **dans la VM** (`.atelier/cache/pages/`), puis transcription par le modèle vision ; 10 pages scannées max par appel       |
-| png, jpg, webp, gif, heic (+avif, tiff) | orientation EXIF, réduction à 1568 px (sharp ; HEIC décodé par heic-convert), description + transcription par le modèle vision                     |
-| docx                                    | mammoth → markdown (titres, gras, listes, tableaux) ; images remplacées par `[image]`                                                              |
-| xlsx                                    | exceljs → une table markdown par feuille (dimensions, 200 lignes et 50 colonnes max, résultat des formules)                                        |
-| autre binaire                           | refus `ok: false` avec le type détecté (ex. « ELF (application/x-elf) », « Word 97-2003 (.doc) »)                                                  |
+| Type (magic bytes, puis extension)      | Traitement                                                                                                                                                                      |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| texte, code, csv, json…                 | lignes numérotées, `offset`/`limit`, 2000 lignes et `maxOutputChars` caractères max (24 000 par défaut) ; UTF-8, UTF-16 (BOM), sinon latin-1 (windows-1252) signalé ; 20 Mo max |
+| PDF                                     | texte par page (unpdf, côté hôte), `--- page N ---`, nombre total de pages, lu **par tranches** (voir ci-dessous)                                                               |
+| page PDF sans texte (< 30 car.)         | rendu PNG par `pdftoppm` **dans la VM** (`.atelier/cache/pages/`), puis transcription par le modèle vision ; 10 pages scannées max par appel                                    |
+| png, jpg, webp, gif, heic (+avif, tiff) | orientation EXIF, réduction à 1568 px (sharp ; HEIC décodé par heic-convert), description + transcription par le modèle vision                                                  |
+| docx                                    | mammoth → markdown (titres, gras, listes, tableaux) ; images remplacées par `[image]`                                                                                           |
+| xlsx                                    | exceljs → une table markdown par feuille (dimensions, 200 lignes et 50 colonnes max, résultat des formules)                                                                     |
+| autre binaire                           | refus `ok: false` avec le type détecté (ex. « ELF (application/x-elf) », « Word 97-2003 (.doc) »)                                                                               |
+
+### PDF longs : lecture par tranches
+
+Une tranche s'arrête à 20 pages ou au budget `maxOutputChars` (le premier atteint ; le rapport de démo de 30 pages donne 1-11, 12-22, 23-30). Sans `pages`, la lecture part de la page 1. La sortie se termine par une consigne placée **en dernier**, là où le modèle la voit avant de décider :
+
+```
+[LECTURE INCOMPLÈTE : pages 12-30 sur 30 pas encore lues. Pour résumer ou analyser ce document, lis la suite AVANT de répondre : read_file({ path: "rapport.pdf", pages: "12-22" }), puis les tranches suivantes jusqu'à la page 30.]
+```
+
+La taille de la tranche suggérée est estimée d'après la taille des pages déjà lues. La dernière tranche se termine par `[Fin du document : page 30 sur 30 lue.]`. `INCOMPLETE_READ_MARKER` (« LECTURE INCOMPLÈTE ») est exporté pour qu'agent-core puisse détecter une lecture partielle.
 
 ## `look_at({ path, question, page? })`
 

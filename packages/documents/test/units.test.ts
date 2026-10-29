@@ -11,6 +11,8 @@ import {
   importAttachments,
   toAttachment,
   markdownTable,
+  MAX_OUTPUT_CHARS,
+  outputCharsForContext,
   parsePageRange,
   prepareImage,
   sanitizeFileName,
@@ -52,6 +54,22 @@ describe('pages et lignes', () => {
   it('coupe les lignes trop longues', () => {
     const { body } = windowLines('x'.repeat(2500), {}, false);
     expect(body).toHaveLength(2000 + '… [ligne tronquée]'.length);
+  });
+
+  it('borne la fenêtre au budget de caractères', () => {
+    const text = Array.from({ length: 100 }, (_, i) => `ligne ${i + 1} ${'x'.repeat(90)}`).join(
+      '\n',
+    );
+    const w = windowLines(text, {}, true, 1_000);
+    expect(w.body.length).toBeLessThanOrEqual(1_000);
+    expect(w.last).toBeLessThan(100);
+  });
+
+  it('dérive le budget de sortie de la fenêtre de contexte', () => {
+    expect(outputCharsForContext(32_768)).toBe(24_576);
+    expect(outputCharsForContext(131_072, 0.1)).toBe(39_321);
+    expect(outputCharsForContext(1_000)).toBe(2_000);
+    expect(MAX_OUTPUT_CHARS).toBeLessThanOrEqual(outputCharsForContext(32_768));
   });
 });
 
