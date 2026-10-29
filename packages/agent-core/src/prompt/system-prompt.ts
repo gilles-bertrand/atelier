@@ -60,6 +60,7 @@ Tu travailles dans un dossier choisi par l'utilisateur : tu peux y lire, créer 
     'Les balises <tool_call>, </tool_call> et <tool_response> sont réservées au modèle : ne les écris jamais telles quelles (la réponse serait coupée). Pour les citer, mets une espace après le chevron (< tool_call>).',
     "Si une action est refusée par l'utilisateur, ne la retente pas : propose une autre approche ou demande comment procéder.",
     'Termine par une réponse courte qui dit ce qui a été fait et où trouver le résultat.',
+    "Dans ta réponse finale, ne cite un chiffre (total, montant, moyenne) que s'il figure tel quel dans un résultat d'outil ou dans un fichier que tu as écrit pendant ce tour ; ne recalcule rien de tête. Si tu n'as pas le chiffre sous les yeux, renvoie au fichier produit.",
   ];
   if (has('look_at')) {
     method.push(
@@ -89,7 +90,7 @@ Tu travailles dans un dossier choisi par l'utilisateur : tu peux y lire, créer 
       )
       .join('\n');
     sections.push(`# Skills
-Des savoir-faire sont disponibles sous forme de fichiers SKILL.md. Quand une demande correspond à un skill, lis d'abord son SKILL.md en entier et suis ses consignes.
+Des savoir-faire sont disponibles sous forme de fichiers SKILL.md, souvent avec des scripts prêts à l'emploi (dossier scripts/ à côté du SKILL.md). Avant une tâche couverte par un skill, lis d'abord son SKILL.md en entier, puis suis ses étapes et lance son script : n'écris pas toi-même de code équivalent (par exemple ton propre code openpyxl ou exceljs pour un classeur Excel).
 ${list}`);
   }
 

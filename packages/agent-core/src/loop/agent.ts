@@ -44,6 +44,7 @@ import {
   shouldCompact,
 } from './compaction.js';
 import { hasReasoning, stripReasoning } from './history.js';
+import { sourceText, unverifiedAmounts, verificationPrompt } from './numbers.js';
 import { createToolCallRepair } from './repair.js';
 
 /** Nombre maximal d'étapes par tour (brief §1). */
@@ -276,6 +277,8 @@ export class Agent {
         let todos: readonly TodoItem[] | undefined; // liste mise à jour pendant ce tour
         let continuations = 0;
         let cutRetries = 0;
+        let usedTools = false;
+        let verified = false;
         let lastText = '';
         let finishReason: string | undefined;
         let streamError: unknown;
@@ -352,6 +355,7 @@ export class Agent {
                 if (part.text !== '') emit({ type: 'reasoning_delta', delta: part.text });
                 break;
               case 'tool-call':
+                usedTools = true;
                 emit({
                   type: 'tool_start',
                   toolCallId: part.toolCallId,
@@ -442,22 +446,35 @@ export class Agent {
             streamError = undefined;
             continue;
           }
+          if (finishReason !== 'stop' || steps >= maxSteps) break;
           // Le modèle a rendu la main (« stop ») en laissant des tâches ouvertes : on le
           // relance, au plus MAX_CONTINUATIONS fois, sauf s'il pose une question.
           const open = openTodos(todos);
           if (
-            finishReason !== 'stop' ||
-            !open.some((t) => t.status === 'pending') ||
-            continuations >= MAX_CONTINUATIONS ||
-            steps >= maxSteps ||
-            lastText.trim().endsWith('?')
+            open.some((t) => t.status === 'pending') &&
+            continuations < MAX_CONTINUATIONS &&
+            !lastText.trim().endsWith('?')
           ) {
-            break;
+            continuations += 1;
+            o.log?.('continuation', { attempt: continuations, open: open.length });
+            base = [...messages, injectedMessage('continuation', continuationPrompt(open))];
+            responseOffset = 0;
+            continue;
           }
-          continuations += 1;
-          o.log?.('continuation', { attempt: continuations, open: open.length });
-          base = [...messages, injectedMessage('continuation', continuationPrompt(open))];
-          responseOffset = 0;
+          // Réponse finale d'un tour qui a utilisé des outils : un montant cité doit
+          // figurer dans les données du tour (#61). Une seule vérification par tour.
+          if (usedTools && !verified) {
+            const missing = unverifiedAmounts(lastText, sourceText(messages));
+            if (missing.length > 0) {
+              verified = true;
+              o.log?.('verification', { amounts: missing });
+              emit({ type: 'text_delta', delta: '\n\n' });
+              base = [...messages, injectedMessage('verification', verificationPrompt(missing))];
+              responseOffset = 0;
+              continue;
+            }
+          }
+          break;
         }
 
         if (sources.size > 0) emit({ type: 'sources', sources: [...sources.values()] });
