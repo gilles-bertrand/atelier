@@ -55,26 +55,48 @@ const REASON_MESSAGES: Record<string, string> = {
     'Le serveur a interrompu la réponse avant la fin. Cela arrive quand le texte contient une balise réservée du modèle (<tool_call>). Reformulez la demande sans cette balise, ou demandez de l’écrire « < tool_call> ».',
 };
 
-/** Causes pour lesquelles relancer le même tour échouerait de la même façon. */
-const NOT_RETRYABLE_REASONS = new Set(['stream_cut']);
+/**
+ * Réponse inattendue dont la cause est connue (`details.reason`) mais sans
+ * message dédié ici, ni message fourni : le texte générique (« Est-ce bien un
+ * serveur Ollama ? ») égarerait l'utilisateur, le serveur est bien Ollama.
+ */
+const BAD_RESPONSE_WITH_REASON = 'Le serveur a interrompu la réponse de façon inattendue.';
+
+/**
+ * Causes pour lesquelles relancer le même tour échouerait de la même façon
+ * (agent-core a déjà fait une relance adaptée) : il faut reformuler.
+ * - `stream_cut` : flux coupé sur la balise réservée `<tool_call>` (#42) ;
+ * - `tool_call_parse` : 500 « EOF » du parseur d'appels d'outils d'Ollama (#69).
+ */
+const NOT_RETRYABLE_REASONS = new Set(['stream_cut', 'tool_call_parse']);
 
 function detail(error: Pick<SerializedAtelierError, 'details'>, key: string): string | undefined {
   const value = error.details?.[key];
   return typeof value === 'string' ? value : undefined;
 }
 
-/** Message lisible pour une erreur sérialisée. */
-export function errorMessage(error: Pick<SerializedAtelierError, 'code' | 'details'>): string {
+/**
+ * Message lisible pour une erreur sérialisée. Le message technique n'est repris
+ * que pour un `llm/bad_response` à cause connue sans message dédié ici : agent-core
+ * le rédige alors en français pour l'utilisateur.
+ */
+export function errorMessage(
+  error: Pick<SerializedAtelierError, 'code' | 'details'> & { message?: string },
+): string {
   const kind = detail(error, 'kind');
   if (kind !== undefined && KIND_MESSAGES[kind]) return KIND_MESSAGES[kind];
   const reason = detail(error, 'reason');
   if (reason !== undefined && REASON_MESSAGES[reason]) return REASON_MESSAGES[reason];
+  if (reason !== undefined && error.code === 'llm/bad_response') {
+    const message = error.message?.trim();
+    return message ? message : BAD_RESPONSE_WITH_REASON;
+  }
   return MESSAGES[error.code];
 }
 
 /**
  * « Réessayer » a-t-il un sens ? Non quand la même demande échouerait à
- * l'identique (flux coupé sur une balise réservée) : il faut reformuler. Les
+ * l'identique ({@link NOT_RETRYABLE_REASONS}) : il faut reformuler. Les
  * autres erreurs gardent le bouton, même non `retryable` : après avoir corrigé
  * le jeton ou le modèle dans les Réglages, rejouer le tour est utile.
  */
