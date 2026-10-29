@@ -100,6 +100,49 @@ describe('outils fichiers', () => {
     });
   });
 
+  it('list_dir signale les pièces jointes de .atelier/uploads (#59)', async () => {
+    await withTempDir(async (ws) => {
+      // Dossier vide en apparence : les pièces jointes sont dans le dossier caché.
+      await mkdir(path.join(ws, '.atelier/uploads'), { recursive: true });
+      await mkdir(path.join(ws, '.atelier/cache'), { recursive: true });
+      await writeFile(path.join(ws, '.atelier/uploads/facture.pdf'), '%PDF');
+      await writeFile(path.join(ws, '.atelier/uploads/photo.jpg'), 'jpg');
+      await writeFile(path.join(ws, '.atelier/cache/abc.txt'), 'cache');
+      const empty = await listDirTool.execute({}, ctx(ws));
+      expect(empty.content).toBe(
+        'Pièces jointes : .atelier/uploads/facture.pdf, .atelier/uploads/photo.jpg',
+      );
+
+      await writeFile(path.join(ws, 'notes.md'), 'x');
+      const root = await listDirTool.execute({ path: '.' }, ctx(ws));
+      expect(root.content).toBe(
+        'notes.md (1 o)\n\nPièces jointes : .atelier/uploads/facture.pdf, .atelier/uploads/photo.jpg',
+      );
+
+      // Sur .atelier : uploads/ seulement, le cache reste masqué.
+      const app = await listDirTool.execute({ path: '.atelier' }, ctx(ws));
+      expect(app.content).toContain('uploads/');
+      expect(app.content).not.toContain('cache');
+      expect(app.content).toContain('Pièces jointes');
+
+      // Un sous-dossier n'est pas concerné.
+      await mkdir(path.join(ws, 'docs'));
+      expect((await listDirTool.execute({ path: 'docs' }, ctx(ws))).content).toBe('docs est vide.');
+    });
+  });
+
+  it('list_dir borne la liste des pièces jointes à 20 noms', async () => {
+    await withTempDir(async (ws) => {
+      await mkdir(path.join(ws, '.atelier/uploads'), { recursive: true });
+      for (let i = 0; i < 25; i++) {
+        await writeFile(path.join(ws, `.atelier/uploads/f${String(i).padStart(2, '0')}.txt`), 'x');
+      }
+      const { content } = await listDirTool.execute({}, ctx(ws));
+      expect(content.match(/\.atelier\/uploads\//g)).toHaveLength(20);
+      expect(content).toMatch(/… et 5 autres$/);
+    });
+  });
+
   it('list_dir, glob et grep explorent le dossier', async () => {
     await withTempDir(async (ws) => {
       await mkdir(path.join(ws, 'rapports/2026'), { recursive: true });

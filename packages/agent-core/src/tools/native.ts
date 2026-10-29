@@ -184,8 +184,13 @@ export const listDirTool = defineTool({
     guarded(async () => {
       const resolved = await resolveWorkspacePath(context.workspace, input.path ?? '.');
       const entries = await readdir(resolved.absolutePath, { withFileTypes: true });
+      const isRoot = resolved.relativePath === '.';
+      const isAppDir = resolved.relativePath === APP_DIR;
+      // Pièces jointes : seul contenu de `.atelier/` signalé (cache et rendus restent masqués).
+      const attachments = isRoot || isAppDir ? await attachmentsLine(context.workspace) : undefined;
       const visible = entries
         .filter((e) => input.show_hidden === true || !e.name.startsWith('.'))
+        .filter((e) => !isAppDir || e.name === 'uploads')
         .sort((a, b) =>
           a.isDirectory() === b.isDirectory()
             ? a.name.localeCompare(b.name)
@@ -193,7 +198,9 @@ export const listDirTool = defineTool({
               ? -1
               : 1,
         );
-      if (visible.length === 0) return { ok: true, content: `${resolved.relativePath} est vide.` };
+      if (visible.length === 0) {
+        return { ok: true, content: attachments ?? `${resolved.relativePath} est vide.` };
+      }
       const lines: string[] = [];
       for (const entry of visible.slice(0, 500)) {
         if (entry.isDirectory()) {
@@ -206,9 +213,41 @@ export const listDirTool = defineTool({
         }
       }
       if (visible.length > 500) lines.push(`… ${visible.length - 500} autres entrées`);
+      if (attachments !== undefined) lines.push('', attachments);
       return { ok: true, content: lines.join('\n') };
     }),
 });
+
+/** Dossier de l'app dans le dossier de travail (cache, rendus, pièces jointes). */
+const APP_DIR = '.atelier';
+/** Pièces jointes déposées par l'utilisateur (copiées par `documents`). */
+export const UPLOADS_DIR = `${APP_DIR}/uploads`;
+/** Noms de pièces jointes cités au plus par list_dir. */
+export const MAX_LISTED_ATTACHMENTS = 20;
+
+/**
+ * Ligne « Pièces jointes : … » si `.atelier/uploads/` contient des fichiers :
+ * le dossier est caché, sans elle le modèle ne les retrouve pas (#59).
+ */
+async function attachmentsLine(workspace: string): Promise<string | undefined> {
+  let names: string[];
+  try {
+    const entries = await readdir(path.join(workspace, UPLOADS_DIR), { withFileTypes: true });
+    names = entries
+      .filter((e) => e.isFile() && !e.name.startsWith('.'))
+      .map((e) => e.name)
+      .sort((a, b) => a.localeCompare(b));
+  } catch {
+    return undefined;
+  }
+  if (names.length === 0) return undefined;
+  const shown = names.slice(0, MAX_LISTED_ATTACHMENTS).map((n) => `${UPLOADS_DIR}/${n}`);
+  const more =
+    names.length > MAX_LISTED_ATTACHMENTS
+      ? `, … et ${String(names.length - MAX_LISTED_ATTACHMENTS)} autres`
+      : '';
+  return `Pièces jointes : ${shown.join(', ')}${more}`;
+}
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} o`;
