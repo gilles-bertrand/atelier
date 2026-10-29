@@ -9,6 +9,8 @@ export const PACKAGE_NAME = '@atelier/agent-core';
 export {
   Agent,
   AgentSession,
+  announceOnlyPrompt,
+  announcesAction,
   continuationPrompt,
   emptyFinalError,
   emptyFinalPrompt,
