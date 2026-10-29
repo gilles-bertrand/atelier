@@ -60,4 +60,10 @@ export {
 } from './pdf.js';
 export type { PdfExtraction, PdfPageText } from './pdf.js';
 export { PAGES_DIR, renderPdfPage, shellQuote } from './render.js';
-export { MAX_LINES, MAX_OUTPUT_CHARS, outputCharsForContext, windowLines } from './text.js';
+export {
+  MAX_LINES,
+  MAX_OUTPUT_TOKENS,
+  OUTPUT_SHARE,
+  outputTokensForContext,
+  windowLines,
+} from './text.js';

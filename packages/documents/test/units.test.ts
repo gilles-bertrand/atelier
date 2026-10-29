@@ -11,8 +11,8 @@ import {
   importAttachments,
   toAttachment,
   markdownTable,
-  MAX_OUTPUT_CHARS,
-  outputCharsForContext,
+  MAX_OUTPUT_TOKENS,
+  outputTokensForContext,
   parsePageRange,
   prepareImage,
   sanitizeFileName,
@@ -20,6 +20,7 @@ import {
   UPLOADS_DIR,
   windowLines,
 } from '../src/index.js';
+import { estimateTokens, TOOL_OUTPUT_SHARE } from '@atelier/agent-core';
 import { FIXTURES, withWorkspace } from './helpers.js';
 
 describe('encodage', () => {
@@ -56,20 +57,21 @@ describe('pages et lignes', () => {
     expect(body).toHaveLength(2000 + '… [ligne tronquée]'.length);
   });
 
-  it('borne la fenêtre au budget de caractères', () => {
+  it('borne la fenêtre au budget de tokens', () => {
     const text = Array.from({ length: 100 }, (_, i) => `ligne ${i + 1} ${'x'.repeat(90)}`).join(
       '\n',
     );
-    const w = windowLines(text, {}, true, 1_000);
-    expect(w.body.length).toBeLessThanOrEqual(1_000);
+    const w = windowLines(text, {}, true, 300);
+    expect(estimateTokens(w.body)).toBeLessThanOrEqual(300);
     expect(w.last).toBeLessThan(100);
   });
 
   it('dérive le budget de sortie de la fenêtre de contexte', () => {
-    expect(outputCharsForContext(32_768)).toBe(24_576);
-    expect(outputCharsForContext(131_072, 0.1)).toBe(39_321);
-    expect(outputCharsForContext(1_000)).toBe(2_000);
-    expect(MAX_OUTPUT_CHARS).toBeLessThanOrEqual(outputCharsForContext(32_768));
+    expect(outputTokensForContext(32_768)).toBe(6_553);
+    expect(outputTokensForContext(131_072, 0.1)).toBe(13_107);
+    expect(outputTokensForContext(1_000)).toBe(500);
+    // Sous le plafond d'agent-core pour une sortie d'outil (25 % de la fenêtre).
+    expect(MAX_OUTPUT_TOKENS).toBeLessThan(32_768 * TOOL_OUTPUT_SHARE);
   });
 });
 

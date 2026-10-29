@@ -7,8 +7,11 @@ import {
   createReadFileTool,
   createVisionAnalyzer,
   CACHE_DIR,
+  MAX_OUTPUT_TOKENS,
+  outputTokensForContext,
   VISION_INSTRUCTIONS,
 } from '../src/index.js';
+import { estimateTokens, ToolOutputBudget } from '@atelier/agent-core';
 import { contextFor, fakeSandbox, okContent, visionModel, withWorkspace } from './helpers.js';
 
 const noCacheTool = (options: Parameters<typeof createReadFileTool>[0] = {}) =>
@@ -37,11 +40,11 @@ describe('read_file : texte', () => {
     await withWorkspace([], async (ws) => {
       const lines = Array.from({ length: 2500 }, (_, i) => `ligne ${i + 1}`).join('\n');
       await writeFile(path.join(ws, 'long.csv'), lines);
-      // Budget par défaut (24 000 caractères) : la fenêtre s'arrête avant 2000 lignes.
+      // Budget par défaut (20 % d'une fenêtre de 32 768) : la fenêtre s'arrête avant 2000 lignes.
       const bounded = okContent(await noCacheTool().execute({ path: 'long.csv' }, contextFor(ws)));
-      expect(bounded.length).toBeLessThanOrEqual(24_000 + 500); // corps + en-tête et rappel de fin
-      expect(bounded).toMatch(/^\[lignes 1-1\d{3} sur 2500 ; suite avec offset: 1\d{3}\]/);
-      const tool = noCacheTool({ maxOutputChars: 100_000 });
+      expect(estimateTokens(bounded)).toBeLessThanOrEqual(MAX_OUTPUT_TOKENS);
+      expect(bounded).toMatch(/^\[lignes 1-\d{3,4} sur 2500 ; suite avec offset: \d{3,4}\]/);
+      const tool = noCacheTool({ maxOutputTokens: 100_000 });
       const first = okContent(await tool.execute({ path: 'long.csv' }, contextFor(ws)));
       expect(first).toContain('[lignes 1-2000 sur 2500 ; suite avec offset: 2001]');
       expect(first).toContain('  2000\tligne 2000');
@@ -152,7 +155,7 @@ describe('read_file : PDF', () => {
     await withWorkspace(['rapport.pdf'], async (ws) => {
       const out = okContent(await noCacheTool().execute({ path: 'rapport.pdf' }, contextFor(ws)));
       expect(out.split('\n')[0]).toBe(
-        '[PDF : rapport.pdf, 25 pages au total ; pages 1-20 ci-dessous]',
+        '[PDF : rapport.pdf, 25 pages au total ; pages 1-20 ci-dessous ; lecture incomplète, suite avec pages: "21-25" (voir la fin)]',
       );
       // La consigne de continuation vient en dernier, impossible à rater.
       expect(out.split('\n\n').at(-1)).toBe(
@@ -170,14 +173,14 @@ describe('read_file : PDF', () => {
   it('borne chaque tranche au budget de sortie et guide la lecture jusqu’à la fin', async () => {
     await withWorkspace(['rapport.pdf'], async (ws) => {
       // Budget serré : quelques pages par appel. On suit les consignes comme le ferait le modèle.
-      const tool = noCacheTool({ maxOutputChars: 300 });
+      const tool = noCacheTool({ maxOutputTokens: 600 });
       const seen = new Set<number>();
       let args: { path: string; pages?: string } = { path: 'rapport.pdf' };
       let calls = 0;
       for (;;) {
         calls++;
         const out = okContent(await tool.execute(args, contextFor(ws)));
-        expect(out.length).toBeLessThan(300 + 600);
+        expect(estimateTokens(out)).toBeLessThanOrEqual(600);
         for (const m of out.matchAll(/--- page (\d+) ---/g)) seen.add(Number(m[1]));
         const next = /pages: "([^"]+)" \}\)/.exec(out.split('\n\n').at(-1) ?? '');
         if (!next) {
@@ -196,14 +199,66 @@ describe('read_file : PDF', () => {
   it('signale les pages demandées mais coupées par le budget', async () => {
     await withWorkspace(['rapport.pdf'], async (ws) => {
       const out = okContent(
-        await noCacheTool({ maxOutputChars: 300 }).execute(
-          { path: 'rapport.pdf', pages: '2,4-12' },
+        await noCacheTool({ maxOutputTokens: 600 }).execute(
+          { path: 'rapport.pdf', pages: '2,4-20' },
           contextFor(ws),
         ),
       );
       const footer = out.split('\n\n').at(-1) ?? '';
       expect(footer).toMatch(/^\[LECTURE INCOMPLÈTE : pages .* demandées mais non affichées/);
-      expect(footer).toMatch(/jusqu'à la page 12\.\]$/);
+      expect(footer).toMatch(/jusqu'à la page 20\.\]$/);
+    });
+  });
+
+  it('garde la consigne de continuation après le budget d’agent-core (PDF de chiffres)', async () => {
+    await withWorkspace(['chiffres.pdf'], async (ws) => {
+      // Tableaux financiers : ≈ 1,2 caractère par token, le pire cas pour un budget en caractères.
+      for (const contextWindow of [32_768, 16_384, 131_072]) {
+        const tool = noCacheTool({ maxOutputTokens: outputTokensForContext(contextWindow) });
+        const out = okContent(await tool.execute({ path: 'chiffres.pdf' }, contextFor(ws)));
+        const budget = new ToolOutputBudget(contextWindow);
+        budget.startStep();
+        const fitted = budget.fit('read_file', out);
+        expect(fitted.truncated).toBe(false);
+        expect(fitted.content.split('\n\n').at(-1)).toMatch(
+          /^\[LECTURE INCOMPLÈTE : pages \d+-30 sur 30 pas encore lues\..*pages: "\d+-\d+" \}\)/,
+        );
+        expect(out.split('\n')[0]).toMatch(/lecture incomplète, suite avec pages: "\d+-\d+"/);
+      }
+    });
+  });
+
+  it('relit un budget fourni par getter à chaque appel', async () => {
+    await withWorkspace(['chiffres.pdf'], async (ws) => {
+      let contextWindow = 32_768;
+      const tool = noCacheTool({ maxOutputTokens: () => outputTokensForContext(contextWindow) });
+      const pagesShown = async () => {
+        const out = okContent(await tool.execute({ path: 'chiffres.pdf' }, contextFor(ws)));
+        return /pages 1-(\d+) ci-dessous/.exec(out)?.[1];
+      };
+      const small = await pagesShown();
+      contextWindow = 131_072;
+      const large = await pagesShown();
+      expect(Number(large)).toBeGreaterThan(Number(small));
+      // Valeur invalide : défaut.
+      const fallback = noCacheTool({ maxOutputTokens: () => Number.NaN });
+      const out = okContent(await fallback.execute({ path: 'chiffres.pdf' }, contextFor(ws)));
+      expect(out).toContain(`pages 1-${small ?? ''} ci-dessous`);
+    });
+  });
+
+  it('coupe une page plus grande que le budget sans perdre la consigne', async () => {
+    await withWorkspace(['chiffres.pdf'], async (ws) => {
+      const out = okContent(
+        await noCacheTool({ maxOutputTokens: 600 }).execute(
+          { path: 'chiffres.pdf' },
+          contextFor(ws),
+        ),
+      );
+      expect(out).toMatch(/^\[PDF : chiffres\.pdf, 30 pages au total ; pages 1 ci-dessous/);
+      expect(out).toContain('(page 1 coupée : trop longue pour un seul appel)');
+      expect(estimateTokens(out)).toBeLessThanOrEqual(600);
+      expect(out.split('\n\n').at(-1)).toMatch(/pages: "2" \}\)/);
     });
   });
 

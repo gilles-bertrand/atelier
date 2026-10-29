@@ -11,7 +11,12 @@ import {
   type ToolExecutionContext,
   type ToolOutput,
 } from '@atelier/shared';
-import { resolveWorkspacePath, type ResolvedWorkspacePath } from '@atelier/agent-core';
+import {
+  estimateTokens,
+  resolveWorkspacePath,
+  truncateToTokens,
+  type ResolvedWorkspacePath,
+} from '@atelier/agent-core';
 import { createWorkspaceCache, noCache, sha256, type ExtractionCache } from './cache.js';
 import { detectType, readSample, type DetectedType } from './detect.js';
 import { decodeText } from './encoding.js';
@@ -26,7 +31,7 @@ import {
   parsePageRange,
 } from './pdf.js';
 import { renderPdfPage } from './render.js';
-import { MAX_OUTPUT_CHARS, windowHeader, windowLines } from './text.js';
+import { bodyBudget, MAX_OUTPUT_TOKENS, windowHeader, windowLines } from './text.js';
 import {
   analyzeImage,
   DESCRIBE_IMAGE_PROMPT,
@@ -57,11 +62,20 @@ export interface DocumentToolsOptions {
   /** Pages scannées transcrites au plus par appel (défaut {@link MAX_VISION_PAGES_PER_CALL}). */
   maxVisionPagesPerCall?: number;
   /**
-   * Taille maximale du texte renvoyé par un appel de `read_file`, en caractères
-   * (défaut {@link MAX_OUTPUT_CHARS}). À dériver de la fenêtre de contexte avec
-   * `outputCharsForContext`. Borne aussi la taille des tranches de PDF.
+   * Taille maximale d'une sortie de `read_file`, en tokens estimés
+   * (`estimateTokens` d'agent-core ; défaut {@link MAX_OUTPUT_TOKENS}, 20 % d'une
+   * fenêtre de 32 768). À dériver de la fenêtre avec `outputTokensForContext`.
+   * Borne aussi la taille des tranches de PDF. Un getter est relu à chaque
+   * appel (la fenêtre peut n'être connue, ou changer, qu'après la création des
+   * outils) ; une valeur invalide retombe sur le défaut.
    */
-  maxOutputChars?: number;
+  maxOutputTokens?: number | (() => number);
+}
+
+/** Budget de sortie effectif d'un appel (option, getter relu, ou défaut). */
+function resolveOutputTokens(option: DocumentToolsOptions['maxOutputTokens']): number {
+  const value = typeof option === 'function' ? option() : option;
+  return value !== undefined && Number.isFinite(value) && value > 0 ? value : MAX_OUTPUT_TOKENS;
 }
 
 const SUPPORTED_FORMATS =
@@ -199,8 +213,8 @@ interface ReadContext {
   options: DocumentToolsOptions;
   context: ToolExecutionContext;
   cache: ExtractionCache;
-  /** Budget de sortie de l'appel, en caractères. */
-  maxChars: number;
+  /** Budget du corps de la sortie (hors en-tête et consigne de fin), en tokens estimés. */
+  maxTokens: number;
 }
 
 async function readText(
@@ -210,7 +224,7 @@ async function readText(
 ): Promise<ToolOutput> {
   const data = await readRegularFile(target.resolved.absolutePath, MAX_TEXT_BYTES);
   const decoded = decodeText(data);
-  const window = windowLines(decoded.text, input, true, ctx.maxChars);
+  const window = windowLines(decoded.text, input, true, ctx.maxTokens);
   const notes: string[] = [];
   if (decoded.encoding !== 'utf-8')
     notes.push(`[encodage détecté : ${decoded.encoding}, converti en UTF-8]`);
@@ -291,9 +305,9 @@ async function transcribePage(
 export const INCOMPLETE_READ_MARKER = 'LECTURE INCOMPLÈTE';
 
 /** Pages par tranche suggérée : ce qui tient dans le budget au rythme observé. */
-function nextChunkSize(shownPages: number, shownChars: number, maxChars: number): number {
-  const perPage = shownPages > 0 ? Math.max(1, shownChars / shownPages) : maxChars;
-  return Math.min(MAX_PDF_PAGES_PER_CALL, Math.max(1, Math.floor(maxChars / perPage)));
+function nextChunkSize(shownPages: number, shownTokens: number, maxTokens: number): number {
+  const perPage = shownPages > 0 ? Math.max(1, shownTokens / shownPages) : maxTokens;
+  return Math.min(MAX_PDF_PAGES_PER_CALL, Math.max(1, Math.floor(maxTokens / perPage)));
 }
 
 /** Plage compacte « a-b » (ou « a ») pour le paramètre `pages`. */
@@ -310,19 +324,19 @@ function pdfFooter(args: {
   totalPages: number;
   requested: readonly number[];
   shown: readonly number[];
-  shownChars: number;
-  maxChars: number;
-}): string | undefined {
+  shownTokens: number;
+  maxTokens: number;
+}): { footer: string; next?: string } | undefined {
   const { path, totalPages, requested, shown } = args;
   const lastShown = shown.at(-1);
   if (lastShown === undefined) return undefined;
-  const size = nextChunkSize(shown.length, args.shownChars, args.maxChars);
+  const size = nextChunkSize(shown.length, args.shownTokens, args.maxTokens);
   // Pages demandées mais coupées par le budget : elles passent avant la suite.
   const cut = requested.filter((p) => p > lastShown);
   if (cut.length === 0 && lastShown >= totalPages) {
     return shown[0] === 1
       ? undefined
-      : `[Fin du document : page ${totalPages} sur ${totalPages} lue.]`;
+      : { footer: `[Fin du document : page ${totalPages} sur ${totalPages} lue.]` };
   }
   let next: number[];
   let rest: string;
@@ -338,7 +352,10 @@ function pdfFooter(args: {
     until = totalPages;
   }
   const call = `read_file({ path: ${JSON.stringify(path)}, pages: "${pageArg(next)}" })`;
-  return `[${INCOMPLETE_READ_MARKER} : ${rest}. Pour résumer ou analyser ce document, lis la suite AVANT de répondre : ${call}, puis les tranches suivantes jusqu'à la page ${until}.]`;
+  return {
+    footer: `[${INCOMPLETE_READ_MARKER} : ${rest}. Pour résumer ou analyser ce document, lis la suite AVANT de répondre : ${call}, puis les tranches suivantes jusqu'à la page ${until}.]`,
+    next: pageArg(next),
+  };
 }
 
 async function readPdf(
@@ -357,7 +374,7 @@ async function readPdf(
   let visionUsed = 0;
   const blocks: string[] = [];
   const shown: number[] = [];
-  let chars = 0;
+  let tokens = 0;
   let scanned = 0;
 
   for (const { page, text } of pages) {
@@ -376,28 +393,42 @@ async function readPdf(
         block = `--- page ${page} ---\n${text ? `${text}\n` : ''}(${result.note})`;
       }
     }
-    if (chars + block.length > ctx.maxChars && shown.length > 0) break;
+    let cost = estimateTokens(block) + 1;
+    if (tokens + cost > ctx.maxTokens && shown.length > 0) break;
+    if (cost > ctx.maxTokens) {
+      // Une seule page dépasse le budget : on la coupe ici plutôt que de laisser
+      // agent-core couper la fin de la sortie (et la consigne de continuation).
+      const cut = truncateToTokens(block, ctx.maxTokens - 30);
+      block = `${cut.text}\n(page ${page} coupée : trop longue pour un seul appel)`;
+      cost = estimateTokens(block) + 1;
+    }
     blocks.push(block);
     shown.push(page);
-    chars += block.length + 2;
+    tokens += cost;
   }
 
-  const footer = pdfFooter({
+  const ending = pdfFooter({
     path: target.resolved.relativePath,
     totalPages,
     // Sans `pages`, on lit « le début » : la suite est le reste du document.
     requested: explicitPages !== null ? pages.map((p) => p.page) : [],
     shown,
-    shownChars: chars,
-    maxChars: ctx.maxChars,
+    shownTokens: tokens,
+    maxTokens: ctx.maxTokens,
   });
   const notes: string[] = [];
+  // Rappel court en tête, au cas où la fin de la sortie serait coupée en aval.
+  if (ending?.next !== undefined)
+    notes.push(`lecture incomplète, suite avec pages: "${ending.next}" (voir la fin)`);
   if (scanned > 0)
     notes.push(
       `${scanned} page${scanned > 1 ? 's' : ''} scannée${scanned > 1 ? 's' : ''} transcrite${scanned > 1 ? 's' : ''} par le modèle vision`,
     );
   const header = `[PDF : ${target.resolved.relativePath}, ${totalPages} page${totalPages > 1 ? 's' : ''} au total ; pages ${describePages(shown)} ci-dessous${notes.length ? ` ; ${notes.join(' ; ')}` : ''}]`;
-  return { ok: true, content: [header, ...blocks, ...(footer ? [footer] : [])].join('\n\n') };
+  return {
+    ok: true,
+    content: [header, ...blocks, ...(ending ? [ending.footer] : [])].join('\n\n'),
+  };
 }
 
 async function readImage(ctx: ReadContext, target: Target): Promise<ToolOutput> {
@@ -440,7 +471,7 @@ async function readOffice(
     markdown = kind === 'docx' ? await docxToMarkdown(data) : await xlsxToMarkdown(data);
     await ctx.cache.set(key, markdown);
   }
-  const window = windowLines(markdown, input, false, ctx.maxChars);
+  const window = windowLines(markdown, input, false, ctx.maxTokens);
   const what = kind === 'docx' ? 'Document Word' : 'Classeur Excel';
   const range = windowHeader(window);
   const header = `[${what} : ${target.resolved.relativePath} (${formatBytes(data.length)}), converti en markdown${range ? ` ; ${range.slice(1, -1)}` : ''}]`;
@@ -471,7 +502,7 @@ export function createReadFileTool(options: DocumentToolsOptions = {}) {
           options,
           context,
           cache: resolveCache(options, context.workspace),
-          maxChars: Math.max(200, options.maxOutputChars ?? MAX_OUTPUT_CHARS),
+          maxTokens: bodyBudget(resolveOutputTokens(options.maxOutputTokens)),
         };
         switch (target.type.kind) {
           case 'text':
