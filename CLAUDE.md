@@ -40,6 +40,7 @@ pnpm typecheck               # tsc strict, tous les packages
 pnpm format                  # Prettier
 pnpm --filter @atelier/<pkg> test     # un seul package
 pnpm dist:mac                # build signé arm64 (variables de signature : voir apps/desktop/electron-builder.yml)
+pnpm dist:mac:adhoc          # build arm64 sans certificat (signature ad hoc, démo : voir docs/DEMO.md)
 ```
 
 Avant chaque PR : `pnpm test && pnpm lint && pnpm typecheck` doivent passer (la CI les rejoue sur `macos-14` arm64).
