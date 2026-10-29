@@ -3,6 +3,7 @@
  * `fullStream` est traduit en {@link AgentEvent} typés.
  */
 import {
+  InvalidResponseDataError,
   stepCountIs,
   streamText,
   type LanguageModel,
@@ -273,6 +274,7 @@ export class Agent {
         const maxSteps = o.maxSteps ?? MAX_STEPS;
         let todos: readonly TodoItem[] | undefined; // liste mise à jour pendant ce tour
         let continuations = 0;
+        let cutRetries = 0;
         let lastText = '';
         let finishReason: string | undefined;
         let streamError: unknown;
@@ -289,6 +291,13 @@ export class Agent {
             abortSignal: signal,
             // Les nouvelles tentatives réseau sont gérées par le fetch du provider.
             maxRetries: 0,
+            // Erreurs du flux : traitées plus bas (event `error`) ; sans ce rappel,
+            // l'AI SDK les écrit aussi sur la console.
+            onError: ({ error }) => {
+              o.log?.('stream-error', {
+                message: error instanceof Error ? error.message : String(error),
+              });
+            },
             // Une seule permission à la fois dans l'UI : exécution séquentielle.
             toolCallConcurrency: 1,
             repairToolCall: createToolCallRepair((info) => {
@@ -415,7 +424,23 @@ export class Agent {
           );
           messages = stripReasoning([...base, ...responseMessages.slice(responseOffset)]);
 
-          if (aborted || signal.aborted || streamError !== undefined) break;
+          if (aborted || signal.aborted) break;
+          if (streamError !== undefined) {
+            // Flux coupé sans fin (Ollama, jeton réservé <tool_call> recopié) : une
+            // relance qui demande de reprendre en écrivant la balise autrement.
+            if (!isStreamCut(streamError) || cutRetries >= MAX_STREAM_CUT_RETRIES) break;
+            cutRetries += 1;
+            o.log?.('stream-cut:retry', { attempt: cutRetries, partialChars: lastText.length });
+            if (lastText.trim() !== '') emit({ type: 'text_delta', delta: '\n\n' });
+            const partial: ModelMessage[] =
+              lastText.trim() !== '' && !endsWithText(messages, lastText)
+                ? [{ role: 'assistant', content: [{ type: 'text', text: lastText }] }]
+                : [];
+            base = [...messages, ...partial, { role: 'user', content: streamCutPrompt() }];
+            responseOffset = 0;
+            streamError = undefined;
+            continue;
+          }
           // Le modèle a rendu la main (« stop ») en laissant des tâches ouvertes : on le
           // relance, au plus MAX_CONTINUATIONS fois, sauf s'il pose une question.
           const open = openTodos(todos);
@@ -441,7 +466,11 @@ export class Agent {
           return { messages, usage: usage(), reason: 'aborted' };
         }
         if (streamError !== undefined) {
-          const error = toLlmError(streamError, o.serverUrl).toJSON();
+          const error = (
+            isStreamCut(streamError)
+              ? streamCutError(streamError)
+              : toLlmError(streamError, o.serverUrl)
+          ).toJSON();
           emit({ type: 'error', error });
           return { messages, usage: usage(), reason: 'error', error };
         }
@@ -482,6 +511,44 @@ export class Agent {
       return this.#options.requestPermission(request, signal);
     };
   }
+}
+
+/** Relances max. après un flux coupé sans `finish_reason` (#42). */
+export const MAX_STREAM_CUT_RETRIES = 1;
+
+/**
+ * Vrai pour un flux terminé sans `finish_reason` ni `[DONE]` : c'est ce que fait
+ * Ollama (parseur Qwen) quand le modèle émet le jeton réservé `<tool_call>` dans
+ * du texte, par exemple en recopiant une documentation.
+ */
+export function isStreamCut(error: unknown): boolean {
+  return (
+    InvalidResponseDataError.isInstance(error) && /without a finish reason/i.test(error.message)
+  );
+}
+
+/** Message de relance après un flux coupé (invisible dans l'UI). */
+export function streamCutPrompt(): string {
+  return `[Atelier] Ta réponse a été coupée par le serveur : <tool_call> est une balise réservée du modèle, qui ne peut pas être écrite telle quelle. Continue ta réponse exactement là où elle s'est arrêtée, sans répéter ce qui précède, en écrivant chaque balise réservée (<tool_call>, </tool_call>, <tool_response>) avec une espace après le chevron : < tool_call>, < /tool_call>. Si un fichier doit contenir ces balises, écris-le avec un script qui assemble la balise (par exemple '<' + 'tool_call>').`;
+}
+
+/** Erreur finale si la relance est coupée à son tour : pas de « Réessayer » en boucle. */
+export function streamCutError(cause: unknown): AtelierError {
+  return new AtelierError(
+    'llm/bad_response',
+    "Le serveur a interrompu la réponse du modèle avant la fin. Cela arrive quand le texte contient une balise réservée du modèle (<tool_call>) : reformule la demande sans cette balise, ou demande de l'écrire « < tool_call> ».",
+    { retryable: false, cause, details: { reason: 'stream_cut' } },
+  );
+}
+
+function endsWithText(messages: readonly ModelMessage[], text: string): boolean {
+  const last = messages.at(-1);
+  if (last?.role !== 'assistant') return false;
+  const content =
+    typeof last.content === 'string'
+      ? last.content
+      : last.content.map((p) => (p.type === 'text' ? p.text : '')).join('');
+  return content.trimEnd().endsWith(text.trim());
 }
 
 /** Relances max. d'un tour qui s'arrête avec des tâches encore ouvertes. */

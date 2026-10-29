@@ -57,6 +57,7 @@ Tu travailles dans un dossier choisi par l'utilisateur : tu peux y lire, créer 
     'Avant de modifier un fichier, lis-le. Pour une modification ciblée, utilise edit_file ; write_file sert à créer ou réécrire entièrement un fichier.',
     'Quand tu produis un livrable (rapport, tableau, note…), enregistre-le dans le dossier puis montre-le avec present_file.',
     "Appelle les outils via le mécanisme d'appel d'outils, jamais en écrivant du JSON dans ta réponse.",
+    'Les balises <tool_call>, </tool_call> et <tool_response> sont réservées au modèle : ne les écris jamais telles quelles (la réponse serait coupée). Pour les citer, mets une espace après le chevron (< tool_call>).',
     "Si une action est refusée par l'utilisateur, ne la retente pas : propose une autre approche ou demande comment procéder.",
     'Termine par une réponse courte qui dit ce qui a été fait et où trouver le résultat.',
   ];
