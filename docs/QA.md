@@ -6,16 +6,23 @@ Outils et mode d'emploi : [`qa/README.md`](../qa/README.md). Rapports bruts : [`
 
 ## Verdict par critère d'acceptation
 
-| #   | Critère                                                  | Mock (CI) |          Réel (qwen3.5:35b + VM)          | Bloquants             |
-| --- | -------------------------------------------------------- | :-------: | :---------------------------------------: | --------------------- |
-| 1   | Installation, connexion et VM sans terminal sur Mac neuf |     –     |               non testé ici               | signature (Lead), #46 |
-| 2   | Excel récapitulatif + résumé markdown                    |    ✅     | ❌ 0/2 sur `dab1eb1` (SKILL.md illisible) | #60, #73              |
-| 3   | `web_search` + lecture d'une source + URL citée          |    ✅     |                    ✅                     | –                     |
-| 4   | PDF par tranches + vision (facture, ticket) + tableau    |    ✅     |   ✅ 2 runs sur 3 (1 ❌ #69, avant #70)   | faux positif de #61   |
-| 5   | `curl` dans la VM bloqué tant que le réseau est coupé    |    ✅     |                    ✅                     | –                     |
-| 6   | `pnpm test`, `pnpm lint`, `pnpm typecheck`               |    ✅     |                     –                     | –                     |
+| #   | Critère                                                  | Mock (CI) |           Réel (qwen3.5:35b + VM)            | Bloquants                   |
+| --- | -------------------------------------------------------- | :-------: | :------------------------------------------: | --------------------------- |
+| 1   | Installation, connexion et VM sans terminal sur Mac neuf |     –     |                non testé ici                 | signature (Lead), #46       |
+| 2   | Excel récapitulatif + résumé markdown                    |    ✅     | ⚠️ 1 run sur 2 sur `cb417b2` (skill utilisé) | #73 (arrêt sur une annonce) |
+| 3   | `web_search` + lecture d'une source + URL citée          |    ✅     |                      ✅                      | –                           |
+| 4   | PDF par tranches + vision (facture, ticket) + tableau    |    ✅     |    ✅ 2 runs sur 3 (1 ❌ #69, avant #70)     | faux positif de #61         |
+| 5   | `curl` dans la VM bloqué tant que le réseau est coupé    |    ✅     |                      ✅                      | –                           |
+| 6   | `pnpm test`, `pnpm lint`, `pnpm typecheck`               |    ✅     |                      –                       | –                           |
 
 Le mode mock vérifie le **contrat de l'app** avec un faux modèle qui joue la bonne séquence d'outils : tâches visibles, permission demandée **avant** l'écriture (le fichier n'existe pas au moment de la modale), cartes, vision appelée sur l'image, refus propre sans VM. Le mode réel vérifie en plus **le résultat** : totaux du classeur, montants lus par la vision, blocage puis ouverture du réseau.
+
+### Quatrième rejeu (29/10/2026, 13 h 50, `main` cb417b2, avec #75 à #78) : critère 2
+
+- **Run 1 : ✅ du premier coup, en 2,4 min.** Le skill est enfin suivi : `cat /skills/xlsx/SKILL.md` dans la VM, puis `build-workbook.cjs --example`, puis `node /skills/xlsx/scripts/build-workbook.cjs spec.json recapitulatif_ventes.xlsx`. Le classeur a des valeurs **numériques**, des totaux mensuels exacts et un graphique natif. Le résumé et la réponse sont justes (89 237,10 €), sans « Correction » ni relance.
+  - Détours avant d'y arriver : `pip install` puis `apt` refusés, un venv sans réseau, un `todo_write` mal formé puis refait. Le `read_file` du SKILL.md part d'un chemin hôte **déformé** (`…/skill/xlsx/SKILL.md`), que #75 ne rattrape pas ; le modèle se rabat sur la VM.
+  - Il laisse deux scripts de travail (`calc_stats.py`, `generate_excel.py`) dans le dossier de l'utilisateur.
+- **Run 2 : ❌ arrêt prématuré.** Après `list_dir` et la lecture de 30 lignes d'un CSV, le dernier pas est un texte qui **annonce** la suite sans appel d'outil (« Commençons par examiner… »). L'app affiche « Réponse terminée. », sans fichier. #76 ne relance que le pas vide : commentaire ajouté sur #73.
 
 ### Troisième rejeu (29/10/2026, 13 h 20, `main` dab1eb1, avec #67, #68, #70 et #71)
 
@@ -23,7 +30,7 @@ Le mode mock vérifie le **contrat de l'app** avec un faux modèle qui joue la b
   - Run 1 : après cet échec, le tour s'arrête **sans réponse ni erreur** : « Réponse terminée. », sans texte, sans tâche, sans fichier (#73).
   - Run 2 : openpyxl écrit à la main. Les totaux sont justes (89 237,10 €), la réponse finale est juste **du premier coup**, sans « Correction », et les cartes sont présentes. Mais toutes les valeurs du classeur sont du **texte** (`inlineStr`) : le graphique est vide dans Excel.
   - Aucune relance `tool_call_parse` (#69) sur ces runs.
-- **Critère 4, run 3 : ✅ en 2,8 min.** Lecture en 3 tranches, vision, montants justes, tableau dans le chat et dans un CSV. Pas de relance `tool_call_parse`. **Faux positif de la vérification de #61** : 25,94 €, le HT du ticket (27,50 − 1,56), est juste mais calculé, donc absent des sources. Le modèle ajoute une « Correction : » qui ne corrige rien (« ✅ avec correction »).
+- **Critère 4, run 3 : ✅ en 2,8 min.** Lecture en 3 tranches, vision, montants justes, tableau dans le chat et dans un CSV. Pas de relance `tool_call_parse`. **Faux positif de la vérification de #61** : « 25,94 » (le HT du ticket, juste) a été lu comme 2594, absent des sources. Le modèle ajoute une « Correction : » qui ne corrige rien (« ✅ avec correction ») ; corrigé par #77.
 
 ### Second rejeu (29/10/2026, 13 h, `main` 89ae928, avec #53, #56, #62 à #66)
 
@@ -103,21 +110,21 @@ Agent assemblé comme dans l'app (outils natifs + documents + web, VM réelle) ;
 
 ## Bugs relevés
 
-| Issue | Sujet                                                                                            | Agent(s)            | État                                                        |
-| ----- | ------------------------------------------------------------------------------------------------ | ------------------- | ----------------------------------------------------------- |
-| #39   | La compaction en cours de tour résume la demande et garde les gros résultats d'outils            | Core                | ✅ corrigé (#54)                                            |
-| #40   | Aucun budget de contexte par étape                                                               | Core, Documents     | ✅ corrigé (#50, #55, #63)                                  |
-| #41   | Le runner MLX d'Ollama ignore `num_ctx` du Modelfile `atelier`                                   | Lead, Core          | décision : garder MLX (`SERVER.md`)                         |
-| #42   | Un texte contenant `<tool_call>` coupe le flux Ollama                                            | Core, Lead          | ✅ corrigé (#56), vérifié en réel                           |
-| #43   | Le repli texte → outil exécute un `<tool_call>` cité depuis des données                          | Core                | ✅ corrigé (#53), vérifié en réel                           |
-| #44   | Les fichiers créés dans la VM n'ont pas de carte cliquable                                       | Core, UI            | ✅ corrigé (#51)                                            |
-| #45   | Un PDF de 30 pages n'est lu qu'à moitié                                                          | Documents, Core     | ✅ corrigé (#52, #55), vérifié en réel                      |
-| #46   | La VM ne se crée pas si le nom d'utilisateur macOS dépasse 21 caractères                         | Sandbox             | ouvert                                                      |
-| #59   | Le modèle déforme le chemin des pièces jointes (`.atelier/uploads`, dossier caché)               | Documents, Core, UI | ✅ corrigé (#64, #65), vérifié en réel                      |
-| #60   | Le modèle n'utilise pas le skill `xlsx` (critère 2)                                              | Core                | rouverte : SKILL.md illisible par `read_file`               |
-| #61   | La réponse finale cite un total inventé alors que les fichiers sont justes                       | Core                | ✅ corrigé (#67, #68) ; faux positif sur un montant calculé |
-| #69   | Ollama répond 500 « tool call parsing failed: EOF » : tour arrêté sans relance, message trompeur | Core, UI            | ✅ corrigé (#70, #71), pas réapparu en 3 runs               |
-| #73   | Le tour s'arrête sans réponse ni erreur après un appel d'outil en échec                          | Core                | ouvert                                                      |
+| Issue | Sujet                                                                                            | Agent(s)            | État                                                              |
+| ----- | ------------------------------------------------------------------------------------------------ | ------------------- | ----------------------------------------------------------------- |
+| #39   | La compaction en cours de tour résume la demande et garde les gros résultats d'outils            | Core                | ✅ corrigé (#54)                                                  |
+| #40   | Aucun budget de contexte par étape                                                               | Core, Documents     | ✅ corrigé (#50, #55, #63)                                        |
+| #41   | Le runner MLX d'Ollama ignore `num_ctx` du Modelfile `atelier`                                   | Lead, Core          | décision : garder MLX (`SERVER.md`)                               |
+| #42   | Un texte contenant `<tool_call>` coupe le flux Ollama                                            | Core, Lead          | ✅ corrigé (#56), vérifié en réel                                 |
+| #43   | Le repli texte → outil exécute un `<tool_call>` cité depuis des données                          | Core                | ✅ corrigé (#53), vérifié en réel                                 |
+| #44   | Les fichiers créés dans la VM n'ont pas de carte cliquable                                       | Core, UI            | ✅ corrigé (#51)                                                  |
+| #45   | Un PDF de 30 pages n'est lu qu'à moitié                                                          | Documents, Core     | ✅ corrigé (#52, #55), vérifié en réel                            |
+| #46   | La VM ne se crée pas si le nom d'utilisateur macOS dépasse 21 caractères                         | Sandbox             | ouvert                                                            |
+| #59   | Le modèle déforme le chemin des pièces jointes (`.atelier/uploads`, dossier caché)               | Documents, Core, UI | ✅ corrigé (#64, #65), vérifié en réel                            |
+| #60   | Le modèle n'utilise pas le skill `xlsx` (critère 2)                                              | Core                | correctif #75 : skill utilisé (1 run sur 1 qui l'atteint)         |
+| #61   | La réponse finale cite un total inventé alors que les fichiers sont justes                       | Core                | ✅ corrigé (#67, #68, #77)                                        |
+| #69   | Ollama répond 500 « tool call parsing failed: EOF » : tour arrêté sans relance, message trompeur | Core, UI            | ✅ corrigé (#70, #71), pas réapparu en 3 runs                     |
+| #73   | Le tour s'arrête sans réponse ni erreur après un appel d'outil en échec                          | Core                | #76 couvre le pas vide ; variante « annonce sans action » ouverte |
 
 Corrigé directement par QA : le générateur des fichiers de démo n'était pas déterministe (dates des PDF), contrairement à ce qu'annonçait `docs/DEMO.md`.
 
