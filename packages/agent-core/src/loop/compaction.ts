@@ -52,16 +52,52 @@ function userText(message: ModelMessage): string {
   return message.content.map((part) => (part.type === 'text' ? part.text : '')).join('');
 }
 
+/** Nature d'un message `user` injecté par l'app (et non tapé par l'utilisateur). */
+export type InjectedKind = 'summary' | 'continuation' | 'stream_cut';
+
+const INJECTED_KINDS: ReadonlySet<string> = new Set<InjectedKind>([
+  'summary',
+  'continuation',
+  'stream_cut',
+]);
+
+/**
+ * Ouvertures exactes des messages injectés avant l'introduction du marqueur :
+ * historiques déjà persistés (SQLite). Des phrases entières, pas un simple
+ * préfixe, pour ne pas confondre avec un message tapé par l'utilisateur.
+ */
+const LEGACY_OPENINGS: readonly [InjectedKind, string][] = [
+  ['summary', `${SUMMARY_PREFIX}\n`],
+  ['continuation', `${APP_MESSAGE_PREFIX} Ta réponse s'est arrêtée alors que des tâches`],
+  ['stream_cut', `${APP_MESSAGE_PREFIX} Ta réponse a été coupée par le serveur`],
+];
+
+/**
+ * Message `user` injecté par l'app, marqué par `providerOptions.atelier.kind`.
+ * Le provider OpenAI-compatible ne transmet que `providerOptions.openaiCompatible` :
+ * le marqueur reste côté app et survit à la persistance de l'historique.
+ */
+export function injectedMessage(kind: InjectedKind, content: string): ModelMessage {
+  return { role: 'user', content, providerOptions: { atelier: { kind } } };
+}
+
+/** Nature du message s'il a été injecté par l'app (marqueur, ou texte d'un ancien historique). */
+export function injectedKind(message: ModelMessage): InjectedKind | undefined {
+  if (message.role !== 'user') return undefined;
+  const kind = message.providerOptions?.['atelier']?.['kind'];
+  if (typeof kind === 'string' && INJECTED_KINDS.has(kind)) return kind as InjectedKind;
+  const text = userText(message);
+  return LEGACY_OPENINGS.find(([, opening]) => text.startsWith(opening))?.[0];
+}
+
 /**
  * Index de la demande de l'utilisateur du tour en cours : le dernier message
- * `user` qui n'est ni un résumé ni un message de l'app (relance). `-1` si aucun.
+ * `user` qui n'a pas été injecté par l'app (résumé, relance). `-1` si aucun.
  */
 export function currentTurnStart(messages: readonly ModelMessage[]): number {
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i];
-    if (msg?.role !== 'user') continue;
-    const text = userText(msg).trimStart();
-    if (text.startsWith(SUMMARY_PREFIX) || text.startsWith(APP_MESSAGE_PREFIX)) continue;
+    if (msg?.role !== 'user' || injectedKind(msg) !== undefined) continue;
     return i;
   }
   return -1;
@@ -266,9 +302,6 @@ export async function compactMessages(options: CompactOptions): Promise<CompactR
     maxRetries: 0,
     ...(options.abortSignal ? { abortSignal: options.abortSignal } : {}),
   });
-  const summaryMessage: ModelMessage = {
-    role: 'user',
-    content: `${SUMMARY_PREFIX}\n${summary.trim()}`,
-  };
+  const summaryMessage = injectedMessage('summary', `${SUMMARY_PREFIX}\n${summary.trim()}`);
   return { messages: [summaryMessage, ...recent], replaced: older.length, pruned };
 }

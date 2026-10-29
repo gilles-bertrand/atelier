@@ -35,6 +35,8 @@ export {
   currentTurnStart,
   estimateMessagesTokens,
   findCompactionSplit,
+  injectedKind,
+  injectedMessage,
   PRUNED_PREFIX,
   prunedResult,
   pruneToolResults,
@@ -42,7 +44,7 @@ export {
   SUMMARY_PREFIX,
   transcript,
 } from './loop/compaction.js';
-export type { CompactOptions, CompactResult } from './loop/compaction.js';
+export type { CompactOptions, CompactResult, InjectedKind } from './loop/compaction.js';
 export { chatMessagesToModelMessages, stripReasoning } from './loop/history.js';
 export { createToolCallRepair, repairToolInput } from './loop/repair.js';
 export {

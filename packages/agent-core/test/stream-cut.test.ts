@@ -3,7 +3,13 @@ import type { LanguageModelV4StreamPart } from '@ai-sdk/provider';
 import { InvalidResponseDataError } from 'ai';
 import { convertArrayToReadableStream, MockLanguageModelV4 } from 'ai/test';
 import { describe, expect, it } from 'vitest';
-import { Agent, buildSystemPrompt, createDefaultRegistry, isStreamCut } from '../src/index.js';
+import {
+  Agent,
+  buildSystemPrompt,
+  createDefaultRegistry,
+  injectedKind,
+  isStreamCut,
+} from '../src/index.js';
 import { collect, permissions, promptText, streamOf, usage, withTempDir } from './helpers.js';
 
 /** Ce que renvoie @ai-sdk/openai-compatible quand Ollama coupe le flux. */
@@ -77,6 +83,11 @@ describe('flux coupé sans finish_reason', () => {
       expect(relaunch).toContain('balise réservée du modèle');
       const text = events.flatMap((e) => (e.type === 'text_delta' ? [e.delta] : [])).join('');
       expect(text).toBe('Un appel ressemble à ceci :\n\n< tool_call> … Fin.');
+      expect(
+        result.messages
+          .filter((m) => injectedKind(m) === 'stream_cut')
+          .map((m) => m.providerOptions),
+      ).toEqual([{ atelier: { kind: 'stream_cut' } }]);
       // Une seule fois le texte partiel dans l'historique.
       expect(JSON.stringify(result.messages).split('Un appel ressemble').length).toBe(2);
     });

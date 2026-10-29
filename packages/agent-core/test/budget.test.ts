@@ -74,11 +74,11 @@ describe('ToolOutputBudget', () => {
     const sizes = [1, 2, 3].map(() => {
       const fitted = budget.fit('read_file', csv);
       expect(fitted.truncated).toBe(true);
-      expect(fitted.content).toContain('[Atelier : sortie de read_file tronquée');
+      expect(fitted.content).toContain('Sortie de read_file tronquée');
       return estimateTokens(fitted.content);
     });
     expect(sizes[0]).toBeLessThanOrEqual(32_768 * 0.25 + 200);
-    expect(budget.usedThisStep).toBeLessThanOrEqual(32_768 * 0.5 + 400);
+    expect(budget.usedThisStep).toBeLessThanOrEqual(32_768 * 0.5 + 600);
     // Le troisième appel n'a plus que le reliquat (ou le minimum).
     expect(sizes[2]).toBeLessThan(sizes[0] ?? 0);
     budget.startStep();
@@ -105,6 +105,25 @@ describe('ToolOutputBudget', () => {
     const { content } = budget.fit('read_file', numbered);
     expect(content).toMatch(/Suite à partir de la ligne (\d+) \(offset: \1\)/);
     expect(content).toMatch(/\d+ lignes affichées sur 602/);
+  });
+  it('PDF de documents : reprise par pages, avec le marqueur LECTURE INCOMPLÈTE', () => {
+    const budget = new ToolOutputBudget(4_000);
+    budget.startStep();
+    const pages = Array.from(
+      { length: 12 },
+      (_, i) =>
+        `--- page ${String(i + 1)} ---\n${'Le chiffre d’affaires progresse nettement. '.repeat(40)}`,
+    );
+    const pdf = `${pages.join('\n')}\n[LECTURE INCOMPLÈTE : pages 13-30 non lues, read_file({ pages: "13-24" })]`;
+    const { content, truncated } = budget.fit('read_file', pdf);
+    expect(truncated).toBe(true);
+    expect(content).toMatch(/LECTURE INCOMPLÈTE\. Sortie de read_file tronquée/);
+    const resume = /page (\d+) coupée.*pages: "(\d+)-12"/.exec(content);
+    expect(resume).not.toBeNull();
+    expect(resume?.[1]).toBe(resume?.[2]);
+    // La page coupée est bien la dernière dont l'en-tête a été gardé.
+    expect(content).toContain(`--- page ${resume?.[1] ?? ''} ---`);
+    expect(content).not.toContain('pages 13-30 non lues');
   });
 });
 

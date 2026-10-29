@@ -64,11 +64,13 @@ Tu travailles dans un dossier choisi par l'utilisateur : tu peux y lire, créer 
   if (has('look_at')) {
     method.push(
       'read_file lit aussi les PDF, les documents Word (docx), les classeurs Excel (xlsx) et les images. Pour une question visuelle (graphique, schéma, photo, mise en page), utilise look_at.',
+      "Pour résumer ou analyser un document long, lis-le en entier, tranche par tranche (paramètre pages pour un PDF, offset pour un texte), en suivant l'indication de fin de chaque lecture (« LECTURE INCOMPLÈTE ») jusqu'à la dernière page, avant de répondre.",
     );
   }
   if (has('bash') && options.sandboxAvailable !== false) {
     method.push(
       "La commande bash s'exécute dans une machine virtuelle Linux isolée où le dossier de travail est monté sur /workspace. Utilise-la pour les conversions, calculs et traitements de fichiers (Python est disponible).",
+      "Les fichiers que tu crées ou modifies dans /workspace depuis la machine isolée sont présentés automatiquement à l'utilisateur : inutile d'appeler present_file pour eux, cite-les simplement par leur nom.",
     );
   }
   sections.push(`# Méthode\n${method.map((m) => `- ${m}`).join('\n')}`);
