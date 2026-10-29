@@ -11,10 +11,10 @@
  */
 import { readFile, stat } from 'node:fs/promises';
 import { basename, join } from 'node:path';
-import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
 import {
   autoApprove,
+  assistantText,
   describeCalls,
   fileCard,
   FIXTURES_DIR,
@@ -117,29 +117,55 @@ test('critère 2 : Excel récapitulatif par mois + résumé markdown', async ({
   expect(xlsxName, `aucun classeur créé (fichiers : ${created.join(', ')})`).toBeDefined();
   const xlsxPath = join(workspace, xlsxName ?? 'recap.xlsx');
   expect((await stat(xlsxPath)).size).toBeGreaterThan(1000);
-  const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.readFile(xlsxPath);
+  // Valeurs lues dans le XML des feuilles (<v>, valeurs et résultats de formules) :
+  // exceljs ne relit pas les classeurs à graphique produits par openpyxl.
+  const zip = await JSZip.loadAsync(await readFile(xlsxPath));
   const numbers: number[] = [];
-  workbook.eachSheet((sheet) => {
-    sheet.eachRow((row) => {
-      row.eachCell((cell) => {
-        const v = cell.value;
-        if (typeof v === 'number') numbers.push(v);
-        else if (v && typeof v === 'object' && 'result' in v && typeof v.result === 'number')
-          numbers.push(v.result);
-      });
-    });
-  });
+  for (const name of Object.keys(zip.files).filter((f) =>
+    /^xl\/worksheets\/sheet\d+\.xml$/.test(f),
+  )) {
+    const xml = (await zip.file(name)?.async('string')) ?? '';
+    for (const match of xml.matchAll(/<v>([^<]+)<\/v>/g)) {
+      const value = Number(match[1]);
+      if (Number.isFinite(value)) numbers.push(value);
+    }
+  }
   const near = (target: number): boolean => numbers.some((n) => Math.abs(n - target) < 0.05);
   for (const [month, total] of Object.entries(MONTHLY_TOTALS)) {
-    expect(near(total), `total ${month} (${total}) absent du classeur`).toBe(true);
+    expect(near(total), `total ${month} (${String(total)}) absent du classeur`).toBe(true);
   }
   // Graphique Excel natif présent dans le paquet OOXML.
-  const zip = await JSZip.loadAsync(await readFile(xlsxPath));
   expect(Object.keys(zip.files).some((f) => /^xl\/charts\/chart\d+\.xml$/.test(f))).toBe(true);
   // Le classeur, produit dans la VM, doit lui aussi apparaître en carte cliquable.
   await expect(fileCard(page, basename(xlsxPath)).first()).toBeVisible();
   // Le résumé reprend le total général.
   expect(resume.replace(/[\s\u00a0\u202f]/g, '')).toMatch(/89[.,]?237[.,]1/);
   expect(GRAND_TOTAL).toBe(89_237.1);
+
+  // La réponse du chat ne doit pas citer un total inventé (#61) : tout montant
+  // supérieur à 50 000 € (un mois ≈ 15 000 €, un magasin ≤ 41 000 €) est le total.
+  const answer = await assistantText(page);
+  const bigAmounts = amountsIn(answer).filter((n) => n > 50_000);
+  for (const amount of bigAmounts) {
+    expect(
+      Math.abs(amount - GRAND_TOTAL),
+      `total inventé dans la réponse : ${String(amount)}`,
+    ).toBeLessThan(0.05);
+  }
 });
+
+/** Montants d'un texte (« 89 237,10 », « 89,237.10 », « 89237.1 »), en nombres. */
+function amountsIn(text: string): number[] {
+  const out: number[] = [];
+  for (const match of text.matchAll(
+    /\d{1,3}(?:[\s\u00a0\u202f.,]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?/g,
+  )) {
+    const raw = match[0].replace(/[\s\u00a0\u202f]/g, '');
+    // Le dernier séparateur suivi de 1 ou 2 chiffres est décimal ; les autres sont des milliers.
+    const decimal = /[.,](\d{1,2})$/.exec(raw);
+    const integer = (decimal ? raw.slice(0, decimal.index) : raw).replace(/[.,]/g, '');
+    const value = Number(`${integer}${decimal ? `.${decimal[1] ?? ''}` : ''}`);
+    if (Number.isFinite(value)) out.push(value);
+  }
+  return out;
+}

@@ -6,23 +6,42 @@ Outils et mode d'emploi : [`qa/README.md`](../qa/README.md). Rapports bruts : [`
 
 ## Verdict par critère d'acceptation
 
-| #   | Critère                                                  | Mock (CI) | Réel (qwen3.5:35b + VM) | Bloquants             |
-| --- | -------------------------------------------------------- | :-------: | :---------------------: | --------------------- |
-| 1   | Installation, connexion et VM sans terminal sur Mac neuf |     –     |      non testé ici      | signature (Lead), #46 |
-| 2   | Excel récapitulatif + résumé markdown                    |    ✅     |           ❌            | #39, #40, #44         |
-| 3   | `web_search` + lecture d'une source + URL citée          |    ✅     |           ✅            | –                     |
-| 4   | PDF par tranches + vision (facture, ticket) + tableau    |    ✅     |           ❌            | #45 (et #39/#40)      |
-| 5   | `curl` dans la VM bloqué tant que le réseau est coupé    |    ✅     |           ✅            | –                     |
-| 6   | `pnpm test`, `pnpm lint`, `pnpm typecheck`               |    ✅     |            –            | –                     |
+| #   | Critère                                                  | Mock (CI) |        Réel (qwen3.5:35b + VM)         | Bloquants             |
+| --- | -------------------------------------------------------- | :-------: | :------------------------------------: | --------------------- |
+| 1   | Installation, connexion et VM sans terminal sur Mac neuf |     –     |             non testé ici              | signature (Lead), #46 |
+| 2   | Excel récapitulatif + résumé markdown                    |    ✅     | ⚠️ livrables justes, skill non utilisé | #60, #61              |
+| 3   | `web_search` + lecture d'une source + URL citée          |    ✅     |                   ✅                   | –                     |
+| 4   | PDF par tranches + vision (facture, ticket) + tableau    |    ✅     |          ✅ (après #50, #52)           | #59 (détour)          |
+| 5   | `curl` dans la VM bloqué tant que le réseau est coupé    |    ✅     |                   ✅                   | –                     |
+| 6   | `pnpm test`, `pnpm lint`, `pnpm typecheck`               |    ✅     |                   –                    | –                     |
 
 Le mode mock vérifie le **contrat de l'app** avec un faux modèle qui joue la bonne séquence d'outils : tâches visibles, permission demandée **avant** l'écriture (le fichier n'existe pas au moment de la modale), cartes, vision appelée sur l'image, refus propre sans VM. Le mode réel vérifie en plus **le résultat** : totaux du classeur, montants lus par la vision, blocage puis ouverture du réseau.
 
-### Critère 2 en réel
+### Rejeu après correctifs (29/10/2026, 10 h 30, `main` avec #50, #51, #52 et #54)
+
+- **Critère 4 : ✅ en 1,7 min.**
+  - Le rapport est lu en entier, en tranches de 11, 11 et 8 pages.
+  - La vision lit 439,23 € (facture) et 27,50 € (ticket).
+  - Le tableau est exact : 90,00 / 186,00 / 87,00, HT 363,00, TVA 76,23, TTC 439,23 ; ticket à 27,50 €, dont 1,56 € de TVA.
+  - Les 4 faits du rapport sont repris, dont Mons et l'objectif de 4,8 M€.
+  - Défaut restant : 2 runs sur 4, le modèle déforme d'abord le chemin des pièces jointes (`.rapport-annuel-2025.pdf`, et même un `web_fetch` sur un chemin local), puis se rattrape avec `bash find` (#59).
+- **Critère 2 : livrables justes, mais le critère n'est pas rempli à la lettre.**
+  - Durée du tour : 5,1 min.
+  - 13 requêtes ; la plus grosse fait **23 849 tokens** (fenêtre de 32 768 ; 77 931 avant #50).
+  - Les lectures de CSV sont tronquées par le budget.
+  - `recapitulatif_ventes.xlsx` : totaux mensuels exacts, total 89 237,10 €, graphique natif.
+  - `RESUME_ventes.md` : juste.
+  - Les deux fichiers ont une carte cliquable.
+  - Écarts :
+    - le modèle **n'a pas utilisé le skill `xlsx`** et a écrit son propre code pandas + openpyxl (#60) ;
+    - sa réponse finale cite un **total inventé**, 59 236,80 €, absent des fichiers (#61).
+
+### Critère 2 en réel (avant correctifs)
 
 - **1er run** : le modèle lit les CSV (30 lignes chacun), lance le skill `xlsx` dans la VM et produit `ventes_mensuelles_2026.xlsx`, puis rédige le résumé (total exact : 89 237,10 €). Le classeur **n'a pas de carte cliquable** (#44).
 - **2e run** : le modèle lit les 3 CSV en entier ; la requête suivante fait **77 931 tokens** (préremplissage de 4 min 10 s), la compaction en cours de tour remplace la demande par un résumé sans réduire les résultats d'outils (#39, #40), et le tour dérive. Aucun fichier au bout de 6,8 min.
 
-### Critère 4 en réel
+### Critère 4 en réel (avant correctifs)
 
 Le rapport de 30 pages est lu **une seule fois, sans `pages`** : le modèle reçoit les pages 1 à 20 avec l'indication `suite avec pages: "21-30"` et ne la suit pas (2 runs sur 2, #45). La facture scannée (rendu `pdftoppm` dans la VM + vision) et le ticket (vision) sont bien lus ; le tableau est produit dans un fichier `synthese-documents.md`.
 
@@ -67,16 +86,19 @@ Agent assemblé comme dans l'app (outils natifs + documents + web, VM réelle) ;
 
 ## Bugs ouverts
 
-| Issue | Sujet                                                                                                                                | Agent(s)        |
-| ----- | ------------------------------------------------------------------------------------------------------------------------------------ | --------------- |
-| #39   | La compaction en cours de tour résume la demande et garde les gros résultats d'outils                                                | Core            |
-| #40   | Aucun budget de contexte par étape                                                                                                   | Core, Documents |
-| #41   | Le runner MLX d'Ollama ignore `num_ctx` du Modelfile `atelier` (décision : garder MLX pour la démo, documenté dans `docs/SERVER.md`) | Lead, Core      |
-| #42   | Un texte contenant `<tool_call>` coupe le flux Ollama                                                                                | Core, Lead      |
-| #43   | Le repli texte → outil exécute un `<tool_call>` cité depuis des données                                                              | Core            |
-| #44   | Les fichiers créés dans la VM n'ont pas de carte cliquable                                                                           | Core, UI        |
-| #45   | Un PDF de 30 pages n'est lu qu'à moitié                                                                                              | Documents, Core |
-| #46   | La VM ne se crée pas si le nom d'utilisateur macOS dépasse 21 caractères                                                             | Sandbox         |
+| Issue | Sujet                                                                                                                                | Agent(s)            |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------- |
+| #39   | La compaction en cours de tour résume la demande et garde les gros résultats d'outils                                                | Core                |
+| #40   | Aucun budget de contexte par étape                                                                                                   | Core, Documents     |
+| #41   | Le runner MLX d'Ollama ignore `num_ctx` du Modelfile `atelier` (décision : garder MLX pour la démo, documenté dans `docs/SERVER.md`) | Lead, Core          |
+| #42   | Un texte contenant `<tool_call>` coupe le flux Ollama                                                                                | Core, Lead          |
+| #43   | Le repli texte → outil exécute un `<tool_call>` cité depuis des données                                                              | Core                |
+| #44   | Les fichiers créés dans la VM n'ont pas de carte cliquable                                                                           | Core, UI            |
+| #45   | Un PDF de 30 pages n'est lu qu'à moitié                                                                                              | Documents, Core     |
+| #46   | La VM ne se crée pas si le nom d'utilisateur macOS dépasse 21 caractères                                                             | Sandbox             |
+| #59   | Le modèle déforme le chemin des pièces jointes (`.atelier/uploads`, dossier caché)                                                   | Documents, Core, UI |
+| #60   | Le modèle n'utilise pas le skill `xlsx` (critère 2)                                                                                  | Core                |
+| #61   | La réponse finale cite un total inventé alors que les fichiers sont justes                                                           | Core                |
 
 Corrigé directement par QA : le générateur des fichiers de démo n'était pas déterministe (dates des PDF), contrairement à ce qu'annonçait `docs/DEMO.md`.
 
