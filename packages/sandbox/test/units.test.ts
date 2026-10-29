@@ -5,7 +5,16 @@ import { classifyLimaFailure, lastLimaError, parseLimaLogLine } from '../src/err
 import { parseLimaList } from '../src/limactl.js';
 import { currentMounts, mountsMatch, mountsSetExpression } from '../src/mounts.js';
 import { OutputCollector, splitOutputBudget } from '../src/output.js';
-import { guestToHost, hostToGuest, defaultLimaHome } from '../src/paths.js';
+import {
+  chooseLimaHome,
+  defaultLimaHome,
+  fallbackLimaHome,
+  guestToHost,
+  hostToGuest,
+  limaSocketFits,
+  limaSocketPath,
+  UNIX_PATH_MAX,
+} from '../src/paths.js';
 import { parseProvisionMarker, progressAt, progressFromLimaMessage } from '../src/progress.js';
 import { loadProvisionScripts, provisionBundle, provisionVersion } from '../src/provision.js';
 import { spawnRunner } from '../src/runner.js';
@@ -187,6 +196,62 @@ describe('chemins', () => {
   const mounts = [{ host: '/Users/a/projet', guest: '/workspace' }];
   it('LIMA_HOME par défaut', () => {
     expect(defaultLimaHome('/Users/a')).toBe('/Users/a/Library/Application Support/Atelier/lima');
+  });
+  describe('LIMA_HOME et longueur du socket de Lima (#46)', () => {
+    const none = (): boolean => false;
+    /** Dossier personnel `/Users/<nom>` de `length` caractères. */
+    const homeOf = (length: number): string => `/Users/${'u'.repeat(length - '/Users/'.length)}`;
+
+    it('mesure le socket comme Lima : 82 caractères + le nom avec le chemin par défaut', () => {
+      expect(limaSocketPath('/Users/a/lima', 'atelier')).toBe(
+        '/Users/a/lima/atelier/ssh.sock.0000000000000000',
+      );
+      expect(limaSocketPath(defaultLimaHome('/Users/a'), 'atelier')).toHaveLength(82 + 1);
+    });
+
+    it('garde le chemin par défaut pour un dossier personnel court', () => {
+      expect(chooseLimaHome('atelier', { home: '/Users/gilles', exists: none })).toBe(
+        '/Users/gilles/Library/Application Support/Atelier/lima',
+      );
+    });
+
+    it('bascule sur ~/.atelier-lima pour un dossier personnel de 40 caractères', () => {
+      const home = homeOf(40);
+      const chosen = chooseLimaHome('atelier', { home, exists: none });
+      expect(chosen).toBe(`${home}/.atelier-lima`);
+      expect(limaSocketPath(chosen, 'atelier').length).toBeLessThan(UNIX_PATH_MAX);
+      expect(limaSocketFits(defaultLimaHome(home), 'atelier')).toBe(false);
+    });
+
+    it('cas limite : 103 caractères passent, 104 basculent sur le repli', () => {
+      // 82 + nom : un nom de 21 caractères donne 103, un nom de 22 donne 104.
+      const fits = `/Users/${'n'.repeat(21)}`;
+      const overflows = `/Users/${'n'.repeat(22)}`;
+      expect(limaSocketPath(defaultLimaHome(fits), 'atelier')).toHaveLength(103);
+      expect(limaSocketPath(defaultLimaHome(overflows), 'atelier')).toHaveLength(104);
+      expect(chooseLimaHome('atelier', { home: fits, exists: none })).toBe(defaultLimaHome(fits));
+      expect(chooseLimaHome('atelier', { home: overflows, exists: none })).toBe(
+        fallbackLimaHome(overflows),
+      );
+    });
+
+    it("ne déplace jamais une VM existante : l'instance déjà créée décide", () => {
+      const home = homeOf(40);
+      const atDefault = (path: string): boolean => path === `${defaultLimaHome(home)}/atelier`;
+      expect(chooseLimaHome('atelier', { home, exists: atDefault })).toBe(defaultLimaHome(home));
+      const short = '/Users/gilles';
+      const atFallback = (path: string): boolean => path === `${fallbackLimaHome(short)}/atelier`;
+      expect(chooseLimaHome('atelier', { home: short, exists: atFallback })).toBe(
+        fallbackLimaHome(short),
+      );
+    });
+
+    it('renvoie le repli même trop long : le preflight se charge du message', () => {
+      const home = homeOf(60);
+      const chosen = chooseLimaHome('atelier', { home, exists: none });
+      expect(chosen).toBe(fallbackLimaHome(home));
+      expect(limaSocketFits(chosen, 'atelier')).toBe(false);
+    });
   });
   it('hôte → VM', () => {
     expect(hostToGuest('/Users/a/projet/x/y.txt', mounts)).toBe('/workspace/x/y.txt');

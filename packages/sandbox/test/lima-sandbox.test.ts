@@ -1,5 +1,5 @@
 import { chmod, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
-import { homedir, tmpdir } from 'node:os';
+import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AtelierError, type SandboxProgress } from '@atelier/shared';
@@ -17,7 +17,9 @@ let limaHome: string;
 
 beforeEach(async () => {
   // Chemin canonique (/var → /private/var sur macOS), comme le fait setWorkspace.
-  root = await realpath(await mkdtemp(join(tmpdir(), 'atelier-sandbox-test-')));
+  // Sous /tmp et non tmpdir() : le dossier temporaire de macOS rendrait le socket
+  // de Lima trop long, et le preflight le refuse (issue #46).
+  root = await realpath(await mkdtemp(join('/tmp', 'atelier-sb-')));
   limactlPath = join(root, 'bin', 'limactl');
   await mkdir(join(root, 'bin'));
   await writeFile(limactlPath, '#!/bin/sh\nexit 1\n');
@@ -182,6 +184,17 @@ describe('LimaSandbox.ensureReady', () => {
     const error = await expectAtelierError(failing.sandbox.ensureReady(), 'sandbox/failed');
     expect(error.retryable).toBe(true);
     expect(failing.fake.state.stamp).toBeUndefined();
+  });
+
+  it('refuse au preflight un LIMA_HOME trop long pour le socket de Lima (#46)', async () => {
+    const tooLong = join(root, 'x'.repeat(60), 'lima');
+    const { fake, sandbox } = setup({}, { limaHome: tooLong });
+    const error = await expectAtelierError(sandbox.ensureReady(), 'sandbox/failed');
+    expect(error.message).toMatch(/chemin trop long pour macOS/);
+    expect(error.message).toMatch(/103 au plus/);
+    expect(error.details).toMatchObject({ limaHome: tooLong });
+    expect(fake.verbs()).not.toContain('create');
+    expect(sandbox.status().state).toBe('error');
   });
 
   it("signale clairement l'absence de limactl", async () => {

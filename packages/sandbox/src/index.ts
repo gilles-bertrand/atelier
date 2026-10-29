@@ -20,6 +20,16 @@ export {
   type LimaMount,
 } from './limactl.js';
 export { classifyLimaFailure } from './errors.js';
-export { defaultLimaHome, defaultSkillsDir, guestToHost, hostToGuest } from './paths.js';
+export {
+  chooseLimaHome,
+  defaultLimaHome,
+  defaultSkillsDir,
+  fallbackLimaHome,
+  guestToHost,
+  hostToGuest,
+  limaSocketFits,
+  limaSocketPath,
+  UNIX_PATH_MAX,
+} from './paths.js';
 export { DEFAULT_MAX_OUTPUT_BYTES, OutputCollector } from './output.js';
 export { spawnRunner, type CommandRunner, type RunOptions, type RunResult } from './runner.js';
