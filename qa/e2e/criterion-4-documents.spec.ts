@@ -10,12 +10,14 @@
  * faux serveur). Réel : qwen3.5 (vision native) + VM, montants contrôlés.
  */
 import { existsSync } from 'node:fs';
+import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
   autoApprove,
   conversationText,
   describeCalls,
   dropFiles,
+  fileCard,
   FIXTURES_DIR,
   IS_REAL,
   openWorkspace,
@@ -48,6 +50,14 @@ function pagesOf(spec: unknown): number[] {
 function pagesShown(output: string | undefined): number[] {
   const match = /pages ([\d,\s-]+) ci-dessous/.exec(output ?? '');
   return pagesOf(match?.[1]?.replace(/\s/g, ''));
+}
+
+/** Fichiers markdown créés par l'agent à la racine du dossier de travail. */
+async function createdMarkdown(workspace: string): Promise<{ name: string; content: string }[]> {
+  const names = (await readdir(workspace)).filter((n) => n.endsWith('.md'));
+  return Promise.all(
+    names.map(async (name) => ({ name, content: await readFile(join(workspace, name), 'utf8') })),
+  );
 }
 
 test('critère 4 : rapport par tranches, facture et ticket par la vision, tableau des montants', async ({
@@ -104,10 +114,15 @@ test('critère 4 : rapport par tranches, facture et ticket par la vision, tablea
   expect(visual('facture-scannee').length).toBeGreaterThan(0);
   expect(visual('ticket-de-caisse').length).toBeGreaterThan(0);
 
-  const answer = await conversationText(page);
+  // Le tableau peut être dans le chat, ou dans un fichier markdown créé dans le dossier
+  // (et présenté par une carte) : le brief demande seulement « un tableau correct ».
   // Un tableau unique ou un tableau par document : les deux répondent à la demande.
   const tables = page.getByRole('log', { name: 'Conversation' }).getByRole('table');
-  await expect(tables.last()).toBeVisible();
+  const created = await createdMarkdown(workspace);
+  const fileTables = created.filter((f) => /^\s*\|.*\|\s*$/m.test(f.content));
+  if (fileTables.length === 0) await expect(tables.last()).toBeVisible();
+  else await expect(fileCard(page, fileTables[0]?.name ?? '').first()).toBeVisible();
+  const answer = [await conversationText(page), ...created.map((f) => f.content)].join('\n');
 
   if (!IS_REAL) {
     // Le ticket a bien été envoyé au modèle vision sous forme d'image.
@@ -126,7 +141,9 @@ test('critère 4 : rapport par tranches, facture et ticket par la vision, tablea
     .join('\n');
   expect(visionOutputs).toMatch(/439[,.]23/);
   expect(visionOutputs).toMatch(/27[,.]50/);
-  const tableText = (await tables.allTextContents()).join('\n');
+  const tableText = [...(await tables.allTextContents()), ...fileTables.map((f) => f.content)].join(
+    '\n',
+  );
   expect(tableText).toMatch(/439[,.]23/);
   expect(tableText).toMatch(/27[,.]5/);
   for (const amount of [/90[,.]00/, /186[,.]00/, /87[,.]00/, /363[,.]00/, /76[,.]23/]) {

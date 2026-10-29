@@ -112,14 +112,15 @@ _Dernière mise à jour : 2026-10-28, Lead._
 | #39   | La compaction en cours de tour résume la demande et garde les gros résultats           | Core                | ✅ corrigé (#54) ; critère 2 en réel               |
 | #40   | Aucun budget de contexte par étape (78 000 tokens dans une étape)                      | Core, Documents     | ✅ corrigé (#50, #55) ; critère 2 en réel, lenteur |
 | #41   | Le runner MLX d'Ollama ignore `num_ctx` du Modelfile `atelier`                         | Lead, Core          | démo locale ≠ production                           |
-| #42   | Un texte contenant `<tool_call>` coupe le flux Ollama (erreur serveur)                 | Core, Lead          | ✅ corrigé (#56) ; robustesse                      |
-| #43   | Le repli texte → outil exécute un `<tool_call>` cité depuis des données (§8)           | Core                | ✅ corrigé (#53) ; sécurité (vLLM, autres)         |
+| #42   | Un texte contenant `<tool_call>` coupe le flux Ollama (erreur serveur)                 | Core, Lead          | ✅ corrigé (#56), vérifié en réel 3/3 ; robustesse |
+| #43   | Le repli texte → outil exécute un `<tool_call>` cité depuis des données (§8)           | Core                | ✅ corrigé (#53), 3/3 en réel ; sécurité           |
 | #44   | Les fichiers créés dans la VM n'ont pas de carte cliquable                             | Core, UI            | ✅ corrigé (#51) ; critère 2 (carte du `.xlsx`)    |
 | #45   | Un PDF de 30 pages n'est lu qu'à moitié                                                | Documents, Core     | ✅ corrigé (#52, #55) ; critère 4                  |
 | #46   | La VM ne se crée pas si le nom d'utilisateur macOS dépasse 21 caractères (socket Lima) | Sandbox             | critère 1 (Mac neuf)                               |
-| #59   | Le modèle déforme le chemin des pièces jointes (`.atelier/uploads`, dossier caché)     | Documents, Core, UI | critère 4 (détour, 2 runs sur 4)                   |
+| #59   | Le modèle déforme le chemin des pièces jointes (`.atelier/uploads`, dossier caché)     | Documents, Core, UI | ✅ corrigé (#64, #65) ; critère 4                  |
 | #60   | Le modèle n'utilise pas le skill `xlsx`                                                | Core                | critère 2                                          |
 | #61   | La réponse finale cite un total inventé (fichiers justes)                              | Core                | critère 2                                          |
+| #69   | Ollama répond 500 « tool call parsing failed: EOF » : tour arrêté, message trompeur    | Core, UI            | critère 4 (1 run sur 2), PR #70                    |
 
 ## Demandes d'évolution de `packages/shared`
 

@@ -242,9 +242,17 @@ export const jsonStress: Scenario = {
   }),
   judge: async (trace, { workspace }) => {
     const failures: string[] = [];
+    const notes: string[] = [];
     const path = join(workspace, 'stress.md');
-    if (!existsSync(path)) failures.push('stress.md non créé');
-    else {
+    // Limite connue (#42) : Ollama coupe le flux sur le jeton réservé <tool_call>. Le comportement
+    // attendu est alors une seule relance, puis une erreur claire, sans rien exécuter.
+    const retries = trace.logs.filter((l) => l.startsWith('stream-cut:retry')).length;
+    const streamCut =
+      trace.reason === 'error' && /balise réservée/.test(trace.error ?? '') && retries === 1;
+    if (!existsSync(path)) {
+      if (streamCut) notes.push('flux coupé (#42) : une relance, puis erreur claire');
+      else failures.push('stress.md non créé');
+    } else {
       const written = (await readFile(path, 'utf8')).replace(/\n+$/, '');
       if (written !== STRESS_CONTENT) failures.push(`contenu altéré :\n${written.slice(0, 600)}`);
     }
@@ -257,7 +265,7 @@ export const jsonStress: Scenario = {
       failures.push(
         `${String(writes.length)} write_file (attendu : 1) : ${writes.map((w) => json(w.input).slice(0, 80)).join(' | ')}`,
       );
-    return verdict(failures, [`réparations d’appels : ${String(trace.repairs)}`]);
+    return verdict(failures, [...notes, `réparations d’appels : ${String(trace.repairs)}`]);
   },
 };
 

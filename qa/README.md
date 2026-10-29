@@ -19,7 +19,10 @@ Les fichiers de test sont dans [`fixtures/`](../fixtures/) : `demo-ventes/` (3 C
 ```bash
 pnpm --filter @atelier/qa e2e        # mode mock (CI) : faux modèle, pas de VM
 pnpm --filter @atelier/qa e2e:real   # mode réel : Ollama + VM Lima, ~15 min
+pnpm --filter @atelier/qa e2e:real criterion-2   # un seul critère
 ```
+
+⚠️ Pour filtrer, passez le nom du fichier **sans `--`** : `e2e:real -- criterion-2` transmet le `--` à Playwright, qui ignore alors le filtre et rejoue toutes les specs (plus d'une heure en mode réel). `robustness` et `bench` acceptent les deux formes.
 
 Les deux commandes construisent d'abord l'app (`electron-vite build`), puis lancent Electron avec un `userData` et un dossier de travail temporaires (réglages pré-remplis, onboarding passé). La boîte « Choisir un dossier » est remplacée par le dossier de test, et le glisser-déposer passe par un vrai drag Chromium (CDP `Input.dispatchDragEvent`) pour que `webUtils.getPathForFile` résolve les chemins.
 
