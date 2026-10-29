@@ -112,12 +112,20 @@ export { buildSystemPrompt } from './prompt/system-prompt.js';
 export type { SystemPromptOptions } from './prompt/system-prompt.js';
 
 // Chemins (réutilisé par packages/documents)
-export { isInside, resolveWorkspacePath, tryResolveWorkspacePath } from './paths.js';
-export type { ResolvedWorkspacePath } from './paths.js';
+export {
+  isInside,
+  resolveReadablePath,
+  resolveWorkspacePath,
+  skillReadRoots,
+  tryResolveWorkspacePath,
+} from './paths.js';
+export type { ReadRoot, ResolvedReadablePath, ResolvedWorkspacePath } from './paths.js';
 
 // Outils
 export {
+  createListDirTool,
   createNativeTools,
+  createReadFileTool,
   editFileTool,
   globTool,
   grepTool,
@@ -127,6 +135,7 @@ export {
   todoWriteTool,
   writeFileTool,
 } from './tools/native.js';
+export type { NativeToolsOptions } from './tools/native.js';
 export { BASH_TIMEOUT_MS, BASH_WHITELIST, bashTool, isWhitelistedCommand } from './tools/bash.js';
 export { executeTool, isToolOutput, toAiSdkTools } from './tools/registry.js';
 export type { ToolRuntime } from './tools/registry.js';

@@ -7,7 +7,7 @@ import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 import { AtelierError, defineTool, type AnyToolDefinition, type ToolOutput } from '@atelier/shared';
-import { resolveWorkspacePath } from '../paths.js';
+import { resolveReadablePath, resolveWorkspacePath, type ReadRoot } from '../paths.js';
 import { countOccurrences, truncateOutput } from './text.js';
 import { preview } from './permission.js';
 import { fileCard, globToRegExp, looksBinary, walkFiles } from './fs-utils.js';
@@ -52,40 +52,66 @@ const pathField = z
   .min(1)
   .describe('Chemin relatif au dossier de travail (ex. "rapport.md" ou "notes/2026.txt").');
 
+/** Options des outils natifs de lecture. */
+export interface NativeToolsOptions {
+  /**
+   * Dossiers lisibles en lecture seule hors du dossier de travail (racine des
+   * skills, #60), relus à chaque appel. Les outils d'écriture les ignorent.
+   */
+  readRoots?: () => readonly ReadRoot[];
+}
+
+const readPathField = z
+  .string()
+  .min(1)
+  .describe(
+    'Chemin relatif au dossier de travail (ex. "rapport.md"), ou chemin d\'un SKILL.md tel qu\'indiqué dans la section Skills.',
+  );
+
 /** Lecture texte simple (M1). Remplacé par l'outil multi-format de `documents`. */
-export const readFileTool = defineTool({
-  name: 'read_file',
-  description:
-    'Lit un fichier texte du dossier de travail et renvoie son contenu avec des numéros de ligne. Utilise offset/limit pour les gros fichiers.',
-  inputSchema: z.object({
-    path: pathField,
-    offset: z.number().int().min(1).optional().describe('Première ligne à lire (1 = début).'),
-    limit: z.number().int().min(1).max(5_000).optional().describe('Nombre de lignes à lire.'),
-  }),
-  permission: 'never',
-  source: 'native',
-  execute: (input, context) =>
-    guarded(async () => {
-      const resolved = await resolveWorkspacePath(context.workspace, input.path);
-      if (!resolved.exists) return { ok: false, content: `Fichier introuvable : ${input.path}` };
-      if (await looksBinary(resolved.absolutePath)) {
-        return {
-          ok: false,
-          content: `${input.path} est un fichier binaire : la lecture de ce format n'est pas encore prise en charge.`,
-        };
-      }
-      const text = await readFile(resolved.absolutePath, 'utf8');
-      const lines = text.split('\n');
-      const start = (input.offset ?? 1) - 1;
-      const end = input.limit !== undefined ? start + input.limit : lines.length;
-      const numbered = lines
-        .slice(start, end)
-        .map((line, i) => `${String(start + i + 1).padStart(6)}\t${line}`)
-        .join('\n');
-      const header = end < lines.length ? `[lignes ${start + 1}-${end} sur ${lines.length}]\n` : '';
-      return { ok: true, content: truncateOutput(header + numbered).text };
+export function createReadFileTool(options: NativeToolsOptions = {}) {
+  return defineTool({
+    name: 'read_file',
+    description:
+      'Lit un fichier texte du dossier de travail et renvoie son contenu avec des numéros de ligne. Utilise offset/limit pour les gros fichiers.',
+    inputSchema: z.object({
+      path: readPathField,
+      offset: z.number().int().min(1).optional().describe('Première ligne à lire (1 = début).'),
+      limit: z.number().int().min(1).max(5_000).optional().describe('Nombre de lignes à lire.'),
     }),
-});
+    permission: 'never',
+    source: 'native',
+    execute: (input, context) =>
+      guarded(async () => {
+        const resolved = await resolveReadablePath(
+          context.workspace,
+          input.path,
+          options.readRoots?.() ?? [],
+        );
+        if (!resolved.exists) return { ok: false, content: `Fichier introuvable : ${input.path}` };
+        if (await looksBinary(resolved.absolutePath)) {
+          return {
+            ok: false,
+            content: `${input.path} est un fichier binaire : la lecture de ce format n'est pas encore prise en charge.`,
+          };
+        }
+        const text = await readFile(resolved.absolutePath, 'utf8');
+        const lines = text.split('\n');
+        const start = (input.offset ?? 1) - 1;
+        const end = input.limit !== undefined ? start + input.limit : lines.length;
+        const numbered = lines
+          .slice(start, end)
+          .map((line, i) => `${String(start + i + 1).padStart(6)}\t${line}`)
+          .join('\n');
+        const header =
+          end < lines.length ? `[lignes ${start + 1}-${end} sur ${lines.length}]\n` : '';
+        return { ok: true, content: truncateOutput(header + numbered).text };
+      }),
+  });
+}
+
+/** `read_file` natif sans racine de lecture supplémentaire. */
+export const readFileTool = createReadFileTool();
 
 export const writeFileTool = defineTool({
   name: 'write_file',
@@ -170,53 +196,63 @@ export const editFileTool = defineTool({
     }),
 });
 
-export const listDirTool = defineTool({
-  name: 'list_dir',
-  description:
-    "Liste le contenu d'un dossier (fichiers et sous-dossiers, avec leur taille). Par défaut, la racine du dossier de travail.",
-  inputSchema: z.object({
-    path: z.string().optional().describe('Dossier à lister (défaut : ".").'),
-    show_hidden: z.boolean().optional().describe('Inclure les fichiers cachés (défaut : non).'),
-  }),
-  permission: 'never',
-  source: 'native',
-  execute: (input, context) =>
-    guarded(async () => {
-      const resolved = await resolveWorkspacePath(context.workspace, input.path ?? '.');
-      const entries = await readdir(resolved.absolutePath, { withFileTypes: true });
-      const isRoot = resolved.relativePath === '.';
-      const isAppDir = resolved.relativePath === APP_DIR;
-      // Pièces jointes : seul contenu de `.atelier/` signalé (cache et rendus restent masqués).
-      const attachments = isRoot || isAppDir ? await attachmentsLine(context.workspace) : undefined;
-      const visible = entries
-        .filter((e) => input.show_hidden === true || !e.name.startsWith('.'))
-        .filter((e) => !isAppDir || e.name === 'uploads')
-        .sort((a, b) =>
-          a.isDirectory() === b.isDirectory()
-            ? a.name.localeCompare(b.name)
-            : a.isDirectory()
-              ? -1
-              : 1,
-        );
-      if (visible.length === 0) {
-        return { ok: true, content: attachments ?? `${resolved.relativePath} est vide.` };
-      }
-      const lines: string[] = [];
-      for (const entry of visible.slice(0, 500)) {
-        if (entry.isDirectory()) {
-          lines.push(`${entry.name}/`);
-        } else if (entry.isSymbolicLink()) {
-          lines.push(`${entry.name} (lien)`);
-        } else {
-          const size = (await stat(path.join(resolved.absolutePath, entry.name))).size;
-          lines.push(`${entry.name} (${formatSize(size)})`);
-        }
-      }
-      if (visible.length > 500) lines.push(`… ${visible.length - 500} autres entrées`);
-      if (attachments !== undefined) lines.push('', attachments);
-      return { ok: true, content: lines.join('\n') };
+export function createListDirTool(options: NativeToolsOptions = {}) {
+  return defineTool({
+    name: 'list_dir',
+    description:
+      "Liste le contenu d'un dossier (fichiers et sous-dossiers, avec leur taille). Par défaut, la racine du dossier de travail.",
+    inputSchema: z.object({
+      path: z.string().optional().describe('Dossier à lister (défaut : ".").'),
+      show_hidden: z.boolean().optional().describe('Inclure les fichiers cachés (défaut : non).'),
     }),
-});
+    permission: 'never',
+    source: 'native',
+    execute: (input, context) =>
+      guarded(async () => {
+        const resolved = await resolveReadablePath(
+          context.workspace,
+          input.path ?? '.',
+          options.readRoots?.() ?? [],
+        );
+        const entries = await readdir(resolved.absolutePath, { withFileTypes: true });
+        const isRoot = !resolved.readOnly && resolved.relativePath === '.';
+        const isAppDir = !resolved.readOnly && resolved.relativePath === APP_DIR;
+        // Pièces jointes : seul contenu de `.atelier/` signalé (cache et rendus restent masqués).
+        const attachments =
+          isRoot || isAppDir ? await attachmentsLine(context.workspace) : undefined;
+        const visible = entries
+          .filter((e) => input.show_hidden === true || !e.name.startsWith('.'))
+          .filter((e) => !isAppDir || e.name === 'uploads')
+          .sort((a, b) =>
+            a.isDirectory() === b.isDirectory()
+              ? a.name.localeCompare(b.name)
+              : a.isDirectory()
+                ? -1
+                : 1,
+          );
+        if (visible.length === 0) {
+          return { ok: true, content: attachments ?? `${resolved.relativePath} est vide.` };
+        }
+        const lines: string[] = [];
+        for (const entry of visible.slice(0, 500)) {
+          if (entry.isDirectory()) {
+            lines.push(`${entry.name}/`);
+          } else if (entry.isSymbolicLink()) {
+            lines.push(`${entry.name} (lien)`);
+          } else {
+            const size = (await stat(path.join(resolved.absolutePath, entry.name))).size;
+            lines.push(`${entry.name} (${formatSize(size)})`);
+          }
+        }
+        if (visible.length > 500) lines.push(`… ${visible.length - 500} autres entrées`);
+        if (attachments !== undefined) lines.push('', attachments);
+        return { ok: true, content: lines.join('\n') };
+      }),
+  });
+}
+
+/** `list_dir` natif sans racine de lecture supplémentaire. */
+export const listDirTool = createListDirTool();
 
 /** Dossier de l'app dans le dossier de travail (cache, rendus, pièces jointes). */
 const APP_DIR = '.atelier';
@@ -399,12 +435,12 @@ export const presentFileTool = defineTool({
 });
 
 /** Outils natifs fichiers + tâches (bash est fourni à part, il dépend d'une Sandbox). */
-export function createNativeTools(): AnyToolDefinition[] {
+export function createNativeTools(options: NativeToolsOptions = {}): AnyToolDefinition[] {
   return [
-    readFileTool,
+    createReadFileTool(options),
     writeFileTool,
     editFileTool,
-    listDirTool,
+    createListDirTool(options),
     globTool,
     grepTool,
     todoWriteTool,

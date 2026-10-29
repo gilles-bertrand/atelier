@@ -4,7 +4,12 @@
  * chaque session agent porte la génération du runtime qui l'a créée, et le
  * `ChatManager` la recrée (avec son historique) entre deux tours.
  */
-import { createAgentRuntime, createLlmModels, type AgentRuntime } from '@atelier/agent-core';
+import {
+  createAgentRuntime,
+  createLlmModels,
+  skillReadRoots,
+  type AgentRuntime,
+} from '@atelier/agent-core';
 import {
   createDocumentTools,
   createVisionAnalyzer,
@@ -178,6 +183,8 @@ export class AgentRuntimeHost implements AgentSessionFactory {
           vision,
           maxOutputTokens: () =>
             outputTokensForContext(runtime?.contextWindow ?? FALLBACK_CONTEXT_WINDOW),
+          // SKILL.md lisible en lecture seule hors du dossier de travail (#60).
+          readRoots: () => skillReadRoots(this.#skills),
         }),
         ...this.#webTools,
         ...(this.#o.extraTools?.() ?? []),

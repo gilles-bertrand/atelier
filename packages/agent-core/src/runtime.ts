@@ -17,6 +17,7 @@ import {
   type ToolRegistry,
 } from '@atelier/shared';
 import { createDefaultRegistry } from './default-registry.js';
+import { skillReadRoots } from './paths.js';
 import { fetchContextWindow, type ContextWindowSource } from './llm/context-window.js';
 import { createLlmModels, type LlmConnectionOptions, type LlmModels } from './llm/provider.js';
 import { Agent, AgentSession, type AgentOptions } from './loop/agent.js';
@@ -124,8 +125,14 @@ export async function createAgentRuntime(options: AgentRuntimeOptions): Promise<
   };
   await refreshContextWindow();
 
+  const currentSkills = (): readonly SkillInfo[] =>
+    typeof options.skills === 'function' ? options.skills() : (options.skills ?? []);
+
   const createSession = (session: CreateSessionOptions): AgentSession => {
-    const registry = createDefaultRegistry(options.tools ?? []);
+    // Racine des skills lisible en lecture seule par read_file / list_dir natifs (#60).
+    const registry = createDefaultRegistry(options.tools ?? [], {
+      readRoots: () => skillReadRoots(currentSkills()),
+    });
     for (const tool of options.sessionTools?.(registry) ?? []) registry.register(tool);
     const agent = new Agent({
       model: llm.model,
