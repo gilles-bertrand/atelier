@@ -1,6 +1,7 @@
 packages:
   - apps/*
   - packages/*
+  - qa
 
 # pnpm 11 : seuls ces paquets peuvent exécuter leurs scripts d'installation.
 allowBuilds:

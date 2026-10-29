@@ -1,26 +1,32 @@
 """Génère les fichiers de la démo (docs/DEMO.md), de façon déterministe.
 
-    uv run --with reportlab --with pillow demo/generate-fixtures.py
+    uv run --with reportlab --with pillow fixtures/generate-demo-fixtures.py
 
-Produit dans demo/fixtures/ :
-  ventes/ventes-{bruxelles,liege,namur}.csv   critère 2 (Excel par mois + résumé)
-  rapport-annuel-2025.pdf                      critère 4 (PDF texte de 30 pages)
-  facture-scannee.pdf                          critère 4 (PDF image, sans couche texte)
-  ticket-de-caisse.jpg                         critère 4 (photo)
+Produit dans fixtures/ :
+  demo-ventes/ventes-{bruxelles,liege,namur}.csv   critère 2 (Excel par mois + résumé)
+  demo-documents/rapport-annuel-2025.pdf           critère 4 (PDF texte de 30 pages)
+  demo-documents/facture-scannee.pdf               critère 4 (PDF image, sans couche texte)
+  demo-documents/ticket-de-caisse.jpg              critère 4 (photo)
 Les montants attendus sont dans docs/DEMO.md.
 """
 
 import csv
 import random
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from reportlab import rl_config
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer
 
-OUT = Path(__file__).parent / "fixtures"
+OUT = Path(__file__).parent
+VENTES = OUT / "demo-ventes"
+DOCS = OUT / "demo-documents"
+# Dates figées dans les PDF : deux générations successives donnent les mêmes octets.
+rl_config.invariant = 1
+PDF_DATE = datetime(2026, 3, 12, tzinfo=timezone.utc).timetuple()
 FONT = "/System/Library/Fonts/Supplemental/Arial.ttf"
 FONT_BOLD = "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
 MONO = "/System/Library/Fonts/Supplemental/Courier New.ttf"
@@ -31,9 +37,9 @@ MAGASINS = {"bruxelles": ("Bruxelles", 1.0), "liege": ("Liège", 0.7), "namur": 
 
 def ventes() -> None:
     rng = random.Random(2026)
-    (OUT / "ventes").mkdir(parents=True, exist_ok=True)
+    VENTES.mkdir(parents=True, exist_ok=True)
     for magasin, (nom, poids) in MAGASINS.items():
-        with open(OUT / "ventes" / f"ventes-{magasin}.csv", "w", newline="", encoding="utf-8") as f:
+        with open(VENTES / f"ventes-{magasin}.csv", "w", newline="", encoding="utf-8") as f:
             w = csv.writer(f)
             w.writerow(["date", "magasin", "produit", "quantite", "prix_unitaire", "montant"])
             jour = date(2026, 1, 1)
@@ -72,7 +78,7 @@ PHRASES = [
 def rapport() -> None:
     rng = random.Random(30)
     styles = getSampleStyleSheet()
-    doc = SimpleDocTemplate(str(OUT / "rapport-annuel-2025.pdf"), pagesize=A4, title="Rapport annuel 2025")
+    doc = SimpleDocTemplate(str(DOCS / "rapport-annuel-2025.pdf"), pagesize=A4, title="Rapport annuel 2025")
     story = [Paragraph("Coopérative Terre & Tasse : rapport annuel 2025", styles["Title"]), Spacer(1, 12)]
     for i, (titre, fait) in enumerate(CHAPITRES, start=1):
         if i > 1:
@@ -133,7 +139,9 @@ def facture() -> None:
         x, yy = rng.randrange(img.width), rng.randrange(img.height)
         px[x, yy] = max(0, px[x, yy] - rng.randrange(40, 120))
     img = img.filter(ImageFilter.GaussianBlur(0.8))
-    img.convert("RGB").save(OUT / "facture-scannee.pdf", "PDF", resolution=150)
+    img.convert("RGB").save(
+        DOCS / "facture-scannee.pdf", "PDF", resolution=150, creationDate=PDF_DATE, modDate=PDF_DATE
+    )
 
 
 def ticket() -> None:
@@ -166,7 +174,7 @@ def ticket() -> None:
     bg.paste(shadow, (330, 330), shadow)
     rotated = paper.convert("RGBA").rotate(6, expand=True, resample=Image.BICUBIC)
     bg.paste(rotated, (300, 290), rotated)
-    bg.filter(ImageFilter.GaussianBlur(0.6)).save(OUT / "ticket-de-caisse.jpg", quality=85)
+    bg.filter(ImageFilter.GaussianBlur(0.6)).save(DOCS / "ticket-de-caisse.jpg", quality=85)
 
 
 if __name__ == "__main__":

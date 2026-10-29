@@ -14,7 +14,7 @@ _Dernière mise à jour : 2026-10-28, Lead._
 | M3 : app Electron fonctionnelle                             | ✅ fait (chat, panneau latéral, onboarding, ouverture sécurisée des fichiers)                                                                                                                                  | UI                            |
 | M4 : skills + MCP + SearXNG + documents                     | ✅ fait (pièces jointes et vision comprises)                                                                                                                                                                   | Sandbox, MCP & Web, Documents |
 | M5 : historique, compaction, réglages, packaging signé      | 🟡 historique (node:sqlite), compaction et réglages faits ; build arm64 non signé vérifié (`.dmg`, icône) ; **signature et notarisation en attente du certificat Developer ID et de la clé App Store Connect** | UI, Core, Lead                |
-| Démo finale (critères d'acceptation)                        | 🟡 scénario et fichiers prêts (`docs/DEMO.md`, `demo/fixtures/`) ; répétition à faire avec `qwen3.5:35b` en local (Ollama sur le Mac de Gilles)                                                                | Lead                          |
+| Démo finale (critères d'acceptation)                        | 🟡 scénario et fichiers prêts (`docs/DEMO.md`, `fixtures/`) ; e2e automatisés (`qa/`) : critères 3 et 5 ✅ en réel, critères 2 et 4 ❌ en réel (#39, #40, #44, #45) ; rapport `docs/QA.md`                     | Lead                          |
 
 ## Ce que contient le squelette
 
@@ -98,6 +98,23 @@ _Dernière mise à jour : 2026-10-28, Lead._
 - **sharp 0.35** : binaires précompilés (`@img/sharp-darwin-arm64`), plus de script d'installation → **aucune entrée `allowBuilds` nécessaire**.
 - Pour **UI / Lead** : externaliser `sharp`, `unpdf`, `exceljs`, `mammoth`, `heic-convert`, `file-type` du bundle main ; `asarUnpack` pour `@img/sharp-*`. Réglage « modèle vision séparé » : `createVisionAnalyzer({ model: createLlmModels({ …, model: visionModel }).model })`, sinon `models.fastModel`. Glisser-déposer : `importAttachment` puis mention du chemin relatif dans le message.
 - Pour **Core** : `glob`/`list_dir`/`grep` pourraient ignorer `.atelier/` (cache et rendus) ; `documents` dépend d'`agent-core` (chemins) : agent-core ne doit donc pas importer `documents` (c'est l'app qui compose le registre).
+
+## QA et intégration (agent QA, `feat/qa-integration`)
+
+- **Paquet `qa/`** (détails : `qa/README.md`, rapport : `docs/QA.md`) : e2e Playwright pour Electron des critères 2 à 5 en deux modes (`mock` pour la CI, avec un faux serveur LLM ; `real` avec Ollama et la VM Lima), campagne de robustesse avec Qwen (`pnpm --filter @atelier/qa robustness -- --vm`), mesures (`bench`). Job CI `e2e` ajouté (mode mock).
+- **Fixtures** déplacées de `demo/fixtures/` vers `fixtures/demo-ventes/` et `fixtures/demo-documents/` ; générateur `fixtures/generate-demo-fixtures.py`, désormais reproductible octet pour octet (dates des PDF figées).
+- **Bugs ouverts, par agent concerné** :
+
+| Issue | Sujet                                                                                  | Agent(s)        | Effet sur les critères       |
+| ----- | -------------------------------------------------------------------------------------- | --------------- | ---------------------------- |
+| #39   | La compaction en cours de tour résume la demande et garde les gros résultats           | Core            | critère 2 en réel            |
+| #40   | Aucun budget de contexte par étape (78 000 tokens dans une étape)                      | Core, Documents | critère 2 en réel, lenteur   |
+| #41   | Le runner MLX d'Ollama ignore `num_ctx` du Modelfile `atelier`                         | Lead, Core      | démo locale ≠ production     |
+| #42   | Un texte contenant `<tool_call>` coupe le flux Ollama (erreur serveur)                 | Core, Lead      | robustesse                   |
+| #43   | Le repli texte → outil exécute un `<tool_call>` cité depuis des données (§8)           | Core            | sécurité (vLLM, autres)      |
+| #44   | Les fichiers créés dans la VM n'ont pas de carte cliquable                             | Core, UI        | critère 2 (carte du `.xlsx`) |
+| #45   | Un PDF de 30 pages n'est lu qu'à moitié                                                | Documents, Core | critère 4                    |
+| #46   | La VM ne se crée pas si le nom d'utilisateur macOS dépasse 21 caractères (socket Lima) | Sandbox         | critère 1 (Mac neuf)         |
 
 ## Demandes d'évolution de `packages/shared`
 

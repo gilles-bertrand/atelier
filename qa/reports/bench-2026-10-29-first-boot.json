@@ -1,0 +1,45 @@
+{
+  "date": "2026-10-29T08:46:04.047Z",
+  "model": "atelier",
+  "url": "http://localhost:11434",
+  "first_boot": {
+    "total_s": 207.390723208,
+    "phases": [
+      {
+        "phase": "checking",
+        "at": 0.00009475000000000477,
+        "message": "Vérification de la machine…"
+      },
+      {
+        "phase": "creating",
+        "at": 0.02109895800000001,
+        "message": "Création de la VM…"
+      },
+      {
+        "phase": "downloading_image",
+        "at": 0.22789387499999997,
+        "message": "Téléchargement de l'image Ubuntu (environ 600 Mo)…"
+      },
+      {
+        "phase": "starting",
+        "at": 0.23375633299999998,
+        "message": "Démarrage de la VM…"
+      },
+      {
+        "phase": "provisioning",
+        "at": 135.295299291,
+        "message": "Installation des outils dans la VM (premier lancement)…"
+      },
+      {
+        "phase": "configuring_mounts",
+        "at": 207.328105125,
+        "message": "Application des règles réseau…"
+      },
+      {
+        "phase": "ready",
+        "at": 207.39071225,
+        "message": "VM prête."
+      }
+    ]
+  }
+}

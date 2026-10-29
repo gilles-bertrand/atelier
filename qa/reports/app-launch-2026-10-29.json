@@ -1,0 +1,15 @@
+{
+  "date": "2026-10-29T08:53:16.892Z",
+  "firstLaunchMs": [
+    1115,
+    679,
+    655
+  ],
+  "nextLaunchMs": [
+    703,
+    685,
+    674
+  ],
+  "firstLaunchMedianMs": 679,
+  "nextLaunchMedianMs": 685
+}
