@@ -168,6 +168,18 @@ async function main(): Promise<void> {
   ]);
   await writeFile(path.join(OUT, 'rapport.pdf'), textPdf(pages));
 
+  // PDF dense en chiffres (tableaux financiers) : ≈ 1,4 caractère par token.
+  const figures = Array.from({ length: 30 }, (_, p) => [
+    `Annexe financière - page ${p + 1}`,
+    ...Array.from({ length: 27 }, (_, l) => {
+      const n = p * 27 + l + 1;
+      const amount = (v: number) =>
+        String(((n * v) % 900_000) + 10_000).replace(/\B(?=(\d{3})+$)/g, ' ');
+      return `${String(n).padStart(4, '0')} ; 2025-${String((n % 12) + 1).padStart(2, '0')}-${String((n % 28) + 1).padStart(2, '0')} ; ${amount(7_919)},${n % 100} ; ${amount(104_729)},${(n * 7) % 100} ; ${amount(15_485_863)}`;
+    }),
+  ]);
+  await writeFile(path.join(OUT, 'chiffres.pdf'), textPdf(figures));
+
   const scanW = 1240;
   const scanH = 1754;
   const scan = await textImage(scanW, scanH, ['FACTURE N° 2026-117', 'Total TTC : 1 234,56 EUR'])
@@ -194,9 +206,15 @@ async function main(): Promise<void> {
   await xlsx(path.join(OUT, 'ventes.xlsx'));
 
   const sizes = await Promise.all(
-    ['rapport.pdf', 'scan.pdf', 'ticket.png', 'photo.heic', 'compte-rendu.docx', 'ventes.xlsx'].map(
-      async (f) => `${f} ${(await readFile(path.join(OUT, f))).length} o`,
-    ),
+    [
+      'rapport.pdf',
+      'chiffres.pdf',
+      'scan.pdf',
+      'ticket.png',
+      'photo.heic',
+      'compte-rendu.docx',
+      'ventes.xlsx',
+    ].map(async (f) => `${f} ${(await readFile(path.join(OUT, f))).length} o`),
   );
   console.log(sizes.join('\n'));
 }

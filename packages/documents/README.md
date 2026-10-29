@@ -9,19 +9,21 @@ import { createDefaultRegistry, createLlmModels } from '@atelier/agent-core';
 import {
   createDocumentTools,
   createVisionAnalyzer,
-  outputCharsForContext,
+  outputTokensForContext,
 } from '@atelier/documents';
 
 const models = createLlmModels({ baseUrl, model, token, thinking });
 // Vision : modèle principal (multimodal) par défaut ; `fastModel` évite le thinking.
 // Modèle vision séparé (Réglages) : createLlmModels({ …, model: settings.visionModel }).model
 const vision = createVisionAnalyzer({ model: models.fastModel });
-// Budget de sortie d'un appel de read_file : 25 % de la fenêtre de contexte (≈ 24 000 car. pour 32 768 tokens).
-const maxOutputChars = outputCharsForContext(contextWindow);
+// Budget d'une sortie de read_file : 20 % de la fenêtre en tokens estimés (estimateTokens d'agent-core),
+// sous le plafond de 25 % qu'agent-core applique à toute sortie d'outil. Un getter est relu à
+// chaque appel : utile quand la fenêtre n'est connue (ou ne change) qu'après la création des outils.
+const maxOutputTokens = () => outputTokensForContext(runtime?.contextWindow ?? 32_768);
 
 // `read_file` de documents remplace le read_file texte provisoire d'agent-core.
 const registry = createDefaultRegistry([
-  ...createDocumentTools({ vision, maxOutputChars }),
+  ...createDocumentTools({ vision, maxOutputTokens }),
   ...webTools,
 ]);
 ```
@@ -42,22 +44,22 @@ Copie dans `<dossier>/.atelier/uploads/` (jamais d'écrasement : « facture (2).
 
 ## `read_file({ path, offset?, limit?, pages? })`
 
-| Type (magic bytes, puis extension)      | Traitement                                                                                                                                                                      |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| texte, code, csv, json…                 | lignes numérotées, `offset`/`limit`, 2000 lignes et `maxOutputChars` caractères max (24 000 par défaut) ; UTF-8, UTF-16 (BOM), sinon latin-1 (windows-1252) signalé ; 20 Mo max |
-| PDF                                     | texte par page (unpdf, côté hôte), `--- page N ---`, nombre total de pages, lu **par tranches** (voir ci-dessous)                                                               |
-| page PDF sans texte (< 30 car.)         | rendu PNG par `pdftoppm` **dans la VM** (`.atelier/cache/pages/`), puis transcription par le modèle vision ; 10 pages scannées max par appel                                    |
-| png, jpg, webp, gif, heic (+avif, tiff) | orientation EXIF, réduction à 1568 px (sharp ; HEIC décodé par heic-convert), description + transcription par le modèle vision                                                  |
-| docx                                    | mammoth → markdown (titres, gras, listes, tableaux) ; images remplacées par `[image]`                                                                                           |
-| xlsx                                    | exceljs → une table markdown par feuille (dimensions, 200 lignes et 50 colonnes max, résultat des formules)                                                                     |
-| autre binaire                           | refus `ok: false` avec le type détecté (ex. « ELF (application/x-elf) », « Word 97-2003 (.doc) »)                                                                               |
+| Type (magic bytes, puis extension)      | Traitement                                                                                                                                                                          |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| texte, code, csv, json…                 | lignes numérotées, `offset`/`limit`, 2000 lignes et `maxOutputTokens` tokens estimés max (6 553 par défaut) ; UTF-8, UTF-16 (BOM), sinon latin-1 (windows-1252) signalé ; 20 Mo max |
+| PDF                                     | texte par page (unpdf, côté hôte), `--- page N ---`, nombre total de pages, lu **par tranches** (voir ci-dessous)                                                                   |
+| page PDF sans texte (< 30 car.)         | rendu PNG par `pdftoppm` **dans la VM** (`.atelier/cache/pages/`), puis transcription par le modèle vision ; 10 pages scannées max par appel                                        |
+| png, jpg, webp, gif, heic (+avif, tiff) | orientation EXIF, réduction à 1568 px (sharp ; HEIC décodé par heic-convert), description + transcription par le modèle vision                                                      |
+| docx                                    | mammoth → markdown (titres, gras, listes, tableaux) ; images remplacées par `[image]`                                                                                               |
+| xlsx                                    | exceljs → une table markdown par feuille (dimensions, 200 lignes et 50 colonnes max, résultat des formules)                                                                         |
+| autre binaire                           | refus `ok: false` avec le type détecté (ex. « ELF (application/x-elf) », « Word 97-2003 (.doc) »)                                                                                   |
 
 ### PDF longs : lecture par tranches
 
-Une tranche s'arrête à 20 pages ou au budget `maxOutputChars` (le premier atteint ; le rapport de démo de 30 pages donne 1-11, 12-22, 23-30). Sans `pages`, la lecture part de la page 1. La sortie se termine par une consigne placée **en dernier**, là où le modèle la voit avant de décider :
+Une tranche s'arrête à 20 pages ou au budget `maxOutputTokens`, compté avec `estimateTokens` d'agent-core (le premier atteint ; le rapport de démo de 30 pages donne 1-10, 11-20, 21-30, un PDF de tableaux chiffrés ≈ 5 pages par appel). Le budget vaut 20 % de la fenêtre pour rester sous le plafond de 25 % de `ToolOutputBudget`, qui coupe la **fin** des sorties : la consigne de continuation n'est donc jamais perdue. L'en-tête la rappelle aussi en bref, et une page seule plus grande que le budget est coupée par documents (avec mention) plutôt que par agent-core. Sans `pages`, la lecture part de la page 1. La sortie se termine par une consigne placée **en dernier**, là où le modèle la voit avant de décider :
 
 ```
-[LECTURE INCOMPLÈTE : pages 12-30 sur 30 pas encore lues. Pour résumer ou analyser ce document, lis la suite AVANT de répondre : read_file({ path: "rapport.pdf", pages: "12-22" }), puis les tranches suivantes jusqu'à la page 30.]
+[LECTURE INCOMPLÈTE : pages 11-30 sur 30 pas encore lues. Pour résumer ou analyser ce document, lis la suite AVANT de répondre : read_file({ path: "rapport.pdf", pages: "11-20" }), puis les tranches suivantes jusqu'à la page 30.]
 ```
 
 La taille de la tranche suggérée est estimée d'après la taille des pages déjà lues. La dernière tranche se termine par `[Fin du document : page 30 sur 30 lue.]`. `INCOMPLETE_READ_MARKER` (« LECTURE INCOMPLÈTE ») est exporté pour qu'agent-core puisse détecter une lecture partielle.

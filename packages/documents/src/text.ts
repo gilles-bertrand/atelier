@@ -1,24 +1,42 @@
 /** Mise en forme du texte renvoyé au modèle : lignes numérotées, fenêtre offset/limit. */
+import { estimateTokens } from '@atelier/agent-core';
 
 /** Nombre maximal de lignes renvoyées par appel. */
 export const MAX_LINES = 2000;
 /** Longueur maximale d'une ligne (au-delà, elle est coupée). */
 export const MAX_LINE_CHARS = 2000;
 /**
- * Taille maximale par défaut du texte renvoyé par appel : ≈ 25 % d'une fenêtre
- * de 32 768 tokens (voir {@link outputCharsForContext}).
+ * Part de la fenêtre de contexte visée pour une sortie de `read_file` : 20 %,
+ * pour garder une marge sous le plafond de 25 % qu'agent-core applique à toute
+ * sortie d'outil (`TOOL_OUTPUT_SHARE`, coupe par la fin). Ainsi la consigne de
+ * continuation, placée en fin de sortie, n'est jamais coupée.
  */
-export const MAX_OUTPUT_CHARS = 24_000;
-/** Caractères par token retenus pour convertir un budget en tokens (texte français). */
-const CHARS_PER_TOKEN = 3;
+export const OUTPUT_SHARE = 0.2;
+/** Fenêtre de contexte de référence (Modelfile `atelier`). */
+const DEFAULT_CONTEXT_WINDOW = 32_768;
+/** Budget minimal d'une sortie, en tokens estimés. */
+const MIN_OUTPUT_TOKENS = 500;
 
 /**
- * Budget de sortie d'un appel de `read_file`, en caractères, dérivé de la
- * fenêtre de contexte du modèle : `share` de la fenêtre (25 % par défaut).
+ * Budget de sortie d'un appel de `read_file`, en tokens estimés
+ * (`estimateTokens` d'agent-core), dérivé de la fenêtre de contexte.
  */
-export function outputCharsForContext(contextWindowTokens: number, share = 0.25): number {
-  const chars = Math.floor(contextWindowTokens * share * CHARS_PER_TOKEN);
-  return Math.max(2_000, chars);
+export function outputTokensForContext(contextWindowTokens: number, share = OUTPUT_SHARE): number {
+  return Math.max(MIN_OUTPUT_TOKENS, Math.floor(contextWindowTokens * share));
+}
+
+/** Budget par défaut : 20 % d'une fenêtre de 32 768 tokens (6 553 tokens estimés). */
+export const MAX_OUTPUT_TOKENS = outputTokensForContext(DEFAULT_CONTEXT_WINDOW);
+
+/**
+ * Tokens réservés à l'en-tête et à la consigne de fin : le corps d'une sortie
+ * dispose du budget moins cette réserve.
+ */
+export const FRAME_RESERVE_TOKENS = 300;
+
+/** Budget du corps d'une sortie (budget total moins la réserve d'en-tête et de fin). */
+export function bodyBudget(maxTokens: number): number {
+  return Math.max(MIN_OUTPUT_TOKENS - FRAME_RESERVE_TOKENS, maxTokens - FRAME_RESERVE_TOKENS);
 }
 
 /** Fenêtre de lignes demandée. */
@@ -53,28 +71,30 @@ function clip(line: string): string {
 }
 
 /**
- * Sélectionne la fenêtre `offset`/`limit` (2000 lignes et `maxChars` caractères
- * au plus) et numérote les lignes si demandé (format `     12\ttexte`).
+ * Sélectionne la fenêtre `offset`/`limit` (2000 lignes et `maxTokens` tokens
+ * estimés au plus pour le corps) et numérote les lignes si demandé (format
+ * `     12\ttexte`).
  */
 export function windowLines(
   text: string,
   window: LineWindow,
   numbered: boolean,
-  maxChars = MAX_OUTPUT_CHARS,
+  maxTokens = bodyBudget(MAX_OUTPUT_TOKENS),
 ): WindowedText {
   const lines = splitLines(text);
   const total = lines.length;
   const start = Math.max(1, window.offset ?? 1);
   const limit = Math.min(window.limit ?? MAX_LINES, MAX_LINES);
   const out: string[] = [];
-  let chars = 0;
+  let tokens = 0;
   let last = start - 1;
   for (let n = start; n <= total && n < start + limit; n++) {
     const raw = clip(lines[n - 1] ?? '');
     const line = numbered ? `${String(n).padStart(6)}\t${raw}` : raw;
-    if (chars + line.length + 1 > maxChars && out.length > 0) break;
+    const cost = estimateTokens(line) + 1;
+    if (tokens + cost > maxTokens && out.length > 0) break;
     out.push(line);
-    chars += line.length + 1;
+    tokens += cost;
     last = n;
   }
   return { body: out.join('\n'), first: start, last, total };
