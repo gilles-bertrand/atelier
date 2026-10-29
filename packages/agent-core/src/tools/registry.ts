@@ -35,6 +35,11 @@ export interface ToolRuntime {
   emitDisplay?: (toolCallId: string, display: ToolDisplay) => void;
   /** Libellés fournis par l'application, après ceux de l'outil (voir {@link describePermissionFor}). */
   describePermission?: PermissionDescriber;
+  /**
+   * Borne la sortie avant qu'elle n'entre dans l'historique (budget de contexte
+   * par étape) : appliquée au contenu vu par le modèle et par l'UI.
+   */
+  limitOutput?: (toolName: string, output: ToolOutput) => ToolOutput;
 }
 
 /** Garde de type pour la sortie d'un outil Atelier. */
@@ -74,7 +79,8 @@ export async function executeTool(
     const decision = await askPermission(context, definition.name, input, description);
     if (!isAllowed(decision)) return deniedOutput(description.title);
   }
-  return definition.execute(input, context);
+  const output = await definition.execute(input, context);
+  return runtime.limitOutput ? runtime.limitOutput(definition.name, output) : output;
 }
 
 /**

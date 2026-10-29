@@ -15,6 +15,16 @@ export {
 } from './loop/agent.js';
 export type { AgentOptions, RunTurnOptions, SendOptions, TurnResult } from './loop/agent.js';
 export {
+  estimateTokens,
+  MIN_TOOL_OUTPUT_TOKENS,
+  STEP_OUTPUT_SHARE,
+  ToolOutputBudget,
+  TOOL_OUTPUT_SHARE,
+  truncateToTokens,
+  truncationNotice,
+} from './loop/budget.js';
+export type { TruncatedText } from './loop/budget.js';
+export {
   compactMessages,
   findCompactionSplit,
   shouldCompact,
