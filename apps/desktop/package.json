@@ -14,7 +14,8 @@
     "test": "vitest run",
     "dist": "electron-vite build && electron-builder --mac --arm64 --config electron-builder.yml",
     "dist:dir": "electron-vite build && electron-builder --mac --arm64 --dir --config electron-builder.yml",
-    "icon": "node -e \"require('sharp')('build/icon.svg').resize(1024,1024).png().toFile('build/icon.png')\""
+    "icon": "node -e \"require('sharp')('build/icon.svg').resize(1024,1024).png().toFile('build/icon.png')\"",
+    "dist:adhoc": "electron-vite build && electron-builder --mac --arm64 --config electron-builder.yml -c.mac.identity=- -c.mac.notarize=false -c.mac.entitlements=build/entitlements.adhoc.plist -c.mac.entitlementsInherit=build/entitlements.adhoc.plist"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.79",

@@ -19,6 +19,7 @@
     "format:check": "prettier --check .",
     "typecheck": "pnpm -r --parallel typecheck",
     "dist:mac": "pnpm fetch:lima && pnpm --filter @atelier/desktop dist",
+    "dist:mac:adhoc": "pnpm fetch:lima && pnpm --filter @atelier/desktop dist:adhoc",
     "fetch:lima": "node --experimental-strip-types scripts/fetch-lima.ts"
   },
   "devDependencies": {

@@ -26,7 +26,7 @@ uv run --with reportlab --with pillow fixtures/generate-demo-fixtures.py
    ```
    Dans l'app, l'URL est `http://localhost:11434`, le token reste vide et le modèle est `atelier`.
 2. **Dossier de travail.** Copier `fixtures/demo-ventes/` dans un dossier vide, par exemple `~/Atelier-demo/ventes`, et le choisir comme dossier de travail.
-3. **App.** Utiliser `pnpm dist:mac` puis installer le `.dmg`, ou lancer `pnpm dev` pour une répétition rapide.
+3. **App.** Utiliser `pnpm dist:mac` (signé) ou `pnpm dist:mac:adhoc` (sans certificat, voir le critère 1) puis installer le `.dmg`, ou lancer `pnpm dev` pour une répétition rapide.
 
 ## Critères
 
@@ -36,7 +36,15 @@ Sur un Mac Apple Silicon neuf : installer le `.dmg`, lancer Atelier, puis suivre
 
 - **Attendu :** la connexion est validée et la VM démarre sans ouvrir de terminal.
 - **Côté serveur :** `docker compose up -d` dans `server/`, puis `./healthcheck.sh` passe au vert.
-- ⚠️ Tant que l'app n'est pas signée et notarisée, macOS bloque le premier lancement (clic droit › Ouvrir). Il faut un certificat « Developer ID Application » pour remplir le critère sur un Mac neuf.
+- **Sans certificat Apple (décision du 29/10 : démo non signée)**, construire avec `pnpm dist:mac:adhoc`, et non avec `pnpm dist:mac`.
+  - Ce build signe toute l'app **ad hoc**. Sans cette signature, l'exécutable n'est signé qu'à moitié et macOS déclare l'app « endommagée » sur un autre Mac, sans recours.
+  - Il ajoute `disable-library-validation`, sans quoi le framework Electron est refusé au lancement (`build/entitlements.adhoc.plist`, réservé à ce build).
+  - `limactl` reste signé avec l'entitlement `virtualization`.
+- **Premier lancement sur le Mac neuf** (macOS 15 et suivants : le clic droit › Ouvrir ne suffit plus) :
+  1. ouvrir Atelier : macOS refuse (« Apple n'a pas pu vérifier… ») ; cliquer sur « OK » ;
+  2. Réglages Système › Confidentialité et sécurité, en bas : « Atelier a été bloqué… » › **Ouvrir quand même**, puis confirmer avec le mot de passe ;
+  3. relancer Atelier, puis l'onboarding.
+- Copier le `.dmg` depuis une clé USB évite la mise en quarantaine, donc les étapes 1 et 2. Un téléchargement ou un AirDrop la déclenche. À annoncer dans la démo : avec un certificat « Developer ID Application » et la notarisation (`pnpm dist:mac`), ces étapes disparaissent.
 
 ### 2. Excel récapitulatif et résumé
 
