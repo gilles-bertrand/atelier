@@ -10,6 +10,9 @@ import { APP_MESSAGE_PREFIX } from './compaction.js';
 /** En dessous, un nombre n'est pas vérifié (quantités, pourcentages, jours…). */
 export const MIN_CHECKED_AMOUNT = 1_000;
 
+/** Début de la première ligne de la réponse donnée après une vérification. */
+export const CORRECTION_PREFIX = 'Correction :';
+
 // Groupes de milliers séparés par espace / espace insécable / espace fine, ou
 // par virgule / point ; partie décimale optionnelle.
 const NUMBER = /\d{1,3}(?:[ \u00a0\u202f]\d{3})+(?:[.,]\d+)?|\d+(?:[.,]\d{3})*(?:[.,]\d+)?/g;
@@ -51,10 +54,25 @@ function isCheckedAmount(values: readonly number[]): boolean {
   return values.some((v) => Math.abs(v) >= MIN_CHECKED_AMOUNT && !isYear(v));
 }
 
-/** Vrai si `cited` correspond à `source`, éventuellement arrondi (0, 1 ou 2 décimales). */
-function matches(cited: number, source: number): boolean {
-  if (Math.abs(cited - source) < 0.005) return true;
-  return [0, 1, 2].some((d) => Math.abs(cited - Number(source.toFixed(d))) < 0.005);
+/** Clé de comparaison : le montant en centimes. */
+function cents(value: number): number {
+  return Math.round(value * 100);
+}
+
+/**
+ * Index des nombres des sources, en centimes, avec leurs arrondis à 0, 1 et
+ * 2 décimales : un montant cité correspond s'il en est un arrondi. Recherche
+ * en temps constant, même sur la sortie d'un long document.
+ */
+function knownAmounts(sources: string): Set<number> {
+  const known = new Set<number>();
+  for (const { values } of extractNumbers(sources)) {
+    for (const value of values) {
+      known.add(cents(value));
+      for (const digits of [0, 1]) known.add(cents(Number(value.toFixed(digits))));
+    }
+  }
+  return known;
 }
 
 /** Texte des données du tour : sorties et appels d'outils, messages utilisateur. */
@@ -86,17 +104,23 @@ export function sourceText(messages: readonly ModelMessage[]): string {
  * Renvoie les écritures telles qu'elles apparaissent dans la réponse.
  */
 export function unverifiedAmounts(answer: string, sources: string): string[] {
-  const known = extractNumbers(sources).flatMap((n) => n.values);
+  const known = knownAmounts(sources);
   const missing: string[] = [];
   for (const { raw, values } of extractNumbers(answer)) {
     if (!isCheckedAmount(values)) continue;
-    if (values.some((v) => known.some((s) => matches(v, s)))) continue;
+    if (values.some((v) => known.has(cents(v)))) continue;
     if (!missing.includes(raw)) missing.push(raw);
   }
   return missing;
 }
 
-/** Message de relance (injecté) quand la réponse cite des montants non vérifiés. */
+/**
+ * Message de relance (injecté) quand la réponse cite des montants non vérifiés.
+ * La réponse fautive est déjà affichée : la nouvelle commence par une ligne
+ * « Correction : … » pour que l'utilisateur sache laquelle croire.
+ */
 export function verificationPrompt(amounts: readonly string[]): string {
-  return `${APP_MESSAGE_PREFIX} Vérification : ta réponse cite ${amounts.map((a) => `« ${a} »`).join(', ')}, qui n'apparai${amounts.length > 1 ? 'ssent' : 't'} dans aucun résultat d'outil ni dans aucun fichier écrit pendant ce tour. Vérifie ces chiffres (relis le fichier produit ou recalcule), puis redonne ta réponse finale en ne citant que des chiffres vérifiés ; sinon, renvoie simplement au fichier.`;
+  const cited = amounts.map((a) => `« ${a} »`).join(', ');
+  const verb = amounts.length > 1 ? 'apparaissent' : 'apparaît';
+  return `${APP_MESSAGE_PREFIX} Vérification : ta réponse cite ${cited}, qui n'${verb} dans aucun résultat d'outil ni dans aucun fichier écrit pendant ce tour. L'utilisateur a déjà vu cette réponse. Vérifie ces chiffres (relis le fichier produit ou recalcule avec un outil), puis commence ta nouvelle réponse par une ligne « ${CORRECTION_PREFIX} … » qui donne le chiffre vérifié à la place du chiffre erroné (ou, si le chiffre était juste, qui le confirme en citant sa source). Redonne ensuite ta réponse finale en ne citant que des chiffres vérifiés ; si tu ne peux pas vérifier, dis-le dans la ligne de correction et renvoie au fichier.`;
 }

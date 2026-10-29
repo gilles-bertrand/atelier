@@ -3,10 +3,12 @@ import { describe, expect, it } from 'vitest';
 import {
   Agent,
   buildSystemPrompt,
+  CORRECTION_PREFIX,
   createDefaultRegistry,
   injectedKind,
   numberValues,
   unverifiedAmounts,
+  verificationPrompt,
 } from '../src/index.js';
 import { collect, permissions, promptText, scriptedModel, withTempDir } from './helpers.js';
 
@@ -36,6 +38,32 @@ describe('unverifiedAmounts', () => {
 
   it('ignore les petits nombres et les années', () => {
     expect(unverifiedAmounts('6 mois, 3 magasins, 12 % de hausse, en 2026.', sources)).toEqual([]);
+  });
+
+  it('un arrondi qui n’en est pas un reste signalé', () => {
+    expect(unverifiedAmounts('Total : 89 238 €.', sources)).toEqual(['89 238']);
+    expect(unverifiedAmounts('Total : 89 237,2 €.', sources)).toEqual(['89 237,2']);
+  });
+
+  it('reste rapide sur la sortie d’un long document', () => {
+    const big = Array.from(
+      { length: 50_000 },
+      (_, i) => `ligne ${i} : ${1000 + i},${i % 100}`,
+    ).join('\n');
+    const answer = Array.from({ length: 500 }, (_, i) => `${2000 + i},${i % 100} €`).join(' ; ');
+    const start = performance.now();
+    expect(unverifiedAmounts(answer, big)).toEqual([]);
+    expect(performance.now() - start).toBeLessThan(2_000);
+  });
+});
+
+describe('verificationPrompt', () => {
+  it('demande une ligne « Correction : » en tête de la nouvelle réponse (réponse fautive déjà affichée)', () => {
+    const prompt = verificationPrompt(['59 236,80']);
+    expect(prompt).toContain('« 59 236,80 »');
+    expect(prompt).toContain(`« ${CORRECTION_PREFIX} … »`);
+    expect(prompt).toContain('déjà vu');
+    expect(verificationPrompt(['1 000', '2 000'])).toContain('apparaissent');
   });
 });
 
