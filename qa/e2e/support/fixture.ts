@@ -2,6 +2,7 @@
  * Fixture Playwright commune : serveur LLM (faux en mode mock, Ollama en mode
  * réel), faux SearXNG en mode mock, et une app Atelier lancée par test.
  */
+import { writeFile } from 'node:fs/promises';
 import { test as base } from '@playwright/test';
 import { IS_REAL, launchAtelier, type AtelierApp } from './app.js';
 import { startFakeSearxng, startMockLlm, type RecordedRequest } from './mock-llm.js';
@@ -53,8 +54,12 @@ export const test = base.extend<Fixtures>({
       seed,
     });
     await use(atelier);
-    if (testInfo.status !== testInfo.expectedStatus) {
-      await testInfo.attach('main.log', { body: atelier.logs.join(''), contentType: 'text/plain' });
+    // En réel, le journal du main est toujours joint : relances (`stream-cut:retry`) et
+    // vérifications de la réponse s'y lisent même quand le test passe.
+    if (IS_REAL || testInfo.status !== testInfo.expectedStatus) {
+      const path = testInfo.outputPath('main.log');
+      await writeFile(path, atelier.logs.join(''));
+      await testInfo.attach('main.log', { path, contentType: 'text/plain' });
     }
     await atelier.close();
   },

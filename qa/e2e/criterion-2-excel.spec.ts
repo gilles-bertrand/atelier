@@ -144,8 +144,24 @@ test('critère 2 : Excel récapitulatif par mois + résumé markdown', async ({
 
   // La réponse du chat ne doit pas citer un total inventé (#61) : tout montant
   // supérieur à 50 000 € (un mois ≈ 15 000 €, un magasin ≤ 41 000 €) est le total.
+  // Quand la vérification de la réponse se déclenche (#61), l'app ajoute une réponse
+  // corrigée qui commence par « Correction : » (souvent en markdown : « **Correction :** »,
+  // « > Correction : ») : seule la dernière version est jugée, et les deux totaux sont notés.
+  // Un run corrigé compte « ✅ avec correction », pas « ✅ » : l'objectif reste une réponse
+  // juste du premier coup.
   const answer = await assistantText(page);
-  const bigAmounts = amountsIn(answer).filter((n) => n > 50_000);
+  const corrected = [...answer.matchAll(/correction\s*:/gi)].at(-1)?.index ?? -1;
+  const finalAnswer = corrected >= 0 ? answer.slice(corrected) : answer;
+  if (corrected >= 0) {
+    const big = (text: string): string =>
+      amountsIn(text)
+        .filter((n) => n > 50_000)
+        .join(', ') || 'aucun';
+    const description = `avant : ${big(answer.slice(0, corrected))} ; après : ${big(finalAnswer)}`;
+    test.info().annotations.push({ type: '✅ avec correction (#61)', description });
+    console.log(`[critère 2] réponse corrigée (#61) : ${description}`);
+  }
+  const bigAmounts = amountsIn(finalAnswer).filter((n) => n > 50_000);
   for (const amount of bigAmounts) {
     expect(
       Math.abs(amount - GRAND_TOTAL),
