@@ -1,0 +1,15 @@
+{
+  "extends": "../tsconfig.base.json",
+  "include": [
+    "../packages/web/src/types/*.d.ts",
+    "e2e/**/*.ts",
+    "robustness/**/*.ts",
+    "bench/**/*.ts",
+    "test/**/*.ts",
+    "playwright.config.ts",
+    "vitest.config.ts"
+  ],
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM"]
+  }
+}

@@ -16,6 +16,9 @@ export default tseslint.config(
       '.agentsroom/**',
       '.claude/**',
       '.worktrees/**',
+      // Sorties Playwright (traces, rapport HTML) : jamais lintées.
+      'qa/playwright-report/**',
+      'qa/test-results/**',
     ],
   },
   js.configs.recommended,

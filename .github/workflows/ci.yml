@@ -31,3 +31,24 @@ jobs:
       - run: pnpm test
       - name: Build de l'app
         run: pnpm --filter @atelier/desktop build
+
+  e2e:
+    name: e2e (critères 2 à 5, modèle mocké)
+    runs-on: macos-14
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Pas de VM sur les runners (pas de virtualisation imbriquée) : mode mock.
+      - run: pnpm --filter @atelier/qa e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: qa/playwright-report/
+          retention-days: 7

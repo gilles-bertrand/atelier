@@ -76,9 +76,9 @@ Dans l'app, l'URL `http://100.x.y.z:11434` (ou `http://<machine>.<tailnet>.ts.ne
 1. `OLLAMA_CONTEXT_LENGTH=32768` (s'applique à tous les modèles) ;
 2. le modèle dérivé `atelier` (`server/Modelfile`, `PARAMETER num_ctx 32768`), recommandé, car explicite et visible dans `/api/show`.
 
-> **Ollama sur Apple Silicon (runner MLX) : `num_ctx` n'est pas appliqué** (#41). Avec Ollama 0.40.x, les modèles en quantification MLX (`nvfp4`, `"runner":"mlx"` dans `/api/tags`) traitent des prompts au-delà de `num_ctx` (77 931 tokens observés pour `num_ctx 32768`), alors que `/api/show` renvoie toujours `32768`. Sur le serveur de production (GPU NVIDIA, runner llama.cpp), c'est l'inverse : Ollama **tronque sans prévenir** un prompt trop long, en commençant par le début (prompt système, demande).
+> **Ollama sur Apple Silicon (runner MLX) : `num_ctx` n'est pas appliqué** (#41). Avec Ollama 0.40.x, les modèles en quantification MLX (`nvfp4`, `"runner":"mlx"` dans `/api/tags`) traitent des prompts au-delà de `num_ctx`. Mesure QA : 77 931 tokens traités pour `num_ctx 32768`, avec 4 min 10 s de préremplissage et un pic de 38,7 Gio ; `/api/show` renvoie pourtant toujours `32768`. La vraie limite devient celle du modèle (262 144). Sur le serveur de production (GPU NVIDIA, runner llama.cpp), c'est l'inverse : Ollama **tronque sans prévenir** un prompt trop long, en commençant par le début (prompt système, demande).
 >
-> Dans les deux cas, la fenêtre annoncée est un **plafond, pas une garantie** : c'est l'app qui borne ce qu'elle envoie (budget de contexte par étape et compaction, voir agent-core). Pour une démo locale sur Mac, le runner MLX reste le bon choix (environ 100 tokens/s pour `qwen3.5:35b` sur un M4 Max) ; prévoyez au moins 64 Go de RAM si la VM tourne en même temps (pic observé à 38,7 Gio pour le modèle seul).
+> Dans les deux cas, la fenêtre annoncée est un **plafond, pas une garantie** : c'est l'app qui borne ce qu'elle envoie (budget de contexte par étape #40, compaction #39, dans agent-core). **Décision (Gilles et le Lead, 29/10/2026)** : la démo locale garde le runner MLX (104 tokens/s pour `qwen3.5:35b` sur un M4 Max, mesure `docs/QA.md`). Prévoyez au moins 64 Go de RAM si la VM tourne en même temps.
 
 ## 4. Dimensionnement GPU / VRAM
 

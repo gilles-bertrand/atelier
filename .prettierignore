@@ -9,3 +9,6 @@ apps/desktop/resources
 /docs/BRIEF.md
 /docs/PROMPTS-AGENTSROOM.md
 .worktrees
+qa/playwright-report
+qa/test-results
+qa/reports/*.json

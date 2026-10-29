@@ -1,21 +1,21 @@
 # Démo finale : répétition des critères d'acceptation
 
-Scénario pour rejouer les six critères d'acceptation de `docs/BRIEF.md`, avec les fichiers de `demo/fixtures/` et les résultats attendus.
+Scénario pour rejouer les six critères d'acceptation de `docs/BRIEF.md`, avec les fichiers de `fixtures/` et les résultats attendus. Les critères 2 à 5 sont aussi automatisés (Playwright, voir `qa/README.md`).
 
 ## Fichiers de démo
 
-Générés de façon déterministe par `demo/generate-fixtures.py` et versionnés, pour que la démo ne demande pas Python :
+Générés de façon déterministe (mêmes octets à chaque génération) par `fixtures/generate-demo-fixtures.py` et versionnés, pour que la démo ne demande pas Python :
 
 ```bash
-uv run --with reportlab --with pillow demo/generate-fixtures.py
+uv run --with reportlab --with pillow fixtures/generate-demo-fixtures.py
 ```
 
-| Fichier                                     | Critère | Contenu                                                                            |
-| ------------------------------------------- | ------- | ---------------------------------------------------------------------------------- |
-| `ventes/ventes-{bruxelles,liege,namur}.csv` | 2       | Ventes quotidiennes de 3 magasins, janvier à juin 2026 (environ 600 lignes chacun) |
-| `rapport-annuel-2025.pdf`                   | 4       | Rapport annuel en texte, 30 pages, 10 chapitres                                    |
-| `facture-scannee.pdf`                       | 4       | Facture scannée : une image, **sans couche texte** (passage obligé par la vision)  |
-| `ticket-de-caisse.jpg`                      | 4       | Photo d'un ticket de caisse posé sur une table                                     |
+| Fichier                                          | Critère | Contenu                                                                            |
+| ------------------------------------------------ | ------- | ---------------------------------------------------------------------------------- |
+| `demo-ventes/ventes-{bruxelles,liege,namur}.csv` | 2       | Ventes quotidiennes de 3 magasins, janvier à juin 2026 (environ 600 lignes chacun) |
+| `demo-documents/rapport-annuel-2025.pdf`         | 4       | Rapport annuel en texte, 30 pages, 10 chapitres                                    |
+| `demo-documents/facture-scannee.pdf`             | 4       | Facture scannée : une image, **sans couche texte** (passage obligé par la vision)  |
+| `demo-documents/ticket-de-caisse.jpg`            | 4       | Photo d'un ticket de caisse posé sur une table                                     |
 
 ## Préparation
 
@@ -25,7 +25,7 @@ uv run --with reportlab --with pillow demo/generate-fixtures.py
    ollama create atelier -f server/Modelfile   # contexte de 32k
    ```
    Dans l'app, l'URL est `http://localhost:11434`, le token reste vide et le modèle est `atelier`.
-2. **Dossier de travail.** Copier `demo/fixtures/ventes/` dans un dossier vide, par exemple `~/Atelier-demo/ventes`, et le choisir comme dossier de travail.
+2. **Dossier de travail.** Copier `fixtures/demo-ventes/` dans un dossier vide, par exemple `~/Atelier-demo/ventes`, et le choisir comme dossier de travail.
 3. **App.** Utiliser `pnpm dist:mac` puis installer le `.dmg`, ou lancer `pnpm dev` pour une répétition rapide.
 
 ## Critères

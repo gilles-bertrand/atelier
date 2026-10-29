@@ -1,0 +1,33 @@
+{
+  "name": "@atelier/qa",
+  "version": "0.1.0",
+  "private": true,
+  "description": "QA d'Atelier : e2e Playwright (critères d'acceptation 2 à 5), campagne de robustesse avec Qwen, mesures de performance.",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "e2e": "pnpm --filter @atelier/desktop build && playwright test",
+    "e2e:real": "pnpm --filter @atelier/desktop build && ATELIER_E2E_MODE=real playwright test",
+    "robustness": "tsx robustness/run.ts",
+    "bench": "tsx bench/run.ts"
+  },
+  "dependencies": {
+    "@atelier/agent-core": "workspace:*",
+    "@atelier/documents": "workspace:*",
+    "@atelier/sandbox": "workspace:*",
+    "@atelier/shared": "workspace:*",
+    "@atelier/skills": "workspace:*",
+    "@atelier/web": "workspace:*"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "ai": "^7.0.154",
+    "electron": "^45.0.0",
+    "exceljs": "4.4.0",
+    "jszip": "^3.10.2",
+    "tsx": "^4.23.15",
+    "vitest": "^5.0.5",
+    "zod": "^4.6.7"
+  }
+}
