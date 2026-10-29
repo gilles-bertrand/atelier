@@ -280,6 +280,8 @@ export class Agent {
         const cutRetries = new Map<StreamCutReason, number>();
         let usedTools = false;
         let verified = false;
+        let emptyRetries = 0;
+        let emptyFinal = false;
         let lastText = '';
         let finishReason: string | undefined;
         let streamError: unknown;
@@ -462,6 +464,23 @@ export class Agent {
             responseOffset = 0;
             continue;
           }
+          // Dernier pas vide (#73) : ni texte ni appel d'outil, alors que le tour a
+          // utilisé des outils. Une relance, puis une erreur claire.
+          if (usedTools && lastText.trim() === '') {
+            if (emptyRetries < MAX_EMPTY_FINAL_RETRIES) {
+              emptyRetries += 1;
+              o.log?.('empty-final', { attempt: emptyRetries });
+              base = [
+                ...withoutEmptyAssistant(messages),
+                injectedMessage('empty_final', emptyFinalPrompt()),
+              ];
+              responseOffset = 0;
+              continue;
+            }
+            o.log?.('empty-final', { attempt: emptyRetries + 1, gaveUp: true });
+            emptyFinal = true;
+            break;
+          }
           // Réponse finale d'un tour qui a utilisé des outils : un montant cité doit
           // figurer dans les données du tour (#61). Une seule vérification par tour.
           if (usedTools && !verified) {
@@ -491,6 +510,11 @@ export class Agent {
               ? streamCutError(streamError, cut)
               : toLlmError(streamError, o.serverUrl)
           ).toJSON();
+          emit({ type: 'error', error });
+          return { messages, usage: usage(), reason: 'error', error };
+        }
+        if (emptyFinal) {
+          const error = emptyFinalError().toJSON();
           emit({ type: 'error', error });
           return { messages, usage: usage(), reason: 'error', error };
         }
@@ -618,6 +642,34 @@ export function streamErrorLog(error: unknown): Record<string, unknown> {
         }
       : {}),
   };
+}
+
+/** Relances max. d'un dernier pas vide dans un même tour (#73). */
+export const MAX_EMPTY_FINAL_RETRIES = 1;
+
+/** Message de relance après un dernier pas vide (invisible dans l'UI). */
+export function emptyFinalPrompt(): string {
+  return `${APP_MESSAGE_PREFIX} Ta dernière réponse est vide : ni texte ni appel d'outil. Continue la tâche avec les appels d'outils nécessaires ; si elle est terminée, donne ta réponse finale à l'utilisateur ; si quelque chose te bloque, explique-le.`;
+}
+
+/** Erreur finale si le modèle rend encore une réponse vide après la relance. */
+export function emptyFinalError(): AtelierError {
+  return new AtelierError(
+    'llm/bad_response',
+    "Le modèle s'est arrêté sans répondre, même après une relance. Les fichiers déjà produits sont conservés : relancez la demande ou précisez l'étape qui reste à faire.",
+    { retryable: false, details: { reason: 'empty_final' } },
+  );
+}
+
+/** Retire un dernier message assistant sans contenu (pas vide), inutile à renvoyer. */
+function withoutEmptyAssistant(messages: readonly ModelMessage[]): ModelMessage[] {
+  const last = messages.at(-1);
+  const empty =
+    last?.role === 'assistant' &&
+    (typeof last.content === 'string'
+      ? last.content.trim() === ''
+      : last.content.every((p) => p.type === 'text' && p.text.trim() === ''));
+  return empty ? messages.slice(0, -1) : [...messages];
 }
 
 function endsWithText(messages: readonly ModelMessage[], text: string): boolean {
