@@ -17,7 +17,20 @@ export const CORRECTION_PREFIX = 'Correction :';
 // par virgule / point ; partie décimale optionnelle.
 const NUMBER = /\d{1,3}(?:[ \u00a0\u202f]\d{3})+(?:[.,]\d+)?|\d+(?:[.,]\d{3})*(?:[.,]\d+)?/g;
 
-/** Interprétations possibles d'un nombre écrit (formats français et anglais). */
+/** Vrai si chaque groupe qui suit un `sep` compte exactement 3 chiffres. */
+function thousandGroups(text: string, sep: string): boolean {
+  return text
+    .split(sep)
+    .slice(1)
+    .every((group) => /^\d{3}$/.test(group));
+}
+
+/**
+ * Interprétations possibles d'un nombre écrit (formats français et anglais).
+ * Un point ou une virgule n'est un séparateur de milliers que s'il est suivi
+ * d'exactement 3 chiffres : « 25,94 » ne vaut que 25,94 ; « 1,234 » reste
+ * ambigu (1,234 ou 1 234).
+ */
 export function numberValues(raw: string): number[] {
   const compact = raw.replace(/[ \u00a0\u202f]/g, '');
   const values = new Set<number>();
@@ -29,12 +42,21 @@ export function numberValues(raw: string): number[] {
   const lastDot = compact.lastIndexOf('.');
   if (lastComma === -1 && lastDot === -1) {
     add(compact);
-  } else {
-    // Le dernier séparateur peut être décimal…
-    const decimalSep = lastComma > lastDot ? ',' : '.';
-    const thousandSep = decimalSep === ',' ? '.' : ',';
-    add(compact.split(thousandSep).join('').replace(decimalSep, '.'));
-    // … ou un séparateur de milliers (« 1,234 », « 89.237 »).
+    return [...values];
+  }
+  // Le dernier séparateur est décimal : la partie entière n'a que des séparateurs
+  // de milliers (l'autre signe), chacun suivi de 3 chiffres.
+  const decimalSep = lastComma > lastDot ? ',' : '.';
+  const thousandSep = decimalSep === ',' ? '.' : ',';
+  const cut = compact.lastIndexOf(decimalSep);
+  const integer = compact.slice(0, cut);
+  if (!integer.includes(decimalSep) && thousandGroups(integer, thousandSep)) {
+    add(`${integer.split(thousandSep).join('')}.${compact.slice(cut + 1)}`);
+  }
+  // Ou tous les séparateurs sont des milliers (« 1,234 », « 89.237 », « 1.234.567 ») :
+  // un seul signe, chaque groupe de 3 chiffres.
+  const signs = new Set(compact.replace(/\d/g, ''));
+  if (signs.size === 1 && thousandGroups(compact, decimalSep)) {
     add(compact.replace(/[.,]/g, ''));
   }
   return [...values];

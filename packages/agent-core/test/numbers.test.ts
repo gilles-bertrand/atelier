@@ -20,6 +20,16 @@ describe('numberValues', () => {
     expect(numberValues('89237.1')).toContain(89_237.1);
     expect(numberValues('1,234')).toEqual(expect.arrayContaining([1.234, 1234]));
   });
+
+  it('un séparateur n’est de milliers que s’il est suivi d’exactement 3 chiffres', () => {
+    expect(numberValues('25,94')).toEqual([25.94]);
+    expect(numberValues('25.9')).toEqual([25.9]);
+    expect(numberValues('89 237,10')).toEqual([89_237.1]);
+    expect(numberValues('1.234.567')).toEqual([1_234_567]);
+    expect(numberValues('1.234.567,89')).toEqual([1_234_567.89]);
+    expect(numberValues('1,234.5')).toEqual([1_234.5]);
+    expect(numberValues('89.237')).toEqual(expect.arrayContaining([89.237, 89_237]));
+  });
 });
 
 describe('unverifiedAmounts', () => {
@@ -34,6 +44,10 @@ describe('unverifiedAmounts', () => {
   it('accepte un montant présent, même reformaté ou arrondi', () => {
     expect(unverifiedAmounts('Total : 89 237,10 € (≈ 89 237 €).', sources)).toEqual([]);
     expect(unverifiedAmounts('Bruxelles : 31 024,50 €.', sources)).toEqual([]);
+  });
+
+  it('faux positif du critère 2 : « 25,94 » (moyenne) n’est pas un montant à vérifier', () => {
+    expect(unverifiedAmounts('Moyenne par vente : 25,94 €.', sources)).toEqual([]);
   });
 
   it('ignore les petits nombres et les années', () => {
