@@ -80,6 +80,8 @@ Dans l'app, l'URL `http://100.x.y.z:11434` (ou `http://<machine>.<tailnet>.ts.ne
 >
 > Dans les deux cas, la fenêtre annoncée est un **plafond, pas une garantie** : c'est l'app qui borne ce qu'elle envoie (budget de contexte par étape #40, compaction #39, dans agent-core). **Décision (Gilles et le Lead, 29/10/2026)** : la démo locale garde le runner MLX (104 tokens/s pour `qwen3.5:35b` sur un M4 Max, mesure `docs/QA.md`). Prévoyez au moins 64 Go de RAM si la VM tourne en même temps.
 
+> **Balise `<tool_call>` dans du texte : Ollama coupe la réponse** (#42). Avec Ollama 0.40.x, si `qwen3.5` écrit la balise réservée `<tool_call>` dans sa réponse (en citant une documentation ou en écrivant un fichier qui la contient), le parseur Qwen d'Ollama arrête le flux sans `finish_reason` ni `[DONE]`. Ollama n'offre pas de `logit_bias` pour l'interdire. L'app relance une fois avec le texte partiel en demandant d'écrire `< tool_call>`, puis s'arrête sur une erreur claire (`llm/bad_response`, `reason: stream_cut`). Avec vLLM (parser `hermes`), le comportement est à vérifier avant la mise en production.
+
 ## 4. Dimensionnement GPU / VRAM
 
 Ordres de grandeur pour une quantification Q4_K_M (valeur par défaut d'Ollama), contexte 32k, cache KV `q8_0`, `NUM_PARALLEL=1`. Ajoutez environ 1 à 3 Go par slot parallèle supplémentaire. Vérifiez sur place avec `docker compose exec ollama ollama ps` (colonne `PROCESSOR` : `100% GPU` attendu).
