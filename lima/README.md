@@ -14,7 +14,7 @@ Spécification : `docs/BRIEF.md` §3. Implémentation : `packages/sandbox` (`Lim
 
 ## Cycle de vie (piloté par `LimaSandbox`)
 
-- `LIMA_HOME` = `~/Library/Application Support/Atelier/lima`, instance `atelier`. `limactl` est embarqué (`pnpm fetch:lima` → `apps/desktop/resources/lima/`, copié dans `Contents/Resources/lima`).
+- `LIMA_HOME` = `~/Library/Application Support/Atelier/lima`, instance `atelier`. Exception (#46) : Lima refuse un socket SSH (`$LIMA_HOME/atelier/ssh.sock.<16 chiffres>`) de 104 caractères ou plus, ce qui arrive au-delà de 21 caractères de nom d'utilisateur. Dans ce cas, Atelier utilise `~/.atelier-lima` (voir `chooseLimaHome` dans `packages/sandbox/src/paths.ts`). Une instance existante reste toujours là où elle a été créée. Si même ce repli est trop long, le preflight renvoie une erreur claire. `limactl` est embarqué (`pnpm fetch:lima` → `apps/desktop/resources/lima/`, copié dans `Contents/Resources/lima`).
 - **Premier lancement** : `limactl create` (template + ressources + montages) → `limactl start` (téléchargement de l'image ~600 Mo, boot) → provisioning lourd **piloté par l'hôte** : les scripts `provision/*.sh` sont concaténés et envoyés à `sudo bash -s` dans la VM. Ils émettent des marqueurs `::atelier:: <pourcentage> <message>` affichés dans la barre de progression. Une empreinte des scripts est écrite dans `/var/lib/atelier/provisioned` : on ne reprovisionne que si les scripts changent (mise à jour de l'app) ou après un échec (repris au lancement suivant).
   - Pourquoi pas tout en `mode: system` dans le template ? `limactl start` bloquerait sans progression lisible pendant 10 minutes, avec son propre délai d'attente, et un échec rendrait l'instance inutilisable. Le template ne garde que ce qui doit s'appliquer à chaque boot.
 - **Changement de dossier** (`setWorkspace`) : `limactl stop` → `limactl edit --set '.mounts = [...]'` → `limactl start`. Rien n'est fait si le dossier ne change pas ; si la VM n'est pas démarrée, le dossier est appliqué au prochain `ensureReady` (pas de double redémarrage). La durée est mesurée (`diagnostics().extra.timings.lastWorkspaceSwitchMs`).
@@ -59,7 +59,7 @@ limactl shell --workdir /workspace atelier -- sudo -u agent -H -- [env K=V…] a
 ## Dépannage
 
 ```bash
-export LIMA_HOME="$HOME/Library/Application Support/Atelier/lima"
+export LIMA_HOME="$HOME/Library/Application Support/Atelier/lima"   # ou "$HOME/.atelier-lima" (#46)
 apps/desktop/resources/lima/bin/limactl list
 apps/desktop/resources/lima/bin/limactl shell atelier            # shell (utilisateur macOS, sudo)
 apps/desktop/resources/lima/bin/limactl shell atelier -- sudo nft list table inet atelier

@@ -27,10 +27,13 @@ import { Limactl, type LimaInstance } from './limactl.js';
 import { assertMountableWorkspace, mountsMatch, mountsSetExpression } from './mounts.js';
 import { DEFAULT_MAX_OUTPUT_BYTES, splitOutputBudget } from './output.js';
 import {
-  defaultLimaHome,
+  chooseLimaHome,
   defaultSkillsDir,
   guestToHost,
   hostToGuest,
+  limaSocketFits,
+  limaSocketPath,
+  UNIX_PATH_MAX,
   type MountMapping,
 } from './paths.js';
 import { parseProvisionMarker, progressAt, progressFromLimaMessage } from './progress.js';
@@ -64,7 +67,10 @@ export interface LimaSandboxOptions {
   limactlPath: string;
   /** Dossier contenant `atelier.yaml` et `provision/` (`lima/` du dépôt ou `lima-templates`). */
   templatesDir: string;
-  /** `LIMA_HOME` (défaut : `~/Library/Application Support/Atelier/lima`). */
+  /**
+   * `LIMA_HOME` (défaut : `~/Library/Application Support/Atelier/lima`, ou
+   * `~/.atelier-lima` si le socket de Lima y serait trop long ; voir `chooseLimaHome`).
+   */
   limaHome?: string;
   /** Dossier des skills monté sur `/skills` (défaut : `~/Atelier/skills`). */
   skillsDir?: string;
@@ -118,15 +124,15 @@ export class LimaSandbox implements Sandbox {
   constructor(options: LimaSandboxOptions) {
     this.runner = options.runner ?? spawnRunner;
     this.log = options.log ?? (() => undefined);
+    this.name = options.instanceName ?? DEFAULT_INSTANCE_NAME;
     this.limactl = new Limactl({
       limactlPath: options.limactlPath,
-      limaHome: options.limaHome ?? defaultLimaHome(),
+      limaHome: options.limaHome ?? chooseLimaHome(this.name),
       runner: this.runner,
       log: (message) => {
         this.log(message);
       },
     });
-    this.name = options.instanceName ?? DEFAULT_INSTANCE_NAME;
     this.templatesDir = options.templatesDir;
     this.skillsDir = options.skillsDir ?? defaultSkillsDir();
     this.resources = { ...DEFAULT_RESOURCES, ...options.resources };
@@ -447,6 +453,14 @@ export class LimaSandbox implements Sandbox {
         'sandbox/failed',
         `limactl est introuvable (${this.limactl.limactlPath}). Lancez \`pnpm fetch:lima\` ou réinstallez l'application.`,
         { cause },
+      );
+    }
+    if (!limaSocketFits(this.limaHome, this.name)) {
+      const socket = limaSocketPath(this.limaHome, this.name);
+      throw new AtelierError(
+        'sandbox/failed',
+        `Le dossier de la VM (${this.limaHome}) a un chemin trop long pour macOS : le socket de la VM ferait ${String(socket.length)} caractères, ${String(UNIX_PATH_MAX - 1)} au plus. Cela arrive avec un dossier personnel au chemin très long. Contactez le support ou utilisez un compte macOS au nom plus court.`,
+        { details: { limaHome: this.limaHome, socketPath: socket, length: socket.length } },
       );
     }
     await mkdir(this.limaHome, { recursive: true });
