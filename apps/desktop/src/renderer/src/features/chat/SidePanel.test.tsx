@@ -143,6 +143,36 @@ describe('changedFiles', () => {
       ['b.md', 'modified'],
     ]);
   });
+
+  it('inclut les fichiers produits dans la VM (bash), joints au bloc d’outil', () => {
+    const files = changedFiles([
+      msg([{ path: 'resume.md', action: 'created' }]),
+      {
+        id: 'm-bash',
+        sessionId: 's1',
+        role: 'assistant',
+        createdAt: '',
+        parts: [
+          {
+            type: 'tool_call',
+            toolCallId: 'b1',
+            toolName: 'bash',
+            input: {},
+            status: 'success',
+            display: { type: 'command', command: 'python xlsx.py', exitCode: 0, output: '' },
+            files: [
+              { path: 'recap.xlsx', absolutePath: '/w/recap.xlsx', action: 'created' },
+              { path: 'resume.md', absolutePath: '/w/resume.md', action: 'modified' },
+            ],
+          },
+        ],
+      },
+    ]);
+    expect(files.map((f) => [f.path, f.action])).toEqual([
+      ['resume.md', 'created'],
+      ['recap.xlsx', 'created'],
+    ]);
+  });
 });
 
 describe('errorMessage', () => {

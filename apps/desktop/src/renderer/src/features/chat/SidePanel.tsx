@@ -26,17 +26,23 @@ export function changedFiles(messages: readonly ChatMessage[]): FileCardData[] {
   const byPath = new Map<string, FileCardData>();
   for (const message of messages) {
     for (const part of message.parts) {
-      if (part.type !== 'tool_call' || part.display?.type !== 'file') continue;
-      const file = part.display.file;
-      const previous = byPath.get(file.path);
-      byPath.delete(file.path);
-      // « Créé » reste « Créé » même si le fichier est ensuite retouché.
-      byPath.set(
-        file.path,
-        previous?.action === 'created' && file.action !== 'created'
-          ? { ...file, action: 'created' }
-          : file,
-      );
+      if (part.type !== 'tool_call') continue;
+      // Carte propre de l'outil (write_file, present_file…) puis fichiers détectés (bash, MCP…).
+      const files = [
+        ...(part.display?.type === 'file' ? [part.display.file] : []),
+        ...(part.files ?? []),
+      ];
+      for (const file of files) {
+        const previous = byPath.get(file.path);
+        byPath.delete(file.path);
+        // « Créé » reste « Créé » même si le fichier est ensuite retouché.
+        byPath.set(
+          file.path,
+          previous?.action === 'created' && file.action !== 'created'
+            ? { ...file, action: 'created' }
+            : file,
+        );
+      }
     }
   }
   return [...byPath.values()].reverse();

@@ -18,7 +18,7 @@ import type { Attachment, ToolCallPart, WebSearchResult } from '@atelier/shared'
 import { formatBytes } from '@renderer/lib/format';
 import { toolLabel } from '@renderer/lib/tool-labels';
 import { cn } from '@renderer/lib/utils';
-import { isProminentDisplay, ToolDisplayView, WebLink } from './ToolDisplays';
+import { FileCard, isProminentDisplay, ToolDisplayView, WebLink } from './ToolDisplays';
 
 const STATUS: Record<
   ToolCallPart['status'],
@@ -75,6 +75,9 @@ export function ToolCallBlock({ part }: { part: ToolCallPart }) {
         </div>
       </details>
       {prominent ? <ToolDisplayView display={prominent} /> : null}
+      {part.files?.map((file) => (
+        <FileCard key={file.path} file={file} />
+      ))}
     </div>
   );
 }

@@ -9,13 +9,14 @@ import {
   ChatManager,
   type AgentSessionFactory,
   type AgentSessionLike,
+  type ChangeTracker,
   type NewAgentSession,
 } from './chat-manager.js';
 import { PermissionBroker } from './permission-broker.js';
 import { InMemorySessionStore, type SessionStore } from './session-store.js';
 import { SqliteSessionStore } from './sqlite-store.js';
 
-type Mode = 'ok' | 'error' | 'hang';
+type Mode = 'ok' | 'error' | 'hang' | 'tool';
 
 interface SentTurn {
   input: string;
@@ -63,6 +64,18 @@ class FakeAgentSession implements AgentSessionLike {
       this.history = withUser;
       return { messages: withUser, reason: 'error', error };
     }
+    if (mode === 'tool') {
+      emit({ ...ev, type: 'tool_start', toolCallId: 'c1', toolName: 'bash', input: {} });
+      emit({
+        ...ev,
+        type: 'tool_result',
+        toolCallId: 'c1',
+        toolName: 'bash',
+        ok: true,
+        output: 'ok',
+        display: { type: 'command', command: 'python xlsx.py', exitCode: 0, output: '' },
+      });
+    }
     emit({ ...ev, type: 'text_delta', delta: 'Bonjour !' });
     emit({ ...ev, type: 'done', reason: 'stop' });
     this.history = [...withUser, { role: 'assistant', content: 'Bonjour !' }];
@@ -79,6 +92,7 @@ function setup(
   mode: () => Mode,
   failCreate = false,
   store: SessionStore = new InMemorySessionStore(),
+  trackChanges?: (workspace: string) => ChangeTracker,
 ) {
   const events: AgentEvent[] = [];
   const llmErrors: string[] = [];
@@ -107,6 +121,7 @@ function setup(
     onLlmError: (e) => llmErrors.push(e.code),
     newId: () => `id${String((n += 1))}`,
     now: () => new Date('2026-10-28T10:00:00.000Z'),
+    ...(trackChanges ? { trackChanges } : {}),
   });
   const wait = async (sessionId: string): Promise<void> => {
     while (chats.isRunning(sessionId)) await new Promise((r) => setTimeout(r, 1));
@@ -134,6 +149,54 @@ describe('ChatManager', () => {
       ['assistant', { type: 'text', text: 'Bonjour !' }],
     ]);
     expect(store.modelHistory(session.id)).toHaveLength(2);
+  });
+
+  it('joint les fichiers produits par un outil (bash dans la VM) avant la fin du tour', async () => {
+    const calls: string[] = [];
+    const xlsx = {
+      path: 'recap.xlsx',
+      absolutePath: '/w/recap.xlsx',
+      size: 9,
+      action: 'created' as const,
+    };
+    const tracker = (workspace: string): ChangeTracker => ({
+      start: () => {
+        calls.push(`start@${workspace}`);
+        return Promise.resolve();
+      },
+      afterTool: async (display) => {
+        calls.push(`after:${display?.type ?? 'none'}`);
+        // Photo lente : l'ordre des événements doit rester celui de l'agent.
+        await new Promise((r) => setTimeout(r, 5));
+        return [xlsx];
+      },
+    });
+    const { chats, events, wait } = setup(() => 'tool', false, undefined, tracker);
+    const session = chats.create('/w');
+    chats.send(session.id, 'Fais le classeur');
+    await wait(session.id);
+    expect(calls).toEqual(['start@/w', 'after:command']);
+    expect(events.map((e) => e.type)).toEqual([
+      'tool_start',
+      'tool_result',
+      'tool_files',
+      'text_delta',
+      'done',
+    ]);
+    const [, assistant] = chats.open(session.id).messages;
+    expect(assistant?.parts[0]).toMatchObject({ type: 'tool_call', files: [xlsx] });
+  });
+
+  it('un suivi des fichiers en échec ne casse pas le tour', async () => {
+    const tracker = (): ChangeTracker => ({
+      start: () => Promise.reject(new Error('illisible')),
+      afterTool: () => Promise.reject(new Error('illisible')),
+    });
+    const { chats, events, wait } = setup(() => 'tool', false, undefined, tracker);
+    const session = chats.create('/w');
+    chats.send(session.id, 'Fais le classeur');
+    await wait(session.id);
+    expect(events.map((e) => e.type)).toEqual(['tool_start', 'tool_result', 'text_delta', 'done']);
   });
 
   it('garde la session agent entre deux tours et la recrée quand le runtime change', async () => {

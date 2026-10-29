@@ -145,6 +145,43 @@ describe('conversation', () => {
     expect(screen.getByRole('button', { name: 'Envoyer' })).toBeInTheDocument();
   });
 
+  it('affiche en cartes les fichiers produits dans la VM par une commande', async () => {
+    const user = await openSession();
+    await user.type(screen.getByLabelText('Votre message'), 'Fais le classeur{Enter}');
+    emit({
+      type: 'tool_start',
+      toolCallId: 'b1',
+      toolName: 'bash',
+      input: { command: 'python x.py' },
+    });
+    emit({
+      type: 'tool_result',
+      toolCallId: 'b1',
+      toolName: 'bash',
+      ok: true,
+      output: 'ok',
+      display: { type: 'command', command: 'python x.py', exitCode: 0, output: 'ok' },
+    });
+    emit({
+      type: 'tool_files',
+      toolCallId: 'b1',
+      files: [
+        {
+          path: 'recap.xlsx',
+          absolutePath: '/Users/test/Ventes/recap.xlsx',
+          action: 'created',
+          size: 4096,
+        },
+      ],
+    });
+    const log = screen.getByRole('log');
+    expect(
+      within(log).getByRole('button', { name: 'Afficher recap.xlsx dans le Finder' }),
+    ).toBeInTheDocument();
+    await user.click(within(log).getByRole('button', { name: 'Ouvrir' }));
+    expect(api.callsTo('file:open')).toEqual([{ absolutePath: '/Users/test/Ventes/recap.xlsx' }]);
+  });
+
   it('modale de permission : autoriser une fois, Échap refuse', async () => {
     const user = await openSession();
     await user.type(screen.getByLabelText('Votre message'), 'Écris{Enter}');
