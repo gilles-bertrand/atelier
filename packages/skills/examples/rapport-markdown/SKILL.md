@@ -1,6 +1,7 @@
 ---
 name: rapport-markdown
 description: Rédiger un rapport ou une synthèse structurée en Markdown (résumé exécutif, contexte, analyse chiffrée avec tableaux, recommandations, sources), à partir de documents, de données ou de recherches web ; conversion en Word (.docx) ou HTML possible. À utiliser pour tout compte rendu, note de synthèse, rapport d'analyse ou résumé de documents.
+triggers: [rapport, compte rendu, note de synthèse, docx, report]
 ---
 
 # Skill rapport-markdown : rédiger un rapport

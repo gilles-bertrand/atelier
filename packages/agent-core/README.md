@@ -103,6 +103,7 @@ const result = await session.send(
 - Coupures du serveur (`streamCutReason`) : flux terminé sans `finish_reason` (jeton réservé `<tool_call>`, #42) et HTTP 500 « EOF » du parseur d'appels d'outils d'Ollama (#69). Une relance par nature et par tour (`MAX_STREAM_CUT_RETRIES`), avec une consigne adaptée, puis `llm/bad_response` non réessayable avec `details.reason` = `'stream_cut'` ou `'tool_call_parse'`.
 - Dernier pas vide (ni texte ni appel d'outil, `stop`) dans un tour qui a utilisé des outils : une relance (`MAX_EMPTY_FINAL_RETRIES` = 1, message marqué `empty_final`), puis `llm/bad_response` non réessayable avec `details.reason: 'empty_final'` (#73).
 - Annonce sans action (dernier pas `stop` sans appel d'outil qui finit par « je vais… », « commençons… », « : »…, `announcesAction`) dans un tour qui a utilisé des outils : une relance (`announce_only`), budget commun avec le pas vide ; au second échec, le texte reste affiché (#79).
+- Skill chargé d'office (`loop/skill-autoload.ts`) : si la demande contient un déclencheur d'un skill (`SkillInfo.triggers`, mot entier, casse et accents ignorés), son SKILL.md (8 Ko max.) est injecté juste après elle, marqué `kind: 'skill'`, avec la consigne de lancer son script (`SkillInfo.scripts`). Log `skill-autoload`.
 - `result.messages` est l'historique modèle à conserver pour le tour suivant (raisonnement retiré, compaction appliquée).
 
 ### Serveur LLM (Réglages, onboarding, indicateur)

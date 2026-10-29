@@ -60,6 +60,7 @@ export type InjectedKind =
   | 'tool_call_parse'
   | 'empty_final'
   | 'announce_only'
+  | 'skill'
   | 'verification';
 
 const INJECTED_KINDS: ReadonlySet<string> = new Set<InjectedKind>([
@@ -69,6 +70,7 @@ const INJECTED_KINDS: ReadonlySet<string> = new Set<InjectedKind>([
   'tool_call_parse',
   'empty_final',
   'announce_only',
+  'skill',
   'verification',
 ]);
 
