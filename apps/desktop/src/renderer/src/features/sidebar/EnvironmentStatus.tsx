@@ -51,6 +51,7 @@ export function EnvironmentStatus({
   session: SessionSummary | undefined;
   sandbox: SandboxStatus;
   server: ServerStatus;
+  /** Modèle de la conversation ouverte, sinon le modèle par défaut. */
   model: string;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -134,7 +135,7 @@ export function EnvironmentStatus({
               <dd className="truncate text-right text-xs">{serverStatusText(server)}</dd>
             </div>
             <div className="flex items-center justify-between gap-2">
-              <dt className="text-muted-foreground">Modèle</dt>
+              <dt className="text-muted-foreground">{session ? 'Modèle' : 'Modèle par défaut'}</dt>
               <dd className="truncate font-mono text-xs" title={model}>
                 {model}
               </dd>

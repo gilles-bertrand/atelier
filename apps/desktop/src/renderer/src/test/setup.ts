@@ -9,6 +9,8 @@ if (typeof document !== 'undefined') {
   const { cleanup } = await import('@testing-library/react');
   // Fenêtre d'Atelier par défaut (1280 px) : la colonne de gauche est affichée.
   Object.defineProperty(window, 'innerWidth', { value: 1280, writable: true, configurable: true });
+  // jsdom n'implémente pas le défilement (listes déroulantes).
+  Element.prototype.scrollIntoView = () => undefined;
   afterEach(() => {
     cleanup();
     window.localStorage.clear();

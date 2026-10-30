@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import type { ConnectionTestResult } from '@atelier/shared';
 import { App } from '@renderer/App';
 import { FakeIpcFailure, installFakeApi } from '@renderer/test/fake-api';
-import { chatModels, initialModel } from './ModelStep';
+import { chatModels, initialModel } from '@renderer/lib/models';
 import { sandboxPhase } from './SandboxStep';
 import { validateServerUrl } from './ServerStep';
 
@@ -16,6 +16,7 @@ const connected: ConnectionTestResult = {
   models: [
     { name: 'qwen3.5:35b', sizeBytes: 24e9 },
     { name: 'qwen3.5:9b', sizeBytes: 6e9 },
+    { name: 'llama-texte', capabilities: ['completion'] },
   ],
   contextWindow: 65_536,
 };
@@ -57,6 +58,9 @@ describe('onboarding', () => {
     // 2. Modèle
     await screen.findByRole('heading', { name: 'Choix du modèle' });
     expect(screen.getByRole('radio', { name: /qwen3\.5:35b/ })).toBeChecked();
+    // Sans outils : affiché, grisé, avec la raison.
+    expect(screen.getByRole('radio', { name: /llama-texte/ })).toBeDisabled();
+    expect(screen.getByText(/Indisponible : ne sait pas utiliser les outils/)).toBeInTheDocument();
     await user.click(screen.getByRole('radio', { name: /qwen3\.5:9b/ }));
     await user.click(screen.getByLabelText('Réflexion approfondie'));
     await user.click(screen.getByRole('button', { name: 'Continuer' }));

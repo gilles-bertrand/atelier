@@ -216,6 +216,10 @@ function WorkspaceViews() {
                     list?.map((s) => (s.id === current.id ? { ...s, title } : s)),
                   );
                 }}
+                onSessionChange={(updated) => {
+                  setCurrent(updated);
+                  setSessions((list) => list?.map((s) => (s.id === updated.id ? updated : s)));
+                }}
               />
             ) : (
               <Home onChooseFolder={chooseFolder} />

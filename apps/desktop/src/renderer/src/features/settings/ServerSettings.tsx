@@ -7,8 +7,8 @@ import { Alert, Hint, Input, Label, Select, Switch } from '@renderer/components/
 import { call } from '@renderer/lib/api';
 import { errorMessage } from '@renderer/lib/error-messages';
 import { formatContext } from '@renderer/lib/format';
+import { chatModels, NO_TOOLS_REASON, supportsTools } from '@renderer/lib/models';
 import { useApp } from '@renderer/state/app-state';
-import { chatModels } from '../onboarding/ModelStep';
 import { validateServerUrl } from '../onboarding/ServerStep';
 import { FeedbackLine, SettingsSection, useAction } from './common';
 
@@ -154,7 +154,10 @@ function ModelSettings() {
   }, [llm.baseUrl]);
 
   const names = models?.map((m) => m.name) ?? [];
-  const options = names.includes(model) ? names : [model, ...names];
+  const options: LlmModelInfo[] = [
+    ...(names.includes(model) ? [] : [{ name: model }]),
+    ...(models ?? []),
+  ];
   const ctxValue = numCtx.trim() === '' ? 0 : Number(numCtx);
   const ctxInvalid = !Number.isInteger(ctxValue) || (ctxValue !== 0 && ctxValue < 2048);
 
@@ -162,7 +165,7 @@ function ModelSettings() {
     <div className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
-          <Label htmlFor={ids.model}>Modèle principal</Label>
+          <Label htmlFor={ids.model}>Modèle par défaut des nouvelles conversations</Label>
           <Select
             id={ids.model}
             value={model}
@@ -170,12 +173,17 @@ function ModelSettings() {
               setModel(e.target.value);
             }}
           >
-            {options.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
+            {options.map((m) => {
+              // Un modèle sans outils reste affiché, grisé, avec la raison (D2).
+              const usable = supportsTools(m) || m.name === model;
+              return (
+                <option key={m.name} value={m.name} disabled={!usable}>
+                  {supportsTools(m) ? m.name : `${m.name} (${NO_TOOLS_REASON})`}
+                </option>
+              );
+            })}
           </Select>
+          <Hint>Chaque conversation peut ensuite choisir le sien, depuis la zone de saisie.</Hint>
         </div>
         <div className="space-y-2">
           <Label htmlFor={ids.vision}>Modèle pour les images</Label>

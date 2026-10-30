@@ -25,6 +25,8 @@ export function Composer({
   disabled,
   importing,
   status,
+  notice,
+  footer,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -35,8 +37,12 @@ export function Composer({
   running: boolean;
   disabled: boolean;
   importing: boolean;
-  /** Indicateur à gauche du bouton d'envoi (jauge de contexte). */
+  /** Indicateurs à gauche du bouton d'envoi (choix du modèle, jauge de contexte). */
   status?: ReactNode;
+  /** Avertissement dans la saisie, sous les pièces jointes (image illisible…). */
+  notice?: ReactNode;
+  /** Avertissement non bloquant sous la saisie (modèle à froid…). */
+  footer?: ReactNode;
 }) {
   const inputId = useId();
   const hintId = useId();
@@ -89,6 +95,7 @@ export function Composer({
               ))}
             </ul>
           ) : null}
+          {notice ? <div className="px-3 pt-3">{notice}</div> : null}
           <label htmlFor={inputId} className="sr-only">
             Votre message
           </label>
@@ -112,7 +119,7 @@ export function Composer({
                 ? 'Import des fichiers…'
                 : 'Entrée pour envoyer, Maj + Entrée pour aller à la ligne. Glissez des fichiers ici.'}
             </p>
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="flex shrink-0 items-center gap-1">
               {status}
               {running ? (
                 <Button size="sm" variant="outline" onClick={onStop}>
@@ -128,6 +135,7 @@ export function Composer({
             </div>
           </div>
         </div>
+        {footer ? <div className="pt-2">{footer}</div> : null}
       </div>
     </div>
   );
