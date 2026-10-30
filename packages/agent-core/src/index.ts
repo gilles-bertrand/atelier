@@ -95,17 +95,30 @@ export type { ParsedTextToolCalls, TextToolCall } from './loop/text-tool-calls.j
 // Serveur LLM
 export { createLlmModels, disableThinking } from './llm/provider.js';
 export type { LlmConnectionOptions, LlmModels } from './llm/provider.js';
-export { fetchContextWindow, parseModelMaxContext, parseNumCtx } from './llm/context-window.js';
+export {
+  fetchContextWindow,
+  fetchModelDetails,
+  parseCapabilities,
+  parseModelMaxContext,
+  parseModelShow,
+  parseNumCtx,
+} from './llm/context-window.js';
 export type {
   ContextWindowInfo,
   ContextWindowOptions,
   ContextWindowSource,
+  ModelDetails,
+  ModelDetailsOptions,
 } from './llm/context-window.js';
 export {
   assertServerUrl,
   checkServerHealth,
+  DESCRIBE_CONCURRENCY,
+  describeModels,
+  fetchLoadedModels,
   fetchServerVersion,
   listModels,
+  parseOllamaPs,
   parseOllamaTags,
   parseOpenAiModels,
   SERVER_CHECK_TIMEOUT_MS,
@@ -121,7 +134,7 @@ export type {
 } from './llm/server.js';
 export { backoffDelay, createRetryingFetch, withRetryListener } from './llm/retry-fetch.js';
 export type { FetchFunction, RetryInfo, RetryOptions } from './llm/retry-fetch.js';
-export { isNetworkError, toLlmError } from './llm/errors.js';
+export { isNetworkError, toLlmError, unsupportedCapability } from './llm/errors.js';
 
 // Prompt
 export { buildSystemPrompt } from './prompt/system-prompt.js';
