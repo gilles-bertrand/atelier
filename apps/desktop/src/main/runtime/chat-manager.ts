@@ -10,16 +10,17 @@
 import { randomUUID } from 'node:crypto';
 import { chatMessagesToModelMessages, type TurnResult } from '@atelier/agent-core';
 import {
-  AtelierError,
-  serializeError,
   type AgentEvent,
   type AgentEventSink,
+  AtelierError,
   type Attachment,
   type ChatMessage,
   type FileCard,
   type PermissionHandler,
   type SerializedAtelierError,
+  serializeError,
   type SessionSummary,
+  type TokenUsage,
   type ToolDisplay,
 } from '@atelier/shared';
 import type { ModelMessage } from 'ai';
@@ -31,7 +32,6 @@ import {
   settleRunningTools,
   userModelText,
 } from '../../common/chat-reducer.js';
-import type { TurnUsage } from '../../common/usage.js';
 import type { PermissionBroker } from './permission-broker.js';
 import { sessionNotFound, type SessionStore } from './session-store.js';
 import { usageRecord, type UsageStore } from './usage-store.js';
@@ -136,7 +136,7 @@ export class ChatManager {
   open(sessionId: string): {
     session: SessionSummary;
     messages: ChatMessage[];
-    usage?: TurnUsage;
+    usage?: TokenUsage;
   } {
     const session = this.#session(sessionId);
     const usage = this.#safeUsage(() => this.#o.usage?.lastForSession(sessionId));
@@ -321,7 +321,7 @@ export class ChatManager {
     result: TurnResult,
     compactions: number,
   ): void {
-    const usage: TurnUsage | undefined = result.usage;
+    const usage: TokenUsage | undefined = result.usage;
     if (!usage) return;
     this.#safeUsage(() => {
       this.#o.usage?.record(

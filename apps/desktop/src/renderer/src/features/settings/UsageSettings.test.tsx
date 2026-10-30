@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
+import { type ModelUsageStats, type UsagePeriod, type UsageSummary } from '@atelier/shared';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { App } from '@renderer/App';
 import { FakeIpcFailure, defaultTestSettings, installFakeApi } from '@renderer/test/fake-api';
-import type { ModelUsageStats, UsagePeriod, UsageSummary } from '../../../../common/usage';
 import { dailyBars, usageTotals, UsageSettings } from './UsageSettings';
 
 const NOW = new Date(2026, 9, 30, 12);
@@ -140,12 +140,7 @@ describe('Réglages › Utilisation', () => {
       'settings:get': () => defaultTestSettings({ onboardingCompleted: true }),
       'session:list': () => [],
     });
-    // `usage:summary` n'est pas encore dans le contrat de shared (L0).
-    (api.handlers as Record<string, unknown>)['usage:summary'] = ({
-      period,
-    }: {
-      period: UsagePeriod;
-    }) => summary(period);
+    api.handlers['usage:summary'] = ({ period }) => summary(period);
     render(<App />);
     const sidebar = await screen.findByRole('navigation', { name: 'Barre latérale' });
     await user.click(within(sidebar).getByRole('button', { name: 'Réglages' }));
@@ -159,13 +154,13 @@ describe('Réglages › Utilisation', () => {
     expect(api.calls.at(-1)).toEqual({ channel: 'usage:summary', request: { period: '30d' } });
   });
 
-  it('erreur IPC (canal refusé avant L0) : message lisible, pas de plantage', async () => {
+  it('erreur IPC : message lisible, pas de plantage', async () => {
     const user = userEvent.setup();
     const api = installFakeApi({
       'settings:get': () => defaultTestSettings({ onboardingCompleted: true }),
       'session:list': () => [],
     });
-    (api.handlers as Record<string, unknown>)['usage:summary'] = () => {
+    api.handlers['usage:summary'] = () => {
       throw new FakeIpcFailure({ code: 'internal', message: 'Canal interdit', retryable: false });
     };
     render(<App />);

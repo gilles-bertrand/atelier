@@ -155,7 +155,7 @@ function applyEvent(session: SessionView, event: AgentEvent): SessionView {
         turn: { ...withoutRetry(turn), status: 'error', error: event.error },
       };
     default:
-      // Event inconnu (agent-core plus récent, ex. `usage`) : vue inchangée.
+      // Event inconnu (agent-core plus récent) : vue inchangée.
       return session;
   }
 }

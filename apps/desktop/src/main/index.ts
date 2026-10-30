@@ -261,6 +261,7 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
       secrets,
       monitor,
       chats,
+      usage,
       permissions,
       sandbox,
       mcp,

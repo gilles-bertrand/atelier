@@ -2,10 +2,9 @@
 import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
-import type { AgentEvent, SessionSummary } from '@atelier/shared';
+import { type SessionSummary, type TokenUsage, type UsageEvent } from '@atelier/shared';
 import { App } from '@renderer/App';
 import { defaultTestSettings, installFakeApi, type FakeApi } from '@renderer/test/fake-api';
-import type { TurnUsage, UsageEvent } from '../../../../common/usage';
 import { gaugeState } from './ContextGauge';
 
 const session: SessionSummary = {
@@ -16,7 +15,7 @@ const session: SessionSummary = {
   updatedAt: '2026-10-28T09:30:00.000Z',
 };
 
-const usage = (contextTokens: number | undefined, contextWindow?: number): TurnUsage => ({
+const usage = (contextTokens: number | undefined, contextWindow?: number): TokenUsage => ({
   inputTokens: 1,
   outputTokens: 1,
   ...(contextTokens !== undefined ? { contextTokens } : {}),
@@ -52,11 +51,10 @@ describe('gaugeState', () => {
   });
 });
 
-function setup(openUsage?: TurnUsage): FakeApi {
+function setup(openUsage?: TokenUsage): FakeApi {
   return installFakeApi({
     'settings:get': () => defaultTestSettings({ onboardingCompleted: true }),
     'session:list': () => [session],
-    // `usage` n'est pas encore dans le type de shared (L0) : réponse élargie.
     'session:open': () => ({
       session,
       messages: [],
@@ -91,7 +89,7 @@ describe('jauge de contexte dans la saisie', () => {
         usage: usage(contextTokens, 32_000),
       };
       act(() => {
-        api.emit('agent:event', event as unknown as AgentEvent);
+        api.emit('agent:event', event);
       });
     };
     emitUsage('s1', 3200);

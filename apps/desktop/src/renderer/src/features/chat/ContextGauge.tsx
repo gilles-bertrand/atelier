@@ -3,11 +3,10 @@
  * Composer. Elle lit le magasin d'usage isolé : une mise à jour ne re-rend
  * qu'elle. Aucune estimation côté renderer : seuls les chiffres du serveur font foi.
  */
-import { COMPACTION_THRESHOLD } from '@atelier/shared';
+import { COMPACTION_THRESHOLD, type TokenUsage } from '@atelier/shared';
 import { formatPercent, formatTokens } from '@renderer/lib/format';
 import { cn } from '@renderer/lib/utils';
 import { useSessionUsage } from '@renderer/state/usage-store';
-import type { TurnUsage } from '../../../../common/usage';
 
 /** Sous ce ratio, la jauge est verte. */
 export const GAUGE_WARNING_RATIO = 0.5;
@@ -23,7 +22,7 @@ export interface GaugeState {
 }
 
 /** État affiché pour un usage (pur, testable). */
-export function gaugeState(usage: TurnUsage | undefined): GaugeState {
+export function gaugeState(usage: TokenUsage | undefined): GaugeState {
   if (usage?.contextTokens === undefined) {
     return {
       tone: 'unknown',

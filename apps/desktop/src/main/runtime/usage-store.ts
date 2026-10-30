@@ -6,19 +6,18 @@
  *
  * Souveraineté : tout reste dans `userData/atelier.db`, rien ne sort de la machine.
  */
-import type { DatabaseSync } from 'node:sqlite';
 import {
-  localDay,
-  periodStartDay,
-  RELAUNCH_KINDS,
   type ModelUsageStats,
+  RELAUNCH_KINDS,
   type RelaunchKind,
+  type TokenUsage,
   type TurnOutcome,
-  type TurnUsage,
   type UsageDailyPoint,
   type UsagePeriod,
   type UsageSummary,
-} from '../../common/usage.js';
+} from '@atelier/shared';
+import type { DatabaseSync } from 'node:sqlite';
+import { localDay, periodStartDay } from '../../common/usage-days.js';
 
 /** Une ligne du registre. */
 export interface UsageRecord {
@@ -52,7 +51,7 @@ export interface UsageStore {
    * Dernier usage d'une conversation dont le contexte est connu (jauge à la
    * réouverture) : un tour annulé avant sa première étape ne l'efface pas.
    */
-  lastForSession(sessionId: string): TurnUsage | undefined;
+  lastForSession(sessionId: string): TokenUsage | undefined;
   /** Conversation supprimée : ses tours restent comptés, sans lien (SET NULL). */
   detachSession(sessionId: string): void;
 }
@@ -79,7 +78,7 @@ export function usageRecord(options: {
   sessionId: string;
   model: string;
   outcome: TurnOutcome;
-  usage: TurnUsage;
+  usage: TokenUsage;
   compactions: number;
   at: Date;
 }): UsageRecord {
@@ -102,7 +101,7 @@ export function usageRecord(options: {
   };
 }
 
-function lastUsage(record: UsageRecord): TurnUsage {
+function lastUsage(record: UsageRecord): TokenUsage {
   return {
     // L'entrée de la dernière étape n'est pas gardée : seule la jauge s'en sert,
     // et elle lit `contextTokens`.
@@ -220,7 +219,7 @@ export class InMemoryUsageStore implements UsageStore {
     return summarize([...this.#records.values()], period, now);
   }
 
-  lastForSession(sessionId: string): TurnUsage | undefined {
+  lastForSession(sessionId: string): TokenUsage | undefined {
     const last = [...this.#records.values()]
       .filter((r) => r.sessionId === sessionId && r.contextTokens !== undefined)
       .reduce<UsageRecord | undefined>(
@@ -420,7 +419,7 @@ export class SqliteUsageStore implements UsageStore {
     };
   }
 
-  lastForSession(sessionId: string): TurnUsage | undefined {
+  lastForSession(sessionId: string): TokenUsage | undefined {
     const row = this.#db
       .prepare(
         `SELECT * FROM usage_turns WHERE session_id = ? AND context_tokens IS NOT NULL

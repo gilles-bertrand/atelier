@@ -9,6 +9,7 @@ import {
   tokenForConnectionTest,
   type HandlerServices,
 } from './handlers.js';
+import { InMemoryUsageStore } from './runtime/usage-store.js';
 
 describe('isWithin', () => {
   it('reconnaît les chemins internes et refuse les sorties', () => {
@@ -136,6 +137,39 @@ describe('attachment:import', () => {
       path: '.atelier/uploads/facture.pdf',
       name: 'facture.pdf',
       mimeType: 'application/pdf',
+    });
+  });
+});
+
+describe('usage:summary', () => {
+  it('renvoie les agrégats du registre, ou des statistiques vides sans registre', async () => {
+    const usage = new InMemoryUsageStore();
+    usage.record({
+      turnId: 't1',
+      sessionId: 's1',
+      model: 'qwen3.5:35b',
+      outcome: 'stop',
+      day: '2999-01-01',
+      steps: 1,
+      inputTokens: 100,
+      outputTokens: 10,
+      contextTokens: undefined,
+      contextWindow: undefined,
+      generationMs: 0,
+      compactions: 0,
+      relaunches: {},
+      createdAt: '2999-01-01T00:00:00.000Z',
+    });
+    const withStore = createHandlers({ usage } as unknown as HandlerServices);
+    expect(await withStore['usage:summary']?.({ period: 'all' })).toMatchObject({
+      period: 'all',
+      models: [{ model: 'qwen3.5:35b', turns: 1, inputTokens: 100 }],
+    });
+    const without = createHandlers({} as unknown as HandlerServices);
+    expect(await without['usage:summary']?.({ period: '7d' })).toEqual({
+      period: '7d',
+      models: [],
+      daily: [],
     });
   });
 });

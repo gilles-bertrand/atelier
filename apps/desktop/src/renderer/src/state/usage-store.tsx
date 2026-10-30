@@ -3,18 +3,18 @@
  * magasin du chat : une mise à jour (au plus une par étape) ne re-rend que la
  * jauge, jamais la liste des messages.
  */
+import { type TokenUsage } from '@atelier/shared';
 import { createContext, use, useCallback, useSyncExternalStore, type ReactNode } from 'react';
-import type { TurnUsage } from '../../../common/usage';
 
 export class SessionUsageStore {
-  readonly #usage = new Map<string, TurnUsage>();
+  readonly #usage = new Map<string, TokenUsage>();
   readonly #listeners = new Set<() => void>();
 
-  get(sessionId: string): TurnUsage | undefined {
+  get(sessionId: string): TokenUsage | undefined {
     return this.#usage.get(sessionId);
   }
 
-  set(sessionId: string, usage: TurnUsage): void {
+  set(sessionId: string, usage: TokenUsage): void {
     this.#usage.set(sessionId, usage);
     for (const listener of this.#listeners) listener();
   }
@@ -44,7 +44,7 @@ export function SessionUsageProvider({
 }
 
 /** Usage de la conversation (`undefined` avant la première réponse). */
-export function useSessionUsage(sessionId: string): TurnUsage | undefined {
+export function useSessionUsage(sessionId: string): TokenUsage | undefined {
   const store = use(UsageContext);
   const subscribe = useCallback(
     (listener: () => void) => store?.subscribe(listener) ?? (() => undefined),

@@ -4,6 +4,14 @@
  * l'écran ne fait qu'additionner les lignes par modèle pour les tuiles.
  * Données locales uniquement : rien ne sort de la machine.
  */
+import {
+  type ModelUsageStats,
+  RELAUNCH_KINDS,
+  type RelaunchKind,
+  type UsageDailyPoint,
+  type UsagePeriod,
+  type UsageSummary,
+} from '@atelier/shared';
 import { useEffect, useId, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Alert } from '@renderer/components/ui/primitives';
@@ -12,16 +20,7 @@ import { errorMessage } from '@renderer/lib/error-messages';
 import { formatDecimal, formatPercent, formatTokens } from '@renderer/lib/format';
 import { loadUsageSummary } from '@renderer/lib/usage-api';
 import { cn } from '@renderer/lib/utils';
-import {
-  localDay,
-  periodStartDay,
-  RELAUNCH_KINDS,
-  type ModelUsageStats,
-  type RelaunchKind,
-  type UsageDailyPoint,
-  type UsagePeriod,
-  type UsageSummary,
-} from '../../../../common/usage';
+import { localDay, periodStartDay } from '../../../../common/usage-days';
 import { SettingsSection } from './common';
 
 const PERIODS: { id: UsagePeriod; label: string }[] = [

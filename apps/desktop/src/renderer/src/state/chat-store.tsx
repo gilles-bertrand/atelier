@@ -14,7 +14,6 @@ import {
 } from 'react';
 import type { Attachment, PermissionDecision, PermissionRequest } from '@atelier/shared';
 import { createUserMessage } from '../../../common/chat-reducer';
-import { asUsageEvent, readUsage } from '../../../common/usage';
 import { atelier, call } from '@renderer/lib/api';
 import { chatReducer, type ChatState, type SessionView } from './chat-reducer';
 import { SessionUsageProvider, SessionUsageStore } from './usage-store';
@@ -46,9 +45,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     () =>
       atelier().on('agent:event', (event) => {
         // Usage (jauge) : magasin isolé, la conversation n'est pas re-rendue.
-        const usageEvent = asUsageEvent(event);
-        if (usageEvent) {
-          usage.set(usageEvent.sessionId, usageEvent.usage);
+        if (event.type === 'usage') {
+          usage.set(event.sessionId, event.usage);
           return;
         }
         dispatch({ type: 'event', event });
@@ -59,8 +57,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const open = useCallback(
     async (sessionId: string) => {
       const opened = await call('session:open', { sessionId });
-      const last = readUsage(opened);
-      if (last) usage.set(sessionId, last);
+      if (opened.usage) usage.set(sessionId, opened.usage);
       dispatch({ type: 'loaded', sessionId, messages: opened.messages });
     },
     [usage],

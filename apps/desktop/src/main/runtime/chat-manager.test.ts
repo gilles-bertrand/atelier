@@ -72,13 +72,11 @@ class FakeAgentSession implements AgentSessionLike {
       };
     }
     if (mode === 'usage') {
-      // Event `usage` d'agent-core (L1), pas encore dans l'union AgentEvent de shared.
-      const usageEvent: unknown = {
+      emit({
         ...ev,
         type: 'usage',
         usage: { inputTokens: 100, outputTokens: 2, contextTokens: 102, contextWindow: 32_768 },
-      };
-      emit(usageEvent as AgentEvent);
+      });
     }
     if (mode === 'compact') {
       emit({ ...ev, type: 'compaction', replacedMessages: 4 });
@@ -111,7 +109,7 @@ class FakeAgentSession implements AgentSessionLike {
         contextTokens: 105,
         steps: 2,
         generationMs: 250,
-      } as TurnResult['usage'],
+      },
     };
   }
 }
@@ -399,7 +397,7 @@ describe('ChatManager', () => {
     expect(usage.all()[0]?.compactions).toBe(2);
   });
 
-  it('relaie un event inconnu (usage d’un agent-core plus récent) sans casser le tour', async () => {
+  it('relaie les events `usage` sans toucher au message persisté', async () => {
     const { chats, store, events, wait } = setup(() => 'usage');
     const session = chats.create('/w');
     chats.send(session.id, 'Salut');

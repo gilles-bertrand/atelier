@@ -100,8 +100,8 @@ export function applyAgentEvent(message: ChatMessage, event: AgentEvent): ChatMe
     case 'error':
       return message;
     default:
-      // Event d'un agent-core plus récent que ce code (ex. `usage`, ADR-001) : sans
-      // effet sur le contenu, et surtout jamais `undefined` (le tour serait perdu).
+      // Event d'un agent-core plus récent que ce code : sans effet sur le contenu,
+      // et surtout jamais `undefined` (le tour serait perdu).
       return message;
   }
 }
