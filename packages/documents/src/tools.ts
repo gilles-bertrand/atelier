@@ -316,7 +316,7 @@ async function transcribePage(
   const { vision } = ctx.options;
   if (!vision)
     return {
-      note: 'page sans texte (scan probable) : aucun modèle vision configuré pour la transcrire',
+      note: "page sans texte (scan probable) : aucun modèle vision disponible pour la transcrire (l'utilisateur peut choisir un modèle multimodal pour cette conversation, ou un modèle vision dans les Réglages)",
     };
   const key = { kind: 'pdf-page-transcription', file: fileHash, page, vision: vision.id };
   const cached = await ctx.cache.get(key);
@@ -489,7 +489,7 @@ async function readImage(ctx: ReadContext, target: Target): Promise<ToolOutput> 
   if (!vision) {
     return {
       ok: false,
-      content: `[Image : ${target.resolved.relativePath} (${label})] Aucun modèle vision n'est configuré : impossible de décrire cette image. L'utilisateur peut en choisir un dans les Réglages.`,
+      content: `[Image : ${target.resolved.relativePath} (${label})] Aucun modèle vision n'est disponible : impossible de décrire cette image. L'utilisateur peut choisir un modèle multimodal pour cette conversation, ou un modèle vision dans les Réglages.`,
     };
   }
   const key = { kind: 'image-description', file: sha256(data), vision: vision.id };
@@ -618,7 +618,7 @@ export function createLookAtTool(options: DocumentToolsOptions = {}) {
             return {
               ok: false,
               content:
-                "Aucun modèle vision n'est configuré : l'utilisateur peut en choisir un dans les Réglages.",
+                "Aucun modèle vision n'est disponible : l'utilisateur peut choisir un modèle multimodal pour cette conversation, ou un modèle vision dans les Réglages.",
             };
           }
           const cache = resolveCache(options, context.workspace);

@@ -334,7 +334,7 @@ describe('read_file : PDF', () => {
           contextFor(ws, { sandbox: fakeSandbox(ws) }),
         ),
       );
-      expect(noVision).toMatch(/aucun modèle vision configuré/);
+      expect(noVision).toMatch(/aucun modèle vision disponible/);
       const missing = okContent(
         await noCacheTool({ vision }).execute(
           { path: 'scan.pdf' },
@@ -383,7 +383,7 @@ describe('read_file : images', () => {
     await withWorkspace(['ticket.png'], async (ws) => {
       const out = await noCacheTool().execute({ path: 'ticket.png' }, contextFor(ws));
       expect(out.ok).toBe(false);
-      expect(out.content).toMatch(/Aucun modèle vision n'est configuré/);
+      expect(out.content).toMatch(/Aucun modèle vision n'est disponible.*modèle multimodal/);
     });
   });
 

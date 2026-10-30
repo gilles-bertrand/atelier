@@ -10,6 +10,7 @@ import { installExampleSkills } from '@atelier/skills';
 import { broadcast } from './broadcast.js';
 import { createHandlers } from './handlers.js';
 import { registerIpcHandlers } from './ipc.js';
+import { ModelCatalog, serverModelSource } from './llm/model-catalog.js';
 import { ServerMonitor } from './llm/server-monitor.js';
 import { limaPreflight, resolveAppPaths } from './paths.js';
 import { AgentRuntimeHost } from './runtime/agent-runtime.js';
@@ -195,11 +196,21 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
     log,
   });
 
+  // Modèles du serveur (#13) : capacités et contexte en cache, état chargé relu à chaque liste.
+  const models = new ModelCatalog({
+    source: serverModelSource(() => {
+      const token = secrets.get('llm_token');
+      return { baseUrl: settings.get().llm.baseUrl, ...(token ? { token } : {}) };
+    }),
+    numCtx: () => settings.get().llm.numCtx,
+  });
+
   const agents = new AgentRuntimeHost({
     settings: () => settings.get(),
     secret: (id) => secrets.get(id),
     sandbox,
     mcp,
+    capabilities: (model) => models.capabilities(model),
     log: (message, data) => {
       log(`agent: ${message}`, data);
     },
@@ -236,14 +247,16 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
       void monitor.check();
     },
     usage,
-    model: () => settings.get().llm.model,
+    defaultModel: () => settings.get().llm.model,
+    models,
     log,
   });
 
   settings.onChange((next, previous) => {
+    // Le modèle par défaut n'invalide aucun runtime (un par modèle) : seules les
+    // conversations qui le suivent changent de session agent au tour suivant.
     if (
       next.llm.baseUrl !== previous.llm.baseUrl ||
-      next.llm.model !== previous.llm.model ||
       next.llm.numCtx !== previous.llm.numCtx ||
       next.llm.thinking !== previous.llm.thinking ||
       next.llm.visionModel !== previous.llm.visionModel
@@ -251,6 +264,7 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
       agents.invalidate();
       void monitor.check();
     }
+    if (next.llm.baseUrl !== previous.llm.baseUrl) models.clear();
     if (next.mcpConfigPath !== previous.mcpConfigPath) void reloadMcp();
     if (next.onboardingCompleted && !previous.onboardingCompleted) monitor.start();
   });
@@ -260,6 +274,7 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
       settings,
       secrets,
       monitor,
+      models,
       chats,
       usage,
       permissions,
@@ -270,6 +285,7 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
       onSecretChanged: (id) => {
         if (id !== 'llm_token') return;
         agents.invalidate();
+        models.clear();
         void monitor.check();
       },
       shell: {

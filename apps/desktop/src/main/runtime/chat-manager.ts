@@ -5,7 +5,11 @@
  *
  * Chaque session de chat garde une session agent (`createAgentRuntime` →
  * `createSession`), recréée entre deux tours si le runtime a changé (Réglages
- * LLM modifiés) ou pour rejouer un tour en échec.
+ * LLM modifiés), si le modèle de la conversation a changé (#13) ou pour
+ * rejouer un tour en échec.
+ *
+ * Modèle d'une conversation (D1 de #13) : celui de la session s'il est choisi,
+ * sinon le modèle par défaut des Réglages (conversations antérieures à #13).
  */
 import { randomUUID } from 'node:crypto';
 import { chatMessagesToModelMessages, type TurnResult } from '@atelier/agent-core';
@@ -54,10 +58,18 @@ export interface AgentSessionLike {
 export interface NewAgentSession {
   sessionId: string;
   workspace: string;
+  /** Modèle de la conversation : runtime, fenêtre de contexte et vision propres à ce modèle. */
+  model: string;
   requestPermission: PermissionHandler;
   history: readonly ModelMessage[];
   /** Reprise d'une session recréée : la compaction reste déclenchée à temps. */
   lastInputTokens?: number;
+}
+
+/** Ce que le gestionnaire utilise du catalogue des modèles (`ModelCatalog`). */
+export interface ModelValidator {
+  /** Rejette `llm/model_not_found` (absent du serveur) ou `llm/model_unsupported` (sans outils). */
+  assertUsable(model: string): Promise<void>;
 }
 
 /** Fabrique de sessions agent (runtime courant). */
@@ -82,8 +94,13 @@ export interface ChatManagerOptions {
   trackChanges?: (workspace: string) => ChangeTracker;
   /** Registre de consommation (une ligne par tour, ADR-001). */
   usage?: UsageStore;
-  /** Modèle du runtime, lu au début de chaque tour (répartition juste par modèle). */
-  model?: () => string;
+  /**
+   * Modèle par défaut des Réglages : copié dans chaque nouvelle conversation, et
+   * suivi par les conversations sans modèle (créées avant #13).
+   */
+  defaultModel?: () => string;
+  /** Validation du modèle choisi pour une conversation (`session:set-model`). */
+  models?: ModelValidator;
   /** Journal des erreurs non bloquantes (registre de consommation…). */
   log?: (message: string, data?: unknown) => void;
   newId?: () => string;
@@ -102,8 +119,8 @@ interface PendingInput {
 }
 
 interface SessionRuntime {
-  /** Session agent et génération du runtime qui l'a créée. */
-  agent?: { session: AgentSessionLike; generation: number };
+  /** Session agent, génération du runtime qui l'a créée et modèle qu'elle utilise. */
+  agent?: { session: AgentSessionLike; generation: number; model: string };
   running?: { turnId: string; controller: AbortController; done: Promise<void> };
   /** Dernier tour en échec ou interrompu : relançable via `agent:retry`. */
   retryable?: { input: PendingInput; history: readonly ModelMessage[] };
@@ -123,13 +140,33 @@ export class ChatManager {
 
   create(workspace: string): SessionSummary {
     const at = this.#now();
+    // Copie du modèle par défaut : le changer ensuite dans les Réglages ne modifie pas cette conversation.
+    const model = this.#o.defaultModel?.() ?? '';
     return this.#o.store.create({
       id: this.#id(),
       title: 'Nouvelle conversation',
       workspace,
       createdAt: at,
       updatedAt: at,
+      ...(model !== '' ? { model } : {}),
     });
+  }
+
+  /**
+   * Change le modèle de la conversation, utilisé à partir du tour suivant (D1).
+   * `null` : retour au modèle par défaut des Réglages. Refusé pendant un tour.
+   */
+  async setModel(sessionId: string, model: string | null): Promise<SessionSummary> {
+    const session = this.#session(sessionId);
+    const runtime = this.#runtime(sessionId);
+    this.#assertIdle(runtime);
+    const name = model === null ? null : model.trim();
+    if (name === '') throw new AtelierError('tool/invalid_input', 'Nom de modèle vide.');
+    if (name === (session.model ?? null)) return session;
+    if (name !== null) await this.#o.models?.assertUsable(name);
+    // Un tour a pu démarrer pendant la vérification auprès du serveur.
+    this.#assertIdle(runtime);
+    return this.#o.store.update(sessionId, { model: name });
   }
 
   /** Messages affichés et dernier usage connu (jauge de contexte dès la réouverture). */
@@ -244,9 +281,14 @@ export class ChatManager {
     // Laisse `send` renvoyer le turnId avant le premier événement.
     await Promise.resolve();
     const sessionId = session.id;
-    let assistant = createAssistantMessage({ id: this.#id(), sessionId, createdAt: this.#now() });
-    // Modèle au moment du tour : changer de modèle ensuite ne réattribue rien.
-    const model = this.#o.model?.() ?? '';
+    // Modèle de la conversation au moment du tour : en changer ensuite ne réattribue rien.
+    const model = this.#modelOf(session);
+    let assistant = createAssistantMessage({
+      id: this.#id(),
+      sessionId,
+      createdAt: this.#now(),
+      ...(model !== '' ? { model } : {}),
+    });
     let compactions = 0;
     const forward = (event: AgentEvent): void => {
       if (event.type === 'compaction') compactions += 1;
@@ -274,7 +316,7 @@ export class ChatManager {
     try {
       await this.#o.agents.beforeTurn(sessionId, session.workspace);
       await tracker.start().catch(() => undefined);
-      const agent = await this.#agentSession(session, runtime, resetHistory);
+      const agent = await this.#agentSession(session, runtime, resetHistory, model);
       if (controller.signal.aborted) {
         outcome = 'aborted';
         emit({ type: 'done', sessionId, turnId, reason: 'aborted' });
@@ -349,29 +391,39 @@ export class ChatManager {
   }
 
   /**
-   * Session agent du tour : réutilisée si le runtime n'a pas changé, sinon
-   * recréée avec l'historique courant (ou celui à rétablir).
+   * Session agent du tour : réutilisée si ni le runtime ni le modèle n'ont
+   * changé, sinon recréée avec l'historique courant (ou celui à rétablir).
    */
   async #agentSession(
     session: SessionSummary,
     runtime: SessionRuntime,
     resetHistory: readonly ModelMessage[] | undefined,
+    model: string,
   ): Promise<AgentSessionLike> {
     const generation = this.#o.agents.generation();
-    if (runtime.agent && runtime.agent.generation === generation && !resetHistory) {
-      return runtime.agent.session;
+    const current = runtime.agent;
+    if (current && current.generation === generation && current.model === model && !resetHistory) {
+      return current.session;
     }
-    // Recréation après un changement de runtime : on garde la consommation du dernier tour.
-    const lastInputTokens = resetHistory ? undefined : runtime.agent?.session.lastInputTokens;
+    // Recréation (Réglages LLM ou modèle changés) : la consommation du dernier tour
+    // suit, pour que la compaction passe avant l'appel si la fenêtre du nouveau
+    // modèle est plus petite.
+    const lastInputTokens = resetHistory ? undefined : current?.session.lastInputTokens;
     const created = await this.#o.agents.createSession({
       sessionId: session.id,
       workspace: session.workspace,
+      model,
       requestPermission: this.#o.permissions.handlerFor(session.id),
       history: resetHistory ?? this.#currentHistory(runtime, session.id),
       ...(lastInputTokens !== undefined ? { lastInputTokens } : {}),
     });
-    runtime.agent = { session: created, generation };
+    runtime.agent = { session: created, generation, model };
     return created;
+  }
+
+  /** Modèle de la conversation, sinon le modèle par défaut des Réglages. */
+  #modelOf(session: SessionSummary): string {
+    return session.model ?? this.#o.defaultModel?.() ?? '';
   }
 
   /** Historique modèle : session agent, sinon persisté, sinon reconstruit depuis l'affichage. */

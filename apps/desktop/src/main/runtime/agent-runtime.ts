@@ -1,8 +1,10 @@
 /**
- * Runtime de l'agent (fabrique `createAgentRuntime` d'agent-core) branché sur
- * la VM, le web, les skills et MCP. Recréé quand les Réglages LLM changent :
- * chaque session agent porte la génération du runtime qui l'a créée, et le
- * `ChatManager` la recrée (avec son historique) entre deux tours.
+ * Runtimes de l'agent (fabrique `createAgentRuntime` d'agent-core) branchés sur
+ * la VM, le web, les skills et MCP. Un runtime par modèle (#13) : chacun lit la
+ * fenêtre de contexte de son modèle et choisit sa vision (D4). Ils sont recréés
+ * quand les Réglages LLM changent : chaque session agent porte la génération
+ * qui l'a créée, et le `ChatManager` la recrée (avec son historique) entre
+ * deux tours.
  */
 import {
   createAgentRuntime,
@@ -22,6 +24,7 @@ import {
   AtelierError,
   type AnyToolDefinition,
   type AppSettings,
+  type ModelCapability,
   type SearchProvider,
   type SearchProviderId,
   type SkillInfo,
@@ -31,6 +34,9 @@ import type { SandboxManager } from './sandbox-manager.js';
 
 /** Fenêtre supposée avant que le runtime ait lu celle du serveur (plancher d'agent-core). */
 const FALLBACK_CONTEXT_WINDOW = 32_768;
+
+/** Runtimes gardés en cache (les modèles les plus récemment utilisés). */
+export const MAX_RUNTIMES = 3;
 
 type SecretGetter = (
   id: 'llm_token' | 'ollama_search_key' | 'brave_search_key',
@@ -43,7 +49,29 @@ export interface AgentRuntimeHostOptions {
   mcp: McpManager;
   /** Outils supplémentaires (ex. `read_file` multi-format de documents). */
   extraTools?: () => readonly AnyToolDefinition[];
+  /** Capacités d'un modèle (choix de la vision, D4) ; `undefined` : inconnues. */
+  capabilities?: (model: string) => Promise<readonly ModelCapability[] | undefined>;
+  /** Fabrique des runtimes (tests). Défaut : `createAgentRuntime` d'agent-core. */
+  createRuntime?: typeof createAgentRuntime;
   log?: (message: string, data?: Record<string, unknown>) => void;
+}
+
+/**
+ * Modèle qui lit les images d'une conversation (D4 de #13) : le modèle vision
+ * des Réglages s'il est défini ; sinon le modèle de la conversation s'il a la
+ * capacité `vision` ou si ses capacités sont inconnues ; sinon aucun (les outils
+ * de documents expliquent alors comment en obtenir un).
+ */
+export function visionModelFor(options: {
+  visionModel: string | undefined;
+  model: string;
+  capabilities: readonly ModelCapability[] | undefined;
+}): string | undefined {
+  if (options.visionModel) return options.visionModel;
+  if (options.capabilities === undefined || options.capabilities.includes('vision')) {
+    return options.model;
+  }
+  return undefined;
 }
 
 /** Fournisseurs de recherche suivant les Réglages (repli : ceux qui ont une clé). */
@@ -76,11 +104,12 @@ export function searchProviders(
   };
 }
 
-/** Héberge le runtime courant et crée les sessions agent. */
+/** Héberge les runtimes (un par modèle) et crée les sessions agent. */
 export class AgentRuntimeHost implements AgentSessionFactory {
   readonly #o: AgentRuntimeHostOptions;
   readonly #webTools: AnyToolDefinition[];
-  #runtime: Promise<AgentRuntime> | undefined;
+  /** Runtimes par modèle, du moins au plus récemment utilisé (ordre d'insertion). */
+  readonly #runtimes = new Map<string, Promise<AgentRuntime>>();
   #generation = 0;
   #skills: readonly SkillInfo[] = [];
 
@@ -93,22 +122,24 @@ export class AgentRuntimeHost implements AgentSessionFactory {
     return this.#generation;
   }
 
-  /** Les Réglages LLM ou le token ont changé : le prochain tour utilisera un nouveau runtime. */
+  /** Les Réglages LLM ou le token ont changé : le prochain tour utilisera de nouveaux runtimes. */
   invalidate(): void {
-    this.#runtime = undefined;
+    this.#runtimes.clear();
     this.#generation += 1;
   }
 
-  /** Le serveur est revenu : relit la fenêtre de contexte si elle avait été devinée. */
+  /** Le serveur est revenu : relit la fenêtre de contexte de chaque runtime qui l'avait devinée. */
   async refreshIfFallback(): Promise<void> {
-    const pending = this.#runtime;
-    if (!pending) return;
-    try {
-      const runtime = await pending;
-      if (runtime.contextWindowSource === 'fallback') await runtime.refreshContextWindow();
-    } catch {
-      // Runtime invalide : l'erreur ressortira au prochain tour.
-    }
+    await Promise.all(
+      [...this.#runtimes.values()].map(async (pending) => {
+        try {
+          const runtime = await pending;
+          if (runtime.contextWindowSource === 'fallback') await runtime.refreshContextWindow();
+        } catch {
+          // Runtime invalide : l'erreur ressortira au prochain tour.
+        }
+      }),
+    );
   }
 
   /** Prépare un tour : dossier monté dans la VM, réseau de la session, skills relus. */
@@ -123,7 +154,7 @@ export class AgentRuntimeHost implements AgentSessionFactory {
   }
 
   async createSession(options: NewAgentSession): Promise<AgentSessionLike> {
-    const runtime = await this.#current();
+    const runtime = await this.#runtimeFor(options.model);
     return runtime.createSession({
       sessionId: options.sessionId,
       workspace: options.workspace,
@@ -135,42 +166,61 @@ export class AgentRuntimeHost implements AgentSessionFactory {
     });
   }
 
-  #current(): Promise<AgentRuntime> {
-    if (!this.#runtime) {
-      const created = this.#create();
-      // Un échec (URL invalide) n'est pas mis en cache : réessayé au tour suivant.
-      created.catch(() => {
-        if (this.#runtime === created) this.#runtime = undefined;
-      });
-      this.#runtime = created;
+  /** Runtime du modèle : réutilisé (et marqué récent), sinon créé en évinçant le plus ancien. */
+  #runtimeFor(model: string): Promise<AgentRuntime> {
+    const cached = this.#runtimes.get(model);
+    if (cached) {
+      this.#runtimes.delete(model);
+      this.#runtimes.set(model, cached);
+      return cached;
     }
-    return this.#runtime;
+    const created = this.#create(model);
+    // Un échec (URL invalide) n'est pas mis en cache : réessayé au tour suivant.
+    created.catch(() => {
+      if (this.#runtimes.get(model) === created) this.#runtimes.delete(model);
+    });
+    this.#runtimes.set(model, created);
+    // Un runtime évincé reste utilisable par les sessions qui le tiennent déjà.
+    for (const oldest of this.#runtimes.keys()) {
+      if (this.#runtimes.size <= MAX_RUNTIMES) break;
+      this.#runtimes.delete(oldest);
+    }
+    return created;
   }
 
-  #create(): Promise<AgentRuntime> {
-    const { baseUrl, model, thinking, numCtx, visionModel } = this.#o.settings().llm;
+  async #create(model: string): Promise<AgentRuntime> {
+    const { baseUrl, thinking, numCtx, visionModel } = this.#o.settings().llm;
     if (baseUrl === '') {
-      return Promise.reject(
-        new AtelierError('llm/unreachable', 'Aucun serveur configuré.', {
-          details: { kind: 'server_not_configured' },
-        }),
-      );
+      throw new AtelierError('llm/unreachable', 'Aucun serveur configuré.', {
+        details: { kind: 'server_not_configured' },
+      });
     }
     const token = this.#o.secret('llm_token');
     const { mcp, sandbox } = this.#o;
-    // Vision : modèle principal (multimodal) ou modèle vision des Réglages, thinking coupé.
-    const vision = createVisionAnalyzer({
-      model: createLlmModels({
-        baseUrl,
-        model: visionModel ?? model,
-        thinking: false,
-        ...(token ? { token } : {}),
-      }).fastModel,
+    // Vision (D4) : sans modèle capable de lire les images, les outils de
+    // documents l'expliquent à l'utilisateur au lieu d'appeler le serveur.
+    const visionTarget = visionModelFor({
+      visionModel,
+      model,
+      capabilities: visionModel
+        ? undefined
+        : await this.#o.capabilities?.(model).catch(() => undefined),
     });
+    // Thinking coupé pour la vision.
+    const vision = visionTarget
+      ? createVisionAnalyzer({
+          model: createLlmModels({
+            baseUrl,
+            model: visionTarget,
+            thinking: false,
+            ...(token ? { token } : {}),
+          }).fastModel,
+        })
+      : undefined;
     // Budget de sortie de read_file : relu à chaque appel, il suit la fenêtre de
     // contexte résolue par le runtime (après sa création, et à chaque refresh).
     let runtime: AgentRuntime | undefined;
-    const created = createAgentRuntime({
+    const created = (this.#o.createRuntime ?? createAgentRuntime)({
       llm: {
         baseUrl,
         model,
@@ -180,7 +230,7 @@ export class AgentRuntimeHost implements AgentSessionFactory {
       },
       tools: [
         ...createDocumentTools({
-          vision,
+          ...(vision ? { vision } : {}),
           maxOutputTokens: () =>
             outputTokensForContext(runtime?.contextWindow ?? FALLBACK_CONTEXT_WINDOW),
           // SKILL.md lisible en lecture seule hors du dossier de travail (#60).

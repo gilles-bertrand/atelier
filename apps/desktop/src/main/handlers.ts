@@ -7,10 +7,11 @@ import { homedir } from 'node:os';
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { importAttachments } from '@atelier/documents';
 import { parseMcpConfigText, type McpManager } from '@atelier/mcp-bridge';
-import { listModels, testConnection, type FetchFunction } from '@atelier/agent-core';
+import { testConnection, type FetchFunction } from '@atelier/agent-core';
 import { loadSkills } from '@atelier/skills';
 import { AtelierError, type AppHealth, type SecretId } from '@atelier/shared';
 import type { IpcHandlers } from './ipc.js';
+import type { ModelCatalog } from './llm/model-catalog.js';
 import type { ServerMonitor } from './llm/server-monitor.js';
 import type { ChatManager } from './runtime/chat-manager.js';
 import { resolveOpenable } from './safe-open.js';
@@ -31,6 +32,8 @@ export interface HandlerServices {
   settings: SettingsStore;
   secrets: SecretsStore;
   monitor: ServerMonitor;
+  /** Modèles du serveur : liste enrichie et cache des détails (#13). */
+  models: Pick<ModelCatalog, 'list'>;
   chats: ChatManager;
   /** Registre de consommation (Réglages › Utilisation) ; absent : statistiques vides. */
   usage?: UsageStore;
@@ -143,14 +146,7 @@ export function createHandlers(s: HandlerServices): IpcHandlers {
         ...(numCtx !== undefined ? { numCtx } : {}),
       });
     },
-    'llm:list-models': async () => {
-      const token = s.secrets.get('llm_token');
-      const { models } = await listModels({
-        baseUrl: s.settings.get().llm.baseUrl,
-        ...(token ? { token } : {}),
-      });
-      return models;
-    },
+    'llm:list-models': () => s.models.list(),
     'llm:status': () => s.monitor.status(),
 
     // --- Dossiers et sessions
@@ -167,6 +163,7 @@ export function createHandlers(s: HandlerServices): IpcHandlers {
     'session:create': async ({ workspace }) =>
       s.chats.create(await assertWorkspace(workspace, home)),
     'session:open': ({ sessionId }) => s.chats.open(sessionId),
+    'session:set-model': ({ sessionId, model }) => s.chats.setModel(sessionId, model),
     'session:delete': async ({ sessionId }) => {
       await s.chats.delete(sessionId);
       return undefined;
