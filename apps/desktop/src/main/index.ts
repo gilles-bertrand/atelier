@@ -17,7 +17,8 @@ import { ChatManager } from './runtime/chat-manager.js';
 import { PermissionBroker } from './runtime/permission-broker.js';
 import { SandboxManager } from './runtime/sandbox-manager.js';
 import { InMemorySessionStore, type SessionStore } from './runtime/session-store.js';
-import { SqliteSessionStore } from './runtime/sqlite-store.js';
+import { openDatabase, SqliteSessionStore } from './runtime/sqlite-store.js';
+import { InMemoryUsageStore, SqliteUsageStore, type UsageStore } from './runtime/usage-store.js';
 import { SecretsStore } from './settings/secrets-store.js';
 import { SettingsStore } from './settings/settings-store.js';
 
@@ -205,13 +206,18 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
   });
 
   // Historique persistant ; si la base est inutilisable, l'app reste utilisable (en mémoire).
+  // Même base pour le registre de consommation (ADR-001) : statistiques locales uniquement.
   let store: SessionStore;
+  let usage: UsageStore;
   let health: AppHealth = { historyPersistent: true };
   try {
-    store = await SqliteSessionStore.open(join(paths.userData, 'atelier.db'));
+    const db = await openDatabase(join(paths.userData, 'atelier.db'));
+    store = new SqliteSessionStore(db);
+    usage = new SqliteUsageStore(db);
   } catch (error) {
     log('historique SQLite indisponible, conversations gardées en mémoire', error);
     store = new InMemorySessionStore();
+    usage = new InMemoryUsageStore();
     health = {
       historyPersistent: false,
       historyError: error instanceof Error ? error.message : String(error),
@@ -229,6 +235,9 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
     onLlmError: () => {
       void monitor.check();
     },
+    usage,
+    model: () => settings.get().llm.model,
+    log,
   });
 
   settings.onChange((next, previous) => {

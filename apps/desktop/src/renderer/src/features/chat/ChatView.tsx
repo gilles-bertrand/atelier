@@ -18,6 +18,7 @@ import { useChat, useSessionView } from '@renderer/state/chat-store';
 import { deriveSessionTitle } from '../../../../common/chat-reducer';
 import { headerInset, SidebarOpenButton, useShellChrome } from '../sidebar/shell-chrome';
 import { Composer, type PendingAttachment } from './Composer';
+import { ContextGauge } from './ContextGauge';
 import { MessageList } from './MessageList';
 import { SidePanel } from './SidePanel';
 
@@ -225,6 +226,7 @@ export function ChatView({
             running={running}
             disabled={!view.loaded}
             importing={importing}
+            status={<ContextGauge sessionId={session.id} />}
           />
         </div>
         {panelOpen ? <SidePanel id={panelId} view={view} /> : null}

@@ -10,9 +10,11 @@ import { McpSettings, SkillsSettings } from './ExtensionsSettings';
 import { SandboxSettings } from './SandboxSettings';
 import { SearchSettings } from './SearchSettings';
 import { ServerSettings } from './ServerSettings';
+import { UsageSettings } from './UsageSettings';
 
 const SECTIONS = [
   { id: 'server', label: 'Serveur et modèle' },
+  { id: 'usage', label: 'Utilisation' },
   { id: 'sandbox', label: 'Machine isolée' },
   { id: 'search', label: 'Recherche web' },
   { id: 'skills', label: 'Skills' },
@@ -82,6 +84,7 @@ export function Settings({ onClose }: { onClose: () => void }) {
         <main className="flex-1 overflow-y-auto">
           <div className="mx-auto w-full max-w-2xl space-y-6 px-6 py-6">
             {section === 'server' ? <ServerSettings /> : null}
+            {section === 'usage' ? <UsageSettings /> : null}
             {section === 'sandbox' ? <SandboxSettings /> : null}
             {section === 'search' ? <SearchSettings /> : null}
             {section === 'skills' ? <SkillsSettings /> : null}
