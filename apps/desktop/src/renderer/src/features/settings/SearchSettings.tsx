@@ -38,7 +38,7 @@ function KeyField({
       <Label htmlFor={inputId}>
         {label}
         {present ? (
-          <span className="ml-2 text-xs font-normal text-emerald-700">configurée</span>
+          <span className="ml-2 text-xs font-normal text-success-text">configurée</span>
         ) : null}
       </Label>
       <div className="flex gap-2">
@@ -111,7 +111,7 @@ export function SearchSettings() {
               onChange={() =>
                 void action.run(() => actions.updateSettings({ search: { provider: p.id } }))
               }
-              className="mt-0.5 size-4 accent-primary"
+              className="mt-0.5 size-4 accent-brand"
             />
             <span>
               <span className="font-medium">{p.label}</span>

@@ -29,6 +29,34 @@ export function hostname(url: string): string {
   }
 }
 
+/**
+ * Repère d'un site (initiale et teinte stable, calculées à partir du domaine) :
+ * remplace la favicon sans aucune requête vers le site cité.
+ * `fr.wikipedia.org` → `W`, `statbel.fgov.be` → `S`.
+ */
+export function siteMark(url: string): { initial: string; hue: number } {
+  const labels = hostname(url).split('.').filter(Boolean);
+  // Sous-domaine de langue ou mobile (fr., en., m.) : le nom du site vient après.
+  const main = (labels.length > 2 && (labels[0]?.length ?? 0) <= 2 ? labels[1] : labels[0]) ?? url;
+  let hue = 0;
+  for (const char of main) hue = (hue * 31 + (char.codePointAt(0) ?? 0)) % 360;
+  const initial = /[\p{L}\p{N}]/u.exec(main)?.[0] ?? '?';
+  return { initial: initial.toLocaleUpperCase('fr'), hue };
+}
+
+/**
+ * Nom du skill dont `read_file` lit le SKILL.md (`skills/xlsx/SKILL.md` → `xlsx`),
+ * chaîne vide pour un SKILL.md sans dossier, `undefined` pour un autre fichier.
+ */
+export function skillName(input: unknown): string | undefined {
+  const path = field(input, 'path');
+  if (!path) return undefined;
+  const parts = path.split(/[\\/]/).filter(Boolean);
+  // Nom exact du loader de skills : un « skill.md » quelconque reste une lecture ordinaire.
+  if (parts.at(-1) !== 'SKILL.md') return undefined;
+  return parts.at(-2) ?? '';
+}
+
 /** URL http(s) sûre à ouvrir dans le navigateur, sinon `undefined`. */
 export function safeHttpUrl(raw: string | undefined): string | undefined {
   if (!raw) return undefined;
@@ -45,8 +73,12 @@ export function toolLabel(toolName: string, input: unknown): string {
   const path = field(input, 'path');
   const name = path ? fileName(path) : undefined;
   switch (toolName) {
-    case 'read_file':
+    case 'read_file': {
+      const skill = skillName(input);
+      if (skill !== undefined)
+        return skill ? `Consultation du skill ${skill}` : 'Consultation d’un skill';
       return name ? `Lecture de ${name}` : 'Lecture d’un fichier';
+    }
     case 'write_file':
       return name ? `Écriture de ${name}` : 'Écriture d’un fichier';
     case 'edit_file':

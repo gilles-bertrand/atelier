@@ -43,7 +43,7 @@ pnpm dist:mac                # build signé arm64 (variables de signature : voir
 pnpm dist:mac:adhoc          # build arm64 sans certificat (signature ad hoc, démo : voir docs/DEMO.md)
 ```
 
-Avant chaque PR : `pnpm test && pnpm lint && pnpm typecheck` doivent passer (la CI les rejoue sur `macos-14` arm64).
+Avant chaque PR : `pnpm test && pnpm lint && pnpm typecheck` doivent passer (la CI les rejoue sur `macos-15` arm64).
 
 ## Conventions
 

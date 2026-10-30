@@ -122,6 +122,12 @@ export async function launchAtelier(options: LaunchOptions): Promise<AtelierApp>
 
   const page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
+  // Diagnostic : taille de l'écran et de la fenêtre (colonne de gauche masquée sous 1100 px).
+  const geometry = await app.evaluate(({ BrowserWindow, screen }) => ({
+    workArea: screen.getPrimaryDisplay().workAreaSize,
+    window: BrowserWindow.getAllWindows()[0]?.getBounds(),
+  }));
+  logs.push(`[e2e] écran et fenêtre : ${JSON.stringify(geometry)}\n`);
   // Diagnostic : un plantage ou une fermeture inattendue apparaît dans main.log.
   const stamp = (): string => new Date().toISOString().slice(11, 23);
   page.on('crash', () => logs.push(`[e2e ${stamp()}] plantage du renderer\n`));
@@ -145,6 +151,19 @@ export async function launchAtelier(options: LaunchOptions): Promise<AtelierApp>
       }
     },
   };
+}
+
+/**
+ * Colonne de gauche, rouverte si elle est masquée : sous 1100 px de large (écran
+ * des runners macos-15), elle se masque d'elle-même.
+ */
+export async function sidebar(page: Page) {
+  const nav = page.getByRole('navigation', { name: 'Barre latérale' });
+  const reopen = page.getByRole('button', { name: 'Afficher la barre latérale' });
+  await expect(nav.or(reopen).first()).toBeVisible();
+  if (await reopen.isVisible()) await reopen.click();
+  await expect(nav).toBeVisible();
+  return nav;
 }
 
 /** Ouvre une nouvelle conversation sur le dossier de travail de test. */

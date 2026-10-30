@@ -38,6 +38,27 @@ export function changedFiles(messages: readonly ChatMessage[]): FileCardData[] {
   return [...byPath.values()].reverse();
 }
 
+/**
+ * Nombre de passages de chaque fichier dans la conversation (par chemin absolu) :
+ * l'aperçu se recharge dès qu'un outil retouche le fichier.
+ */
+export function fileRevisions(messages: readonly ChatMessage[]): Map<string, number> {
+  const revisions = new Map<string, number>();
+  for (const message of messages) {
+    for (const part of message.parts) {
+      if (part.type !== 'tool_call') continue;
+      const files = [
+        ...(part.display?.type === 'file' ? [part.display.file] : []),
+        ...(part.files ?? []),
+      ];
+      for (const file of files) {
+        revisions.set(file.absolutePath, (revisions.get(file.absolutePath) ?? 0) + 1);
+      }
+    }
+  }
+  return revisions;
+}
+
 function Section({
   title,
   icon: Icon,

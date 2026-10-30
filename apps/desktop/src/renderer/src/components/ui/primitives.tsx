@@ -42,12 +42,10 @@ export function Card({ className, ...props }: ComponentProps<'section'>) {
 type Tone = 'info' | 'success' | 'warning' | 'error';
 
 const TONE_STYLES: Record<Tone, string> = {
-  info: 'border-border bg-muted/40 text-foreground',
-  success:
-    'border-emerald-600/30 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100',
-  warning:
-    'border-amber-600/30 bg-amber-50 text-amber-950 dark:bg-amber-950/40 dark:text-amber-100',
-  error: 'border-destructive/40 bg-destructive/5 text-destructive',
+  info: 'border-info/30 bg-info-soft text-info-text',
+  success: 'border-success/30 bg-success-soft text-success-text',
+  warning: 'border-warning/40 bg-warning-soft text-warning-text',
+  error: 'border-destructive/40 bg-destructive-soft text-destructive-text',
 };
 
 const TONE_ICONS: Record<Tone, ReactNode> = {
@@ -98,7 +96,7 @@ export function Progress({ value, label }: { value?: number | undefined; label: 
     >
       <div
         className={cn(
-          'h-full rounded-full bg-primary transition-[width] duration-500',
+          'h-full rounded-full bg-brand transition-[width] duration-500',
           percent === undefined && 'w-1/3 animate-pulse',
         )}
         style={percent !== undefined ? { width: `${String(percent)}%` } : undefined}
@@ -127,7 +125,7 @@ export function Switch({
       }}
       className={cn(
         'relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50',
-        checked ? 'bg-primary' : 'bg-input',
+        checked ? 'bg-brand' : 'bg-input',
         className,
       )}
       {...props}

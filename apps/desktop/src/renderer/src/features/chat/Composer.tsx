@@ -1,10 +1,12 @@
 /**
- * Zone de saisie : texte, pièces jointes en attente (vignettes pour les images),
+ * Zone de saisie : texte, pièces jointes en attente (vignettes pour les images,
+ * tuile typée pour les autres), trombone pour joindre sans glisser-déposer,
  * envoi (Entrée) ou arrêt du tour en cours.
  */
-import { useId, useRef, type KeyboardEvent, type ReactNode } from 'react';
-import { ArrowUp, FileText, Square, X } from 'lucide-react';
+import { useId, useRef, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
+import { ArrowUp, Paperclip, Square, X } from 'lucide-react';
 import type { Attachment } from '@atelier/shared';
+import { FileTypeIcon } from '@renderer/components/FileTypeIcon';
 import { Button } from '@renderer/components/ui/button';
 import { formatBytes } from '@renderer/lib/format';
 
@@ -27,6 +29,8 @@ export function Composer({
   status,
   notice,
   footer,
+  onAddFiles,
+  textareaRef,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -43,10 +47,16 @@ export function Composer({
   notice?: ReactNode;
   /** Avertissement non bloquant sous la saisie (modèle à froid…). */
   footer?: ReactNode;
+  /** Fichiers choisis avec le trombone (même import que le glisser-déposer). */
+  onAddFiles?: (files: File[]) => void;
+  /** Champ de saisie, pour y placer le curseur depuis la vue (suggestions). */
+  textareaRef?: RefObject<HTMLTextAreaElement | null>;
 }) {
   const inputId = useId();
   const hintId = useId();
-  const textarea = useRef<HTMLTextAreaElement>(null);
+  const ownTextarea = useRef<HTMLTextAreaElement>(null);
+  const textarea = textareaRef ?? ownTextarea;
+  const fileInput = useRef<HTMLInputElement>(null);
   const canSend =
     !running && !disabled && !importing && (value.trim() !== '' || attachments.length > 0);
 
@@ -71,9 +81,11 @@ export function Composer({
                   {pending.previewUrl ? (
                     <img src={pending.previewUrl} alt="" className="size-9 rounded object-cover" />
                   ) : (
-                    <span className="flex size-9 items-center justify-center rounded bg-muted">
-                      <FileText className="size-4 text-muted-foreground" aria-hidden />
-                    </span>
+                    <FileTypeIcon
+                      name={pending.attachment.name}
+                      mimeType={pending.attachment.mimeType}
+                      className="h-9"
+                    />
                   )}
                   <span className="max-w-40">
                     <span className="block truncate font-medium">{pending.attachment.name}</span>
@@ -114,10 +126,41 @@ export function Composer({
             className="block max-h-60 min-h-14 w-full resize-none bg-transparent px-4 py-3 text-sm outline-none placeholder:text-muted-foreground [field-sizing:content] disabled:opacity-50"
           />
           <div className="flex items-center justify-between gap-2 px-3 pb-2.5">
-            <p id={hintId} className="text-xs text-muted-foreground">
+            {onAddFiles ? (
+              <>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  aria-label="Joindre des fichiers"
+                  title="Joindre des fichiers (ou glissez-les dans la conversation)"
+                  disabled={disabled || importing}
+                  onClick={() => fileInput.current?.click()}
+                  className="size-8 shrink-0 text-muted-foreground"
+                >
+                  <Paperclip className="size-4" aria-hidden />
+                </Button>
+                <input
+                  ref={fileInput}
+                  type="file"
+                  multiple
+                  hidden
+                  tabIndex={-1}
+                  aria-hidden
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files ?? []);
+                    // Rechoisir le même fichier doit redéclencher l'import.
+                    e.target.value = '';
+                    if (files.length > 0) onAddFiles(files);
+                  }}
+                />
+              </>
+            ) : null}
+            <p id={hintId} className="min-w-0 flex-1 text-xs text-muted-foreground">
               {importing
                 ? 'Import des fichiers…'
-                : 'Entrée pour envoyer, Maj + Entrée pour aller à la ligne. Glissez des fichiers ici.'}
+                : onAddFiles
+                  ? 'Entrée pour envoyer, Maj + Entrée pour aller à la ligne.'
+                  : 'Entrée pour envoyer, Maj + Entrée pour aller à la ligne. Glissez des fichiers ici.'}
             </p>
             <div className="flex shrink-0 items-center gap-1">
               {status}

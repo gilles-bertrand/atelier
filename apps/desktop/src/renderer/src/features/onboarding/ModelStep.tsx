@@ -111,7 +111,7 @@ export function ModelStep({
                     !usable
                       ? 'cursor-not-allowed opacity-60'
                       : checked
-                        ? 'cursor-pointer border-primary bg-accent'
+                        ? 'cursor-pointer border-brand bg-brand-soft'
                         : 'cursor-pointer hover:bg-accent/60',
                   )}
                 >
@@ -124,7 +124,7 @@ export function ModelStep({
                     onChange={() => {
                       setModel(m.name);
                     }}
-                    className="size-4 accent-primary"
+                    className="size-4 accent-brand"
                   />
                   <span className="flex-1">
                     <span className="font-medium">{m.name}</span>
@@ -170,7 +170,7 @@ export function ModelStep({
           onChange={(e) => {
             setThinking(e.target.checked);
           }}
-          className="mt-0.5 size-4 accent-primary"
+          className="mt-0.5 size-4 accent-brand"
           aria-describedby={`${thinkingId}-hint`}
         />
         <div className="space-y-1">

@@ -4,9 +4,11 @@
  * des commandes de la conversation ouverte.
  */
 import { useId, useState } from 'react';
-import { ChevronUp, Cpu, Globe, Loader2, Server } from 'lucide-react';
+import { ChevronUp, Cpu, Globe, Server } from 'lucide-react';
 import type { SandboxStatus, ServerStatus, SessionSummary } from '@atelier/shared';
 import { serverStatusText } from '@renderer/components/status/ServerStatusBadge';
+import { StatusDot, type StatusTone } from '@renderer/components/status/StatusDot';
+import { Switch } from '@renderer/components/ui/primitives';
 import { call, toSerializedError } from '@renderer/lib/api';
 import { errorMessage } from '@renderer/lib/error-messages';
 import { cn } from '@renderer/lib/utils';
@@ -21,24 +23,18 @@ export const VM_LABELS: Record<SandboxStatus['state'], string> = {
   error: 'Indisponible',
 };
 
-const VM_DOTS: Record<SandboxStatus['state'], string> = {
-  absent: 'bg-muted-foreground/50',
-  stopped: 'bg-muted-foreground/50',
-  starting: 'bg-amber-500',
-  provisioning: 'bg-amber-500',
-  ready: 'bg-emerald-500',
-  restarting: 'bg-amber-500',
-  error: 'bg-red-500',
+export const VM_TONES: Record<SandboxStatus['state'], StatusTone> = {
+  absent: 'idle',
+  stopped: 'idle',
+  starting: 'busy',
+  provisioning: 'busy',
+  ready: 'ok',
+  restarting: 'busy',
+  error: 'error',
 };
 
-const BUSY_STATES: readonly SandboxStatus['state'][] = ['starting', 'provisioning', 'restarting'];
-
 function VmDot({ state }: { state: SandboxStatus['state'] }) {
-  return BUSY_STATES.includes(state) ? (
-    <Loader2 className="size-3.5 animate-spin text-muted-foreground" aria-hidden />
-  ) : (
-    <span className={cn('size-2 rounded-full', VM_DOTS[state])} aria-hidden />
-  );
+  return <StatusDot tone={VM_TONES[state]} />;
 }
 
 export function EnvironmentStatus({
@@ -152,26 +148,14 @@ export function EnvironmentStatus({
                 {hint}
               </p>
             </div>
-            <button
+            <Switch
               id={switchId}
-              type="button"
-              role="switch"
-              aria-checked={networkOn}
+              checked={networkOn}
               aria-describedby={`${switchId}-hint`}
               disabled={busy || sandbox.state !== 'ready' || !mountedHere}
-              onClick={() => void toggleNetwork(!networkOn)}
-              className={cn(
-                'relative mt-0.5 inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50',
-                networkOn ? 'bg-primary' : 'bg-input',
-              )}
-            >
-              <span
-                className={cn(
-                  'inline-block size-4 rounded-full bg-background shadow transition-transform',
-                  networkOn ? 'translate-x-4' : 'translate-x-0.5',
-                )}
-              />
-            </button>
+              onCheckedChange={(enabled) => void toggleNetwork(enabled)}
+              className="mt-0.5"
+            />
           </div>
           {error ? (
             <p role="alert" className="text-xs text-destructive">
