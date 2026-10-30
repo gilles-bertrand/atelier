@@ -7,7 +7,10 @@ import type { AtelierErrorCode } from './errors.js';
 export interface LlmServerConfig {
   /** URL de base du serveur, sans `/v1` (ex. `https://llm.example.com`). */
   baseUrl: string;
-  /** Modèle principal (défaut `qwen3.5:35b`). */
+  /**
+   * Modèle par défaut des nouvelles conversations (défaut `qwen3.5:35b`).
+   * Chaque conversation peut en choisir un autre (`SessionSummary.model`).
+   */
   model: string;
   /** Mode « thinking » de Qwen activé. */
   thinking: boolean;
@@ -35,7 +38,22 @@ export const MODEL_PROFILES = [
   { model: 'qwen3.5:122b', label: 'Maximal (96 Go et plus)', minMemoryGiB: 96 },
 ] as const;
 
-/** Modèle disponible sur le serveur (issu de `/api/tags`). */
+/**
+ * Capacité d'un modèle, telle qu'annoncée par Ollama (`/api/show`, champ `capabilities`).
+ * `tools` est requise pour piloter Atelier (lecture de fichiers, commandes).
+ */
+export type ModelCapability = 'completion' | 'tools' | 'vision' | 'thinking' | 'embedding';
+
+/** Toutes les capacités connues, dans l'ordre d'affichage. */
+export const MODEL_CAPABILITIES = [
+  'completion',
+  'tools',
+  'vision',
+  'thinking',
+  'embedding',
+] as const satisfies readonly ModelCapability[];
+
+/** Modèle disponible sur le serveur (issu de `/api/tags`, enrichi par `/api/show` et `/api/ps`). */
 export interface LlmModelInfo {
   /** Nom complet (ex. `qwen3.5:35b`). */
   name: string;
@@ -44,6 +62,12 @@ export interface LlmModelInfo {
   /** Famille / quantification, si connues. */
   family?: string;
   quantization?: string;
+  /** Capacités annoncées (`/api/show`). Absent : inconnues (par exemple avec vLLM). */
+  capabilities?: ModelCapability[];
+  /** Fenêtre de contexte effective (`/api/show`). */
+  contextWindow?: number;
+  /** Modèle en mémoire sur le serveur (`/api/ps`). Absent : inconnu. */
+  loaded?: boolean;
 }
 
 /** Résultat du bouton « Tester la connexion ». */

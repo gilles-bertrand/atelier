@@ -12,6 +12,8 @@ const MESSAGES: Record<AtelierErrorCode, string> = {
     'Adresse refusée : utilisez https:// (http:// est accepté seulement pour localhost et Tailscale).',
   'llm/timeout': 'Le serveur met trop de temps à répondre.',
   'llm/bad_response': 'Le serveur a répondu de façon inattendue. Est-ce bien un serveur Ollama ?',
+  'llm/model_unsupported':
+    'Ce modèle ne sait pas utiliser les outils d’Atelier (lecture de fichiers, commandes). Choisissez-en un autre.',
   'agent/aborted': 'Arrêté.',
   'agent/max_steps':
     'L’assistant s’est arrêté après trop d’étapes. Reformulez ou découpez la demande.',
