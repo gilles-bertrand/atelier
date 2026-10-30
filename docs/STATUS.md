@@ -24,12 +24,12 @@ _Dernière mise à jour : 2026-10-29, Lead._
 - `apps/desktop` : Electron 45 + electron-vite 6 + React 19 + Tailwind 4 + shadcn/ui (Button, `cn`, thème neutral), preload `sandbox: true` avec liste blanche des canaux IPC, CSP stricte en production. L'app démarre sur un écran vide (vérifié en local).
 - `apps/desktop/electron-builder.yml` : mac arm64 (dmg + zip), hardened runtime, notarisation via variables d'env.
 - `server/` : `docker-compose.yml` (Ollama GPU NVIDIA + Caddy), `Caddyfile` (TLS, Bearer, rate limit, liste blanche des routes), `Modelfile` `atelier`, `.env.example`, `healthcheck.sh`. Documentation : `docs/SERVER.md`.
-- CI GitHub Actions (`macos-14`) : format, lint, typecheck, test, build.
+- CI GitHub Actions (`macos-15`) : format, lint, typecheck, test, build.
 
 ## Dépôt et CI
 
 - Dépôt **public** : https://github.com/gilles-bertrand/atelier (public pour bénéficier des runners macOS gratuits).
-- CI verte sur `main` (macos-14 : format, lint, typecheck, test, build).
+- CI verte sur `main` (macos-15 : format, lint, typecheck, test, build).
 - Ne committez jamais de secret ni de config locale (`.env`, `.mcp.json`, `.agentsroom/`).
 
 ## Notes du Lead pour les agents
