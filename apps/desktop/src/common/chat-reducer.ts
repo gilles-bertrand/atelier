@@ -42,6 +42,8 @@ export function createAssistantMessage(options: {
   id: string;
   sessionId: string;
   createdAt: string;
+  /** Modèle qui produit la réponse (séparateur « modèle changé » dans le fil). */
+  model?: string;
 }): ChatMessage {
   return { ...options, role: 'assistant', parts: [] };
 }

@@ -3,13 +3,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { TurnResult } from '@atelier/agent-core';
-import type { AgentEvent, AgentEventSink } from '@atelier/shared';
+import { AtelierError, type AgentEvent, type AgentEventSink } from '@atelier/shared';
 import type { ModelMessage } from 'ai';
 import {
   ChatManager,
   type AgentSessionFactory,
   type AgentSessionLike,
   type ChangeTracker,
+  type ModelValidator,
   type NewAgentSession,
 } from './chat-manager.js';
 import { PermissionBroker } from './permission-broker.js';
@@ -114,6 +115,23 @@ class FakeAgentSession implements AgentSessionLike {
   }
 }
 
+/** Serveur factice : `9b` et `35b` utilisables, `embed` sans outils, le reste absent. */
+class FakeModels implements ModelValidator {
+  readonly checked: string[] = [];
+  assertUsable(model: string): Promise<void> {
+    this.checked.push(model);
+    if (model === 'nomic-embed-text') {
+      return Promise.reject(
+        new AtelierError('llm/model_unsupported', 'sans outils', { details: { missing: 'tools' } }),
+      );
+    }
+    if (!['qwen3.5:9b', 'qwen3.5:35b'].includes(model)) {
+      return Promise.reject(new AtelierError('llm/model_not_found', 'absent'));
+    }
+    return Promise.resolve();
+  }
+}
+
 function setup(
   mode: () => Mode,
   failCreate = false,
@@ -121,7 +139,8 @@ function setup(
   trackChanges?: (workspace: string) => ChangeTracker,
   usage: UsageStore = new InMemoryUsageStore(),
 ) {
-  let model = 'qwen3.5:35b';
+  let defaultModel = 'qwen3.5:35b';
+  const models = new FakeModels();
   const events: AgentEvent[] = [];
   const llmErrors: string[] = [];
   const sent: SentTurn[] = [];
@@ -151,7 +170,8 @@ function setup(
     now: () => new Date('2026-10-28T10:00:00.000Z'),
     ...(trackChanges ? { trackChanges } : {}),
     usage,
-    model: () => model,
+    defaultModel: () => defaultModel,
+    models,
   });
   const wait = async (sessionId: string): Promise<void> => {
     while (chats.isRunning(sessionId)) await new Promise((r) => setTimeout(r, 1));
@@ -159,10 +179,24 @@ function setup(
   const bump = (): void => {
     generation += 1;
   };
-  const setModel = (next: string): void => {
-    model = next;
+  /** Change le modèle par défaut des Réglages. */
+  const setDefault = (next: string): void => {
+    defaultModel = next;
   };
-  return { chats, store, events, llmErrors, sent, created, prepared, wait, bump, usage, setModel };
+  return {
+    chats,
+    store,
+    events,
+    llmErrors,
+    sent,
+    created,
+    prepared,
+    wait,
+    bump,
+    usage,
+    setDefault,
+    models,
+  };
 }
 
 describe('ChatManager', () => {
@@ -339,11 +373,13 @@ describe('ChatManager', () => {
 
   it('enregistre un tour par modèle avec l’usage du TurnResult et le relaie à la réouverture', async () => {
     const usage = new InMemoryUsageStore();
-    const { chats, wait, setModel } = setup(() => 'ok', false, undefined, undefined, usage);
+    const { chats, wait, setDefault } = setup(() => 'ok', false, undefined, undefined, usage);
     const session = chats.create('/w');
     const { turnId } = chats.send(session.id, 'Un');
     await wait(session.id);
-    setModel('qwen3.5:9b');
+    // Le défaut des Réglages ne touche pas une conversation qui a son modèle.
+    setDefault('qwen3.5:122b');
+    await chats.setModel(session.id, 'qwen3.5:9b');
     chats.send(session.id, 'Deux');
     await wait(session.id);
     expect(usage.all()).toMatchObject([
@@ -428,5 +464,96 @@ describe('ChatManager', () => {
     expect(events.map((e) => e.type)).toEqual(['text_delta', 'done']);
     expect(chats.open(session.id).usage).toBeUndefined();
     await expect(chats.delete(session.id)).resolves.toBeUndefined();
+  });
+});
+
+describe('ChatManager : modèle par conversation (#13)', () => {
+  it('copie le modèle par défaut à la création : le changer ensuite ne touche pas la conversation', async () => {
+    const { chats, created, store, wait, setDefault } = setup(() => 'ok');
+    const session = chats.create('/w');
+    expect(session.model).toBe('qwen3.5:35b');
+    setDefault('qwen3.5:9b');
+    chats.send(session.id, 'Salut');
+    await wait(session.id);
+    expect(created.map((c) => c.model)).toEqual(['qwen3.5:35b']);
+    expect(store.messages(session.id).at(-1)?.model).toBe('qwen3.5:35b');
+  });
+
+  it('une conversation sans modèle (antérieure à #13) suit le défaut, même quand il change', async () => {
+    const { chats, store, created, wait, setDefault } = setup(() => 'ok');
+    const legacy = store.create({
+      id: 'ancienne',
+      title: 'Ancienne',
+      workspace: '/w',
+      createdAt: '2026-10-01T09:00:00.000Z',
+      updatedAt: '2026-10-01T09:00:00.000Z',
+    });
+    chats.send(legacy.id, 'Un');
+    await wait(legacy.id);
+    setDefault('qwen3.5:9b');
+    chats.send(legacy.id, 'Deux');
+    await wait(legacy.id);
+    expect(created.map((c) => c.model)).toEqual(['qwen3.5:35b', 'qwen3.5:9b']);
+    expect(chats.open(legacy.id).session.model).toBeUndefined();
+  });
+
+  it('recrée la session agent quand le modèle change, avec l’historique et la consommation du dernier tour', async () => {
+    const { chats, created, sent, store, wait } = setup(() => 'ok');
+    const session = chats.create('/w');
+    chats.send(session.id, 'Un');
+    await wait(session.id);
+    expect((await chats.setModel(session.id, 'qwen3.5:9b')).model).toBe('qwen3.5:9b');
+    chats.send(session.id, 'Deux');
+    await wait(session.id);
+    expect(created).toHaveLength(2);
+    // `lastInputTokens` suit : la compaction passe avant l'appel si la fenêtre est plus petite.
+    expect(created[1]).toMatchObject({ model: 'qwen3.5:9b', lastInputTokens: 100 });
+    expect(created[1]?.history).toHaveLength(2);
+    expect(sent[1]?.history).toHaveLength(2);
+    // Chaque réponse garde le modèle qui l'a produite (séparateur dans le fil).
+    expect(
+      store
+        .messages(session.id)
+        .filter((m) => m.role === 'assistant')
+        .map((m) => m.model),
+    ).toEqual(['qwen3.5:35b', 'qwen3.5:9b']);
+  });
+
+  it('set-model : refusé pendant un tour, modèle absent ou sans outils refusé, null revient au défaut', async () => {
+    let mode: Mode = 'hang';
+    const { chats, models, wait } = setup(() => mode);
+    const session = chats.create('/w');
+    chats.send(session.id, 'Long');
+    await expect(chats.setModel(session.id, 'qwen3.5:9b')).rejects.toMatchObject({
+      code: 'agent/busy',
+    });
+    await new Promise((r) => setTimeout(r, 5));
+    await chats.stop(session.id);
+    await wait(session.id);
+    mode = 'ok';
+
+    await expect(chats.setModel(session.id, 'mistral:7b')).rejects.toMatchObject({
+      code: 'llm/model_not_found',
+    });
+    await expect(chats.setModel(session.id, 'nomic-embed-text')).rejects.toMatchObject({
+      code: 'llm/model_unsupported',
+      details: { missing: 'tools' },
+    });
+    await expect(chats.setModel(session.id, '  ')).rejects.toMatchObject({
+      code: 'tool/invalid_input',
+    });
+    expect(chats.open(session.id).session.model).toBe('qwen3.5:35b');
+
+    // Même modèle : rien à vérifier auprès du serveur.
+    const checked = models.checked.length;
+    await chats.setModel(session.id, 'qwen3.5:35b');
+    expect(models.checked).toHaveLength(checked);
+
+    const reset = await chats.setModel(session.id, null);
+    expect(reset).not.toHaveProperty('model');
+    expect(chats.open(session.id).session).not.toHaveProperty('model');
+    await expect(chats.setModel('inconnue', null)).rejects.toMatchObject({
+      code: 'session/not_found',
+    });
   });
 });

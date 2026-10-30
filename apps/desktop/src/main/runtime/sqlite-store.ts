@@ -11,10 +11,15 @@ import { dirname } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import type { ChatMessage, MessagePart, SessionSummary } from '@atelier/shared';
 import type { ModelMessage } from 'ai';
-import { sessionNotFound, type SessionStore } from './session-store.js';
+import {
+  applySessionPatch,
+  sessionNotFound,
+  type SessionPatch,
+  type SessionStore,
+} from './session-store.js';
 
-/** Migrations successives : l'index + 1 est la version atteinte. */
-const MIGRATIONS: readonly string[] = [
+/** Migrations successives : l'index + 1 est la version atteinte (exportées pour les tests). */
+export const MIGRATIONS: readonly string[] = [
   `CREATE TABLE sessions (
      id TEXT PRIMARY KEY,
      title TEXT NOT NULL,
@@ -56,6 +61,11 @@ const MIGRATIONS: readonly string[] = [
    );
    CREATE INDEX usage_turns_day ON usage_turns (day);
    CREATE INDEX usage_turns_session ON usage_turns (session_id);`,
+  // 3 : modèle par conversation (#13). Sur `sessions`, NULL = modèle par défaut
+  // des Réglages (conversations antérieures) ; sur `messages`, le modèle qui a
+  // produit la réponse (NULL : message utilisateur ou réponse antérieure).
+  `ALTER TABLE sessions ADD COLUMN model TEXT;
+   ALTER TABLE messages ADD COLUMN model TEXT;`,
 ];
 
 /** Version de schéma courante. */
@@ -127,6 +137,7 @@ interface SessionRow {
   workspace: string;
   created_at: string;
   updated_at: string;
+  model: string | null;
 }
 
 interface MessageRow {
@@ -135,6 +146,7 @@ interface MessageRow {
   role: 'user' | 'assistant';
   parts: string;
   created_at: string;
+  model: string | null;
 }
 
 function toSummary(row: SessionRow): SessionSummary {
@@ -144,6 +156,7 @@ function toSummary(row: SessionRow): SessionSummary {
     workspace: row.workspace,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    ...(row.model !== null ? { model: row.model } : {}),
   };
 }
 
@@ -184,22 +197,27 @@ export class SqliteSessionStore implements SessionStore {
   create(session: SessionSummary): SessionSummary {
     this.#db
       .prepare(
-        'INSERT INTO sessions (id, title, workspace, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+        `INSERT INTO sessions (id, title, workspace, created_at, updated_at, model)
+         VALUES (?, ?, ?, ?, ?, ?)`,
       )
-      .run(session.id, session.title, session.workspace, session.createdAt, session.updatedAt);
+      .run(
+        session.id,
+        session.title,
+        session.workspace,
+        session.createdAt,
+        session.updatedAt,
+        session.model ?? null,
+      );
     return session;
   }
 
-  update(
-    sessionId: string,
-    patch: Partial<Pick<SessionSummary, 'title' | 'updatedAt'>>,
-  ): SessionSummary {
+  update(sessionId: string, patch: SessionPatch): SessionSummary {
     const current = this.get(sessionId);
     if (!current) throw sessionNotFound(sessionId);
-    const next = { ...current, ...patch };
+    const next = applySessionPatch(current, patch);
     this.#db
-      .prepare('UPDATE sessions SET title = ?, updated_at = ? WHERE id = ?')
-      .run(next.title, next.updatedAt, sessionId);
+      .prepare('UPDATE sessions SET title = ?, updated_at = ?, model = ? WHERE id = ?')
+      .run(next.title, next.updatedAt, next.model ?? null, sessionId);
     return next;
   }
 
@@ -218,6 +236,7 @@ export class SqliteSessionStore implements SessionStore {
       role: row.role,
       parts: parseParts(row.parts),
       createdAt: row.created_at,
+      ...(row.model !== null ? { model: row.model } : {}),
     }));
   }
 
@@ -225,9 +244,9 @@ export class SqliteSessionStore implements SessionStore {
     if (!this.get(message.sessionId)) throw sessionNotFound(message.sessionId);
     this.#db
       .prepare(
-        `INSERT INTO messages (id, session_id, seq, role, parts, created_at)
-         VALUES (?, ?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM messages WHERE session_id = ?), ?, ?, ?)
-         ON CONFLICT (id) DO UPDATE SET parts = excluded.parts`,
+        `INSERT INTO messages (id, session_id, seq, role, parts, created_at, model)
+         VALUES (?, ?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM messages WHERE session_id = ?), ?, ?, ?, ?)
+         ON CONFLICT (id) DO UPDATE SET parts = excluded.parts, model = excluded.model`,
       )
       .run(
         message.id,
@@ -236,6 +255,7 @@ export class SqliteSessionStore implements SessionStore {
         message.role,
         JSON.stringify(message.parts),
         message.createdAt,
+        message.model ?? null,
       );
   }
 

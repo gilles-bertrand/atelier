@@ -8,15 +8,31 @@
 import { AtelierError, type ChatMessage, type SessionSummary } from '@atelier/shared';
 import type { ModelMessage } from 'ai';
 
+/**
+ * Modification d'une session. `model: null` efface le modèle choisi : la
+ * conversation suit alors le modèle par défaut des Réglages.
+ */
+export interface SessionPatch {
+  title?: string;
+  updatedAt?: string;
+  model?: string | null;
+}
+
+/** Applique un {@link SessionPatch} (fonction pure, partagée par les deux stores). */
+export function applySessionPatch(current: SessionSummary, patch: SessionPatch): SessionSummary {
+  const { model, ...rest } = patch;
+  const next: SessionSummary = { ...current, ...rest };
+  if (model === null) delete next.model;
+  else if (model !== undefined) next.model = model;
+  return next;
+}
+
 export interface SessionStore {
   list(limit?: number): SessionSummary[];
   get(sessionId: string): SessionSummary | undefined;
   create(session: SessionSummary): SessionSummary;
-  /** Met à jour le titre et/ou la date de dernière activité. */
-  update(
-    sessionId: string,
-    patch: Partial<Pick<SessionSummary, 'title' | 'updatedAt'>>,
-  ): SessionSummary;
+  /** Met à jour le titre, la date de dernière activité et/ou le modèle. */
+  update(sessionId: string, patch: SessionPatch): SessionSummary;
   delete(sessionId: string): void;
   messages(sessionId: string): ChatMessage[];
   /** Ajoute ou remplace (même `id`) un message. */
@@ -58,13 +74,10 @@ export class InMemorySessionStore implements SessionStore {
     return session;
   }
 
-  update(
-    sessionId: string,
-    patch: Partial<Pick<SessionSummary, 'title' | 'updatedAt'>>,
-  ): SessionSummary {
+  update(sessionId: string, patch: SessionPatch): SessionSummary {
     const current = this.#sessions.get(sessionId);
     if (!current) throw sessionNotFound(sessionId);
-    const next = { ...current, ...patch };
+    const next = applySessionPatch(current, patch);
     this.#sessions.set(sessionId, next);
     return next;
   }

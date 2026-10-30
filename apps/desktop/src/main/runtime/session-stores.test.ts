@@ -4,7 +4,13 @@ import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import type { ChatMessage, SessionSummary } from '@atelier/shared';
 import { InMemorySessionStore, type SessionStore } from './session-store.js';
-import { migrate, openDatabase, SCHEMA_VERSION, SqliteSessionStore } from './sqlite-store.js';
+import {
+  migrate,
+  MIGRATIONS,
+  openDatabase,
+  SCHEMA_VERSION,
+  SqliteSessionStore,
+} from './sqlite-store.js';
 
 const session = (id: string, updatedAt: string): SessionSummary => ({
   id,
@@ -66,6 +72,26 @@ describe.each(stores)('SessionStore (%s)', (_name, make) => {
     expect(store.messages('s')).toEqual([]);
     expect(store.modelHistory('s')).toBeUndefined();
   });
+
+  it('garde le modèle de la conversation (null : retour au défaut) et celui des réponses', async () => {
+    const store = await make();
+    store.create({ ...session('s', '2026-10-28T09:00:00.000Z'), model: 'qwen3.5:35b' });
+    expect(store.get('s')?.model).toBe('qwen3.5:35b');
+    expect(store.update('s', { model: 'qwen3.5:9b' }).model).toBe('qwen3.5:9b');
+    // Un patch sans `model` ne l'efface pas.
+    expect(store.update('s', { title: 'Récap' })).toMatchObject({
+      title: 'Récap',
+      model: 'qwen3.5:9b',
+    });
+    expect(store.update('s', { model: null })).not.toHaveProperty('model');
+    expect(store.get('s')).not.toHaveProperty('model');
+
+    store.saveMessage({ ...message('m1', 's', 'Réponse'), role: 'assistant', model: 'qwen3.5:9b' });
+    store.saveMessage(message('m2', 's', 'Question'));
+    const [answer, question] = store.messages('s');
+    expect(answer?.model).toBe('qwen3.5:9b');
+    expect(question).not.toHaveProperty('model');
+  });
 });
 
 describe('SqliteSessionStore', () => {
@@ -87,6 +113,39 @@ describe('SqliteSessionStore', () => {
     expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: SCHEMA_VERSION });
     expect(db.prepare('PRAGMA journal_mode').get()).toEqual({ journal_mode: 'wal' });
     db.close();
+  });
+
+  it('migre une base v2 vers v3 : les conversations existantes suivent le modèle par défaut', async () => {
+    const file = join(await mkdtemp(join(tmpdir(), 'atelier-v2-')), 'atelier.db');
+    const { DatabaseSync } = await import('node:sqlite');
+    const v2 = new DatabaseSync(file);
+    for (const sql of MIGRATIONS.slice(0, 2)) v2.exec(sql);
+    v2.exec(`INSERT INTO sessions VALUES ('s1', 'Ancienne', '/w', 'a', 'b');
+             INSERT INTO messages VALUES ('m1', 's1', 1, 'assistant', '[{"type":"text","text":"Oui"}]', 'a');
+             PRAGMA user_version = 2;`);
+    v2.close();
+
+    const store = await SqliteSessionStore.open(file);
+    expect(store.get('s1')).toEqual({
+      id: 's1',
+      title: 'Ancienne',
+      workspace: '/w',
+      createdAt: 'a',
+      updatedAt: 'b',
+    });
+    expect(store.messages('s1')).toEqual([
+      {
+        id: 'm1',
+        sessionId: 's1',
+        role: 'assistant',
+        parts: [{ type: 'text', text: 'Oui' }],
+        createdAt: 'a',
+      },
+    ]);
+    expect(store.update('s1', { model: 'qwen3.5:9b' }).model).toBe('qwen3.5:9b');
+    expect(store.get('s1')?.model).toBe('qwen3.5:9b');
+    store.close();
+    expect(SCHEMA_VERSION).toBe(3);
   });
 
   it('refuse une base créée par une version plus récente', async () => {

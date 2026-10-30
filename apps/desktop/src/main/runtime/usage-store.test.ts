@@ -221,7 +221,7 @@ describe('SqliteUsageStore', () => {
     expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(
       SCHEMA_VERSION,
     );
-    expect(SCHEMA_VERSION).toBe(2);
+    expect(SCHEMA_VERSION).toBe(3);
     expect(new SqliteSessionStore(db).get('s1')?.title).toBe('Ancienne');
     const usage = new SqliteUsageStore(db);
     usage.record(record({ turnId: 't1' }));
