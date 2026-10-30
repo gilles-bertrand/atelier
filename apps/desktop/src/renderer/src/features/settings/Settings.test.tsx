@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { App } from '@renderer/App';
@@ -28,6 +28,7 @@ function setup(): FakeApi {
       { name: 'qwen3.5:35b' },
       { name: 'qwen3.5:9b' },
       { name: 'qwen3-vl:8b' },
+      { name: 'llama-texte', capabilities: ['completion'] },
       { name: 'nomic-embed-text' },
     ],
     'llm:test-connection': () => ({ ok: true, latencyMs: 40, models: [{ name: 'm' }] }),
@@ -100,10 +101,16 @@ describe('réglages : serveur et modèle', () => {
   it('change de modèle, revient à la vision et au contexte automatiques', async () => {
     const api = setup();
     const user = await openSettings();
-    const model = screen.getByLabelText('Modèle principal');
+    const model = screen.getByLabelText('Modèle par défaut des nouvelles conversations');
     await waitFor(() => {
       expect(screen.getAllByRole('option', { name: 'qwen3.5:9b' }).length).toBeGreaterThan(0);
     });
+    // Sans outils : grisé, avec la raison.
+    expect(
+      within(model).getByRole('option', {
+        name: 'llama-texte (ne sait pas utiliser les outils : lecture de fichiers, commandes)',
+      }),
+    ).toBeDisabled();
     // Les modèles d'embedding ne sont pas proposés.
     expect(screen.queryByRole('option', { name: 'nomic-embed-text' })).not.toBeInTheDocument();
     await user.selectOptions(model, 'qwen3.5:9b');

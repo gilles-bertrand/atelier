@@ -4,12 +4,13 @@
  */
 import { useEffect, useId, useRef, useState, type DragEvent } from 'react';
 import { Folder, PanelRight, Upload } from 'lucide-react';
-import type { SessionSummary } from '@atelier/shared';
+import type { LlmModelInfo, SessionSummary } from '@atelier/shared';
 import { ServerStatusBadge } from '@renderer/components/status/ServerStatusBadge';
 import { Button } from '@renderer/components/ui/button';
 import { Alert } from '@renderer/components/ui/primitives';
-import { atelier, toSerializedError } from '@renderer/lib/api';
+import { atelier, call, toSerializedError } from '@renderer/lib/api';
 import { errorMessage } from '@renderer/lib/error-messages';
+import { canReadImages, isImage } from '@renderer/lib/models';
 import { fileName } from '@renderer/lib/tool-labels';
 import { cn } from '@renderer/lib/utils';
 import { useApp } from '@renderer/state/app-state';
@@ -20,6 +21,7 @@ import { headerInset, SidebarOpenButton, useShellChrome } from '../sidebar/shell
 import { Composer, type PendingAttachment } from './Composer';
 import { ContextGauge } from './ContextGauge';
 import { MessageList } from './MessageList';
+import { ModelPicker } from './ModelPicker';
 import { SidePanel } from './SidePanel';
 
 function hasFiles(event: DragEvent): boolean {
@@ -29,10 +31,13 @@ function hasFiles(event: DragEvent): boolean {
 export function ChatView({
   session,
   onTitleChange,
+  onSessionChange,
 }: {
   session: SessionSummary;
   /** Titre dérivé du premier message (la colonne de gauche le reprend aussitôt). */
   onTitleChange?: (title: string) => void;
+  /** Conversation mise à jour par le main (modèle choisi). */
+  onSessionChange?: (session: SessionSummary) => void;
 }) {
   const { state } = useApp();
   const { sidebarOpen } = useShellChrome();
@@ -49,6 +54,45 @@ export function ChatView({
   const [error, setError] = useState<string | undefined>();
   const dragDepth = useRef(0);
   const running = isRunning(view);
+  // Conversation antérieure au choix par conversation : elle suit le défaut (D1).
+  const model = session.model ?? state.settings.llm.model;
+  const visionModel = state.settings.llm.visionModel;
+  const [pickerOpen, setPickerOpen] = useState(false);
+  // Dernière liste lue sur le serveur : capacités et état chargé / à froid.
+  const [models, setModels] = useState<LlmModelInfo[] | undefined>();
+  const [coldChoice, setColdChoice] = useState<string | undefined>();
+  const [modelLoading, setModelLoading] = useState(false);
+  const modelInfo = models?.find((m) => m.name === model);
+  const isCold = modelInfo?.loaded === false;
+  const hasImage = pending.some((p) => isImage(p.attachment.mimeType));
+  const visionSet = visionModel !== undefined && visionModel !== '';
+
+  // Image jointe sans modèle vision réglé : capacités du modèle lues à la demande.
+  useEffect(() => {
+    if (!hasImage || visionSet || models) return;
+    let cancelled = false;
+    call('llm:list-models').then(
+      (list) => {
+        if (!cancelled) setModels(list);
+      },
+      () => undefined,
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [hasImage, visionSet, models]);
+  const imageUnreadable = hasImage && canReadImages(modelInfo, visionModel) === false;
+
+  const chooseModel = async (next: LlmModelInfo): Promise<void> => {
+    setError(undefined);
+    try {
+      const updated = await call('session:set-model', { sessionId: session.id, model: next.name });
+      onSessionChange?.(updated);
+      setColdChoice(next.loaded === false ? next.name : undefined);
+    } catch (e) {
+      setError(errorMessage(toSerializedError(e)));
+    }
+  };
 
   useEffect(() => {
     if (view.loaded) return;
@@ -110,8 +154,14 @@ export function ChatView({
     setDraft('');
     for (const p of pending) revoke(p.previewUrl);
     setPending([]);
+    // Premier message sur un modèle à froid : « Chargement du modèle… » (D3).
+    setModelLoading(isCold);
+    setColdChoice(undefined);
+    if (isCold) {
+      setModels((list) => list?.map((m) => (m.name === model ? { ...m, loaded: true } : m)));
+    }
     try {
-      await actions.send(session.id, text, attachments);
+      await actions.send(session.id, text, attachments, model);
     } catch (e) {
       setError(errorMessage(toSerializedError(e)));
     }
@@ -196,8 +246,13 @@ export function ChatView({
           ) : (
             <MessageList
               view={view}
+              modelLoading={modelLoading}
               onRetry={() => {
-                guard(actions.retry(session.id));
+                setModelLoading(false);
+                guard(actions.retry(session.id, model));
+              }}
+              onChooseModel={() => {
+                setPickerOpen(true);
               }}
             />
           )}
@@ -226,7 +281,36 @@ export function ChatView({
             running={running}
             disabled={!view.loaded}
             importing={importing}
-            status={<ContextGauge sessionId={session.id} />}
+            status={
+              <>
+                <ModelPicker
+                  model={model}
+                  disabled={running || !view.loaded}
+                  open={pickerOpen}
+                  onOpenChange={setPickerOpen}
+                  onSelect={(next) => void chooseModel(next)}
+                  onModels={setModels}
+                />
+                <ContextGauge sessionId={session.id} />
+              </>
+            }
+            notice={
+              imageUnreadable ? (
+                <Alert tone="warning">
+                  Le modèle {model} ne lit pas les images et aucun modèle pour les images n’est
+                  réglé : l’image jointe ne pourra pas être analysée. Choisissez un autre modèle, ou
+                  réglez-en un dans Réglages › Serveur et modèle.
+                </Alert>
+              ) : undefined
+            }
+            footer={
+              coldChoice === model ? (
+                <Alert tone="warning">
+                  Premier message plus lent : le serveur doit charger {model} (10 à 60 s). Les
+                  autres utilisateurs du serveur peuvent être ralentis.
+                </Alert>
+              ) : undefined
+            }
           />
         </div>
         {panelOpen ? <SidePanel id={panelId} view={view} /> : null}

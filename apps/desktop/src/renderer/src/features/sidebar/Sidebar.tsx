@@ -306,7 +306,7 @@ export function Sidebar({
           session={current}
           sandbox={state.sandbox}
           server={state.server}
-          model={state.settings.llm.model}
+          model={current?.model ?? state.settings.llm.model}
         />
         <div className="border-t p-2">
           <button

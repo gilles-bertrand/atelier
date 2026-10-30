@@ -2,8 +2,8 @@
  * Fil de la conversation : messages, message en direct et état du tour
  * (réflexion, reconnexion, erreur avec « Réessayer »).
  */
-import { useEffect, useRef } from 'react';
-import { Loader2, RotateCcw } from 'lucide-react';
+import { Fragment, useEffect, useMemo, useRef } from 'react';
+import { ListChecks, Loader2, RotateCcw } from 'lucide-react';
 import type { ChatMessage } from '@atelier/shared';
 import { Button } from '@renderer/components/ui/button';
 import { Alert } from '@renderer/components/ui/primitives';
@@ -41,7 +41,7 @@ function UserMessage({ message }: { message: ChatMessage }) {
 
 export function AssistantMessage({ message, live }: { message: ChatMessage; live: boolean }) {
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" title={message.model ? `Modèle : ${message.model}` : undefined}>
       <h3 className="sr-only">Assistant</h3>
       {message.parts.map((part, i) => {
         const key = part.type === 'tool_call' ? part.toolCallId : `${part.type}-${String(i)}`;
@@ -68,14 +68,32 @@ export function AssistantMessage({ message, live }: { message: ChatMessage; live
   );
 }
 
+/** Séparateur « Modèle : X » quand le modèle change d'une réponse à la suivante (D1). */
+function ModelDivider({ model }: { model: string }) {
+  return (
+    <div role="separator" aria-label={`Modèle : ${model}`} className="flex items-center gap-3">
+      <span className="h-px flex-1 bg-border" aria-hidden />
+      <span className="text-xs text-muted-foreground">Modèle : {model}</span>
+      <span className="h-px flex-1 bg-border" aria-hidden />
+    </div>
+  );
+}
+
+/** Erreurs qu'un autre modèle corrige : absent du serveur, ou sans outils. */
+const MODEL_ERRORS = new Set(['llm/model_not_found', 'llm/model_unsupported']);
+
 function TurnStatus({
   turn,
   hasLiveContent,
+  modelLoading,
   onRetry,
+  onChooseModel,
 }: {
   turn: TurnView | undefined;
   hasLiveContent: boolean;
+  modelLoading: boolean;
   onRetry: () => void;
+  onChooseModel: () => void;
 }) {
   if (!turn) return null;
   if (turn.status === 'running') {
@@ -96,7 +114,7 @@ function TurnStatus({
     return hasLiveContent ? null : (
       <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status">
         <Loader2 className="size-4 animate-spin" aria-hidden />
-        L’assistant réfléchit…
+        {modelLoading ? 'Chargement du modèle sur le serveur…' : 'L’assistant réfléchit…'}
       </p>
     );
   }
@@ -106,7 +124,18 @@ function TurnStatus({
         <Alert tone="error" title="La réponse n’a pas pu aboutir">
           {errorMessage(turn.error)}
         </Alert>
-        {canRetry(turn.error) ? (
+        {MODEL_ERRORS.has(turn.error.code) ? (
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" onClick={onChooseModel}>
+              <ListChecks className="size-3.5" aria-hidden />
+              Choisir un autre modèle
+            </Button>
+            <Button variant="ghost" size="sm" onClick={onRetry}>
+              <RotateCcw className="size-3.5" aria-hidden />
+              Réessayer
+            </Button>
+          </div>
+        ) : canRetry(turn.error) ? (
           <Button variant="outline" size="sm" onClick={onRetry}>
             <RotateCcw className="size-3.5" aria-hidden />
             Réessayer
@@ -141,8 +170,40 @@ function TurnStatus({
   return null;
 }
 
-export function MessageList({ view, onRetry }: { view: SessionView; onRetry: () => void }) {
+/**
+ * Modèle à annoncer avant chaque réponse : celui de la réponse précédente
+ * différait (inconnu avant #13 : rien n'est annoncé).
+ */
+export function modelChanges(messages: readonly ChatMessage[]): Map<string, string> {
+  const changes = new Map<string, string>();
+  let previous: string | undefined;
+  for (const message of messages) {
+    if (message.role !== 'assistant' || message.model === undefined) continue;
+    if (previous !== undefined && message.model !== previous)
+      changes.set(message.id, message.model);
+    previous = message.model;
+  }
+  return changes;
+}
+
+export function MessageList({
+  view,
+  modelLoading = false,
+  onRetry,
+  onChooseModel,
+}: {
+  view: SessionView;
+  /** Premier message sur un modèle qui était à froid. */
+  modelLoading?: boolean;
+  onRetry: () => void;
+  onChooseModel: () => void;
+}) {
   const container = useRef<HTMLDivElement>(null);
+  const { messages, live } = view;
+  const changes = useMemo(
+    () => modelChanges(live && live.parts.length > 0 ? [...messages, live] : messages),
+    [messages, live],
+  );
   const liveSize = view.live?.parts.reduce(
     (n, p) => n + (p.type === 'text' || p.type === 'reasoning' ? p.text.length : 1),
     0,
@@ -167,11 +228,21 @@ export function MessageList({ view, onRetry }: { view: SessionView; onRetry: () 
           message.role === 'user' ? (
             <UserMessage key={message.id} message={message} />
           ) : (
-            <AssistantMessage key={message.id} message={message} live={false} />
+            <Fragment key={message.id}>
+              {changes.has(message.id) ? (
+                <ModelDivider model={changes.get(message.id) ?? ''} />
+              ) : null}
+              <AssistantMessage message={message} live={false} />
+            </Fragment>
           ),
         )}
         {view.live && view.live.parts.length > 0 ? (
-          <AssistantMessage message={view.live} live />
+          <>
+            {changes.has(view.live.id) ? (
+              <ModelDivider model={changes.get(view.live.id) ?? ''} />
+            ) : null}
+            <AssistantMessage message={view.live} live />
+          </>
         ) : null}
         {view.turn?.compacted ? (
           <p className="text-center text-xs text-muted-foreground">
@@ -181,7 +252,9 @@ export function MessageList({ view, onRetry }: { view: SessionView; onRetry: () 
         <TurnStatus
           turn={view.turn}
           hasLiveContent={(view.live?.parts.length ?? 0) > 0}
+          modelLoading={modelLoading}
           onRetry={onRetry}
+          onChooseModel={onChooseModel}
         />
       </div>
       {/* Annonce discrète de fin de réponse pour les lecteurs d'écran. */}

@@ -1,53 +1,21 @@
 import { useEffect, useId, useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import {
-  DEFAULT_MODEL,
-  MIN_CONTEXT_WINDOW,
-  MODEL_PROFILES,
-  type ConnectionTestResult,
-  type LlmModelInfo,
-} from '@atelier/shared';
+import { DEFAULT_MODEL, MIN_CONTEXT_WINDOW, type ConnectionTestResult } from '@atelier/shared';
 import { Button } from '@renderer/components/ui/button';
 import { Alert, Hint } from '@renderer/components/ui/primitives';
 import { call, toSerializedError } from '@renderer/lib/api';
 import { errorMessage } from '@renderer/lib/error-messages';
 import { formatBytes, formatContext } from '@renderer/lib/format';
+import {
+  chatModels,
+  initialModel,
+  NO_TOOLS_REASON,
+  profileLabel,
+  supportsTools,
+} from '@renderer/lib/models';
 import { cn } from '@renderer/lib/utils';
 import { useApp } from '@renderer/state/app-state';
 import { StepCard } from './StepCard';
-
-/** Libellé de profil connu (« Recommandé (32 Go et plus) »), s'il existe. */
-export function profileLabel(model: string): string | undefined {
-  return MODEL_PROFILES.find((p) => p.model === model)?.label;
-}
-
-/** Vrai pour un modèle d'embedding (inutilisable pour discuter). */
-export function isEmbeddingModel(model: LlmModelInfo): boolean {
-  return /embed/i.test(model.name) || /bert/i.test(model.family ?? '');
-}
-
-/**
- * Modèles proposés : sans les modèles d'embedding, profils connus d'abord
- * (dans l'ordre des profils, le recommandé en tête), puis les autres par nom.
- */
-export function chatModels(models: readonly LlmModelInfo[]): LlmModelInfo[] {
-  const rank = (name: string): number => {
-    if (name === DEFAULT_MODEL) return -1;
-    const index = MODEL_PROFILES.findIndex((p) => p.model === name);
-    return index < 0 ? MODEL_PROFILES.length : index;
-  };
-  return models
-    .filter((m) => !isEmbeddingModel(m))
-    .sort((a, b) => rank(a.name) - rank(b.name) || a.name.localeCompare(b.name));
-}
-
-/** Modèle présélectionné : celui des Réglages, sinon le défaut, sinon le premier. */
-export function initialModel(models: readonly LlmModelInfo[], current: string): string | undefined {
-  const names = models.map((m) => m.name);
-  if (names.includes(current)) return current;
-  if (names.includes(DEFAULT_MODEL)) return DEFAULT_MODEL;
-  return names[0];
-}
 
 export function ModelStep({
   connection,
@@ -133,13 +101,18 @@ export function ModelStep({
             {models.map((m) => {
               const profile = profileLabel(m.name);
               const checked = m.name === model;
+              const usable = supportsTools(m);
               return (
                 <label
                   key={m.name}
                   className={cn(
-                    'flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5 text-sm transition-colors',
+                    'flex items-center gap-3 rounded-lg border px-3 py-2.5 text-sm transition-colors',
                     'has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring',
-                    checked ? 'border-primary bg-accent' : 'hover:bg-accent/60',
+                    !usable
+                      ? 'cursor-not-allowed opacity-60'
+                      : checked
+                        ? 'cursor-pointer border-primary bg-accent'
+                        : 'cursor-pointer hover:bg-accent/60',
                   )}
                 >
                   <input
@@ -147,6 +120,7 @@ export function ModelStep({
                     name="model"
                     value={m.name}
                     checked={checked}
+                    disabled={!usable}
                     onChange={() => {
                       setModel(m.name);
                     }}
@@ -156,6 +130,11 @@ export function ModelStep({
                     <span className="font-medium">{m.name}</span>
                     {profile ? (
                       <span className="ml-2 text-xs text-muted-foreground">{profile}</span>
+                    ) : null}
+                    {!usable ? (
+                      <span className="block text-xs text-muted-foreground">
+                        Indisponible : {NO_TOOLS_REASON}
+                      </span>
                     ) : null}
                   </span>
                   {m.sizeBytes !== undefined ? (

@@ -109,6 +109,27 @@ describe('chatReducer', () => {
     expect(state['s1']?.permissions).toEqual([]);
   });
 
+  it('la réponse en direct porte le modèle du tour, même si les events précèdent turn_started', () => {
+    const started = chatReducer(
+      {},
+      { type: 'turn_started', sessionId: 's1', turnId: 't1', model: 'qwen3.5:9b' },
+    );
+    expect(run([{ ...ev, type: 'text_delta', delta: 'A' }], started)['s1']?.live?.model).toBe(
+      'qwen3.5:9b',
+    );
+    const early = run([{ ...ev, type: 'text_delta', delta: 'A' }]);
+    expect(early['s1']?.live?.model).toBeUndefined();
+    const late = chatReducer(early, {
+      type: 'turn_started',
+      sessionId: 's1',
+      turnId: 't1',
+      model: 'qwen3.5:9b',
+    });
+    expect(late['s1']?.live?.model).toBe('qwen3.5:9b');
+    const done = run([{ ...ev, type: 'done', reason: 'stop' }], late);
+    expect(done['s1']?.messages.at(-1)?.model).toBe('qwen3.5:9b');
+  });
+
   it('ignore l’event usage (la jauge a son propre état)', () => {
     const during = run([{ ...ev, type: 'text_delta', delta: 'Bonjour' }]);
     const after = run(

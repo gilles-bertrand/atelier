@@ -32,6 +32,8 @@ export interface TurnView {
   compacted?: number;
   /** Fin anormale mais sans erreur (`max_steps`, `length`). */
   stopReason?: 'max_steps' | 'length';
+  /** Modèle de la conversation à l'envoi : porté par la réponse en direct. */
+  model?: string;
 }
 
 export interface SessionView {
@@ -52,7 +54,7 @@ export type ChatState = Readonly<Record<string, SessionView>>;
 export type ChatAction =
   | { type: 'loaded'; sessionId: string; messages: ChatMessage[] }
   | { type: 'user_sent'; message: ChatMessage }
-  | { type: 'turn_started'; sessionId: string; turnId: string }
+  | { type: 'turn_started'; sessionId: string; turnId: string; model?: string }
   | { type: 'event'; event: AgentEvent }
   | { type: 'permission_answered'; sessionId: string; requestId: string }
   | { type: 'forget'; sessionId: string };
@@ -92,6 +94,7 @@ function applyEvent(session: SessionView, event: AgentEvent): SessionView {
           id: `live-${event.turnId}`,
           sessionId: event.sessionId,
           createdAt: new Date().toISOString(),
+          ...(turn.model !== undefined ? { model: turn.model } : {}),
         });
   const next: SessionView = { ...session, turn, live: applyAgentEvent(live, event) };
 
@@ -181,11 +184,22 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         messages: [...session.messages, action.message],
       }));
     case 'turn_started':
-      return withSession(state, action.sessionId, (session) =>
-        session.turn?.turnId === action.turnId
-          ? session
-          : { ...session, turn: { turnId: action.turnId, status: 'running' } },
-      );
+      return withSession(state, action.sessionId, (session) => {
+        const model = action.model !== undefined ? { model: action.model } : {};
+        if (session.turn?.turnId !== action.turnId) {
+          return { ...session, turn: { turnId: action.turnId, status: 'running', ...model } };
+        }
+        // Events arrivés avant la réponse d'`agent:send` : le modèle rejoint le tour.
+        const live =
+          session.live && session.live.model === undefined
+            ? { ...session.live, ...model }
+            : session.live;
+        return {
+          ...session,
+          turn: { ...session.turn, ...model },
+          ...(live ? { live } : {}),
+        };
+      });
     case 'event':
       return withSession(state, action.event.sessionId, (session) =>
         applyEvent(session, action.event),

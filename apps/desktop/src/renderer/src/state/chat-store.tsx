@@ -21,9 +21,15 @@ import { SessionUsageProvider, SessionUsageStore } from './usage-store';
 export interface ChatActions {
   /** Charge l'historique d'une session (une seule fois). */
   open(sessionId: string): Promise<void>;
-  send(sessionId: string, text: string, attachments: readonly Attachment[]): Promise<void>;
+  /** `model` : modèle de la conversation, porté par la réponse en direct. */
+  send(
+    sessionId: string,
+    text: string,
+    attachments: readonly Attachment[],
+    model?: string,
+  ): Promise<void>;
   stop(sessionId: string): Promise<void>;
-  retry(sessionId: string): Promise<void>;
+  retry(sessionId: string, model?: string): Promise<void>;
   respond(request: PermissionRequest, decision: PermissionDecision): Promise<void>;
   forget(sessionId: string): void;
 }
@@ -64,7 +70,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   );
 
   const send = useCallback(
-    async (sessionId: string, text: string, attachments: readonly Attachment[]) => {
+    async (sessionId: string, text: string, attachments: readonly Attachment[], model?: string) => {
       localIds += 1;
       dispatch({
         type: 'user_sent',
@@ -81,7 +87,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         text,
         ...(attachments.length > 0 ? { attachments: [...attachments] } : {}),
       });
-      dispatch({ type: 'turn_started', sessionId, turnId });
+      dispatch({ type: 'turn_started', sessionId, turnId, ...(model ? { model } : {}) });
     },
     [],
   );
@@ -90,9 +96,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     await call('agent:stop', { sessionId });
   }, []);
 
-  const retry = useCallback(async (sessionId: string) => {
+  const retry = useCallback(async (sessionId: string, model?: string) => {
     const { turnId } = await call('agent:retry', { sessionId });
-    dispatch({ type: 'turn_started', sessionId, turnId });
+    dispatch({ type: 'turn_started', sessionId, turnId, ...(model ? { model } : {}) });
   }, []);
 
   const respond = useCallback(async (request: PermissionRequest, decision: PermissionDecision) => {
