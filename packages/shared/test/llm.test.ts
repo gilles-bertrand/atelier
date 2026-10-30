@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { checkServerUrl, isTailscaleHost, openAiCompatibleBaseUrl } from '../src/index.js';
+import {
+  MODEL_CAPABILITIES,
+  checkServerUrl,
+  isTailscaleHost,
+  openAiCompatibleBaseUrl,
+} from '../src/index.js';
 
 describe('checkServerUrl', () => {
   it.each([
@@ -38,5 +43,12 @@ describe('openAiCompatibleBaseUrl', () => {
   it('ajoute /v1 une seule fois', () => {
     expect(openAiCompatibleBaseUrl('https://x.io/')).toBe('https://x.io/v1');
     expect(openAiCompatibleBaseUrl('https://x.io/v1')).toBe('https://x.io/v1');
+  });
+});
+
+describe('MODEL_CAPABILITIES', () => {
+  it('liste chaque capacité une seule fois, dont tools', () => {
+    expect(new Set(MODEL_CAPABILITIES).size).toBe(MODEL_CAPABILITIES.length);
+    expect(MODEL_CAPABILITIES).toContain('tools');
   });
 });

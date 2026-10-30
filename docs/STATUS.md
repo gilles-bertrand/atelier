@@ -130,6 +130,12 @@ _Dernière mise à jour : 2026-10-29, Lead._
 
 _Format : date, agent, type proposé, raison, packages impactés._
 
+- ✅ **Livrée (PR `feat/lead-shared-model-per-session`), conforme au plan. Aucun nouvel `AgentEvent`, tous les champs sont optionnels : pas de `switch` exhaustif à compléter. Le message français de `llm/model_unsupported` est ajouté au renderer dans la même PR. À brancher par Core (L1 : capacités, `/api/ps`, modèle par tour), le main (L2 : colonne `model` des sessions, canal `session:set-model`) et l'UI (L3 : sélecteur dans le Composer, séparateur dans le fil).** **2026-10-30, architect (ticket #13, décisions D1 à D4 validées par Gilles le 2026-10-30)** (impact : `shared`, `agent-core`, main, renderer). Raison : choisir le modèle par conversation parmi ceux du serveur. Demandes :
+  - `llm.ts` : type `ModelCapability` (`completion`, `tools`, `vision`, `thinking`, `embedding`) et liste `MODEL_CAPABILITIES` ; `LlmModelInfo` gagne `capabilities?` (absent = inconnu, par exemple vLLM), `contextWindow?` (`/api/show`) et `loaded?` (`/api/ps`) ; `LlmServerConfig.model` devient le modèle par défaut des nouvelles conversations.
+  - `messages.ts` : `SessionSummary.model?` (absent = modèle par défaut des Réglages) et `ChatMessage.model?` (modèle qui a produit la réponse).
+  - Canal **`session:set-model`** (`{ sessionId, model: string | null }` → `SessionSummary`, `null` = revenir au défaut).
+  - Code **`llm/model_unsupported`** (`details.missing: ModelCapability`).
+
 - ✅ **Livrée (PR `feat/lead-shared-token-usage`), conforme au §3 plus la constante `RELAUNCH_KINDS`. Le `case 'usage'` est déjà ajouté aux trois `switch` exhaustifs (CLI, deux réducteurs) et le transtypage provisoire de Core est retiré. À brancher par l'UI (#92) ; Core retire ensuite `usageEvents` et ses types locaux.** **2026-10-30, architect (ticket #10, [ADR-001](adr/ADR-001-consommation-tokens.md) §3)** (impact : `shared`, `agent-core`, main, renderer). Raison : jauge de contexte permanente dans le Composer et rubrique Réglages › Utilisation (tokens par modèle, débit, contexte, fiabilité). Spec validée par Gilles le 2026-10-30. Demandes :
   - `TokenUsage` gagne des champs optionnels : `totalInputTokens`, `contextTokens`, `steps`, `generationMs` et `relaunches?: Partial<Record<RelaunchKind, number>>`.
   - Nouveau type `RelaunchKind`.

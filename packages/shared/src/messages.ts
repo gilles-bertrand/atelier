@@ -122,6 +122,11 @@ export interface ChatMessage {
   parts: MessagePart[];
   /** Horodatage ISO 8601. */
   createdAt: string;
+  /**
+   * Modèle qui a produit ce message (réponses de l'assistant). Sert au séparateur
+   * « modèle changé » dans le fil et à l'infobulle. Absent : messages antérieurs à #13.
+   */
+  model?: string;
 }
 
 /** Résumé d'une session pour l'accueil (« sessions récentes »). */
@@ -136,6 +141,11 @@ export interface SessionSummary {
   createdAt: string;
   /** Horodatage ISO 8601 de dernière activité. */
   updatedAt: string;
+  /**
+   * Modèle choisi pour cette conversation. Absent : modèle par défaut des Réglages
+   * (`LlmServerConfig.model`), notamment pour les conversations créées avant #13.
+   */
+  model?: string;
 }
 
 /**

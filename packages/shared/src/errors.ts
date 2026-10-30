@@ -15,6 +15,8 @@ export const ATELIER_ERROR_CODES = [
   'llm/insecure_url',
   'llm/timeout',
   'llm/bad_response',
+  /** Le modèle n'a pas une capacité requise (`details.missing: ModelCapability`, ex. `tools`). */
+  'llm/model_unsupported',
   // Agent
   'agent/aborted',
   'agent/max_steps',

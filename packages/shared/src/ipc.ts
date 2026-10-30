@@ -73,6 +73,14 @@ export interface IpcInvokeContract {
     };
   };
   'session:delete': { request: { sessionId: string }; response: undefined };
+  /**
+   * Change le modèle de la conversation (pris en compte au tour suivant).
+   * `null` : revenir au modèle par défaut des Réglages.
+   */
+  'session:set-model': {
+    request: { sessionId: string; model: string | null };
+    response: SessionSummary;
+  };
 
   // --- Agent
   'agent:send': {
@@ -158,6 +166,7 @@ export const IPC_INVOKE_CHANNELS = [
   'session:create',
   'session:open',
   'session:delete',
+  'session:set-model',
   'agent:send',
   'agent:stop',
   'agent:retry',
