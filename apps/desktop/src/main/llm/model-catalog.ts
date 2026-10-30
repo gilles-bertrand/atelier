@@ -29,6 +29,8 @@ export interface ModelDetailsInfo {
   capabilities?: readonly ModelCapability[];
   /** Fenêtre de contexte effective. */
   contextWindow?: number;
+  /** Famille d'architecture : seule source pour les modèles MLX (vide dans `/api/tags`). */
+  family?: string;
 }
 
 /** Accès au serveur (fonctions d'agent-core), injecté pour les tests. */
@@ -68,6 +70,7 @@ export function serverModelSource(server: () => ServerQueryOptions): ModelCatalo
       return {
         ...(details.capabilities !== undefined ? { capabilities: details.capabilities } : {}),
         contextWindow: details.contextWindow,
+        ...(details.family !== undefined ? { family: details.family } : {}),
       };
     },
     loaded: () => fetchLoadedModels(server()),
@@ -101,6 +104,8 @@ export class ModelCatalog {
       const contextWindow = numCtx ?? info.contextWindow;
       return {
         ...model,
+        // Badge « non testé » : la famille de `/api/tags` prime, `/api/show` la complète (MLX).
+        ...(model.family === undefined && info.family !== undefined ? { family: info.family } : {}),
         ...(info.capabilities !== undefined ? { capabilities: [...info.capabilities] } : {}),
         ...(contextWindow !== undefined ? { contextWindow } : {}),
         ...(loaded !== undefined ? { loaded: loaded.includes(model.name) } : {}),

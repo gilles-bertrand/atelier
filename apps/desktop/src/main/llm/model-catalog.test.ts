@@ -176,10 +176,16 @@ describe('serverModelSource (fonctions d’agent-core, réponses d’Ollama 0.40
             name: 'qwen3.5:35b',
             model: 'qwen3.5:35b',
             size: 24_000_000_000,
-            details: { family: 'qwen35moe' },
+            // Modèle MLX : Ollama 0.40 laisse la famille vide dans `/api/tags`.
+            details: { family: '' },
             capabilities: ['completion', 'tools', 'vision'],
           },
-          { name: 'llama3.1:8b', model: 'llama3.1:8b', size: 4_900_000_000 },
+          {
+            name: 'llama3.1:8b',
+            model: 'llama3.1:8b',
+            size: 4_900_000_000,
+            details: { family: 'llama' },
+          },
         ],
       });
     }
@@ -188,11 +194,13 @@ describe('serverModelSource (fonctions d’agent-core, réponses d’Ollama 0.40
         model === 'qwen3.5:35b'
           ? {
               parameters: 'num_ctx 65536',
-              model_info: { 'qwen35moe.context_length': 262_144 },
+              details: { family: 'qwen3_5_moe' },
+              model_info: { 'qwen3_5_moe.context_length': 262_144 },
               capabilities: ['completion', 'tools', 'vision'],
             }
           : {
               parameters: '',
+              details: { family: 'autre' },
               model_info: { 'llama.context_length': 131_072 },
               capabilities: ['completion', 'tools'],
             },
@@ -204,20 +212,23 @@ describe('serverModelSource (fonctions d’agent-core, réponses d’Ollama 0.40
     return Promise.resolve(new Response('{"detail":"Not Found"}', { status: 404 }));
   };
 
-  it('remplit capacités, contexte et état chargé depuis le serveur', async () => {
+  it('remplit capacités, contexte, famille et état chargé depuis le serveur', async () => {
     const catalog = new ModelCatalog({
       source: serverModelSource(() => ({ baseUrl: 'https://llm.exemple.fr', fetch: ollama })),
     });
     expect(await catalog.list()).toMatchObject([
+      // Famille vide dans `/api/tags` (MLX) : celle de `/api/show` la remplace.
       {
         name: 'qwen3.5:35b',
+        family: 'qwen3_5_moe',
         capabilities: ['completion', 'tools', 'vision'],
         contextWindow: 65_536,
         loaded: true,
       },
-      // Sans `num_ctx` : 32 768, borné par le maximum du modèle.
+      // Sans `num_ctx` : 32 768, borné par le maximum du modèle. La famille de `/api/tags` prime.
       {
         name: 'llama3.1:8b',
+        family: 'llama',
         capabilities: ['completion', 'tools'],
         contextWindow: 32_768,
         loaded: false,

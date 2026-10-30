@@ -79,6 +79,13 @@ describe('parseModelShow', () => {
   it('capacités vides : liste vide (connue), pas absente', () => {
     expect(parseModelShow({ capabilities: [] }).capabilities).toEqual([]);
   });
+
+  it('lit la famille dans details.family ; vide, elle reste inconnue', () => {
+    expect(parseModelShow({ ...SHOW_QWEN, details: { family: 'qwen3_5_moe' } }).family).toBe(
+      'qwen3_5_moe',
+    );
+    expect(parseModelShow({ details: { family: '' } })).not.toHaveProperty('family');
+  });
 });
 
 describe('fetchModelDetails', () => {
@@ -135,6 +142,26 @@ describe('describeModels', () => {
     expect(
       parseOllamaTags({ models: [{ name: 'e', capabilities: ['embedding'] }, { name: 'x' }] }),
     ).toEqual([{ name: 'e', capabilities: ['embedding'] }, { name: 'x' }]);
+  });
+
+  it('famille vide dans /api/tags (MLX, Ollama 0.40) : absente, puis complétée par /api/show', async () => {
+    const tags = parseOllamaTags({
+      models: [
+        { name: 'atelier:latest', details: { family: '' } },
+        { name: 'llama3.1:8b', details: { family: 'llama' } },
+      ],
+    });
+    expect(tags).toEqual([{ name: 'atelier:latest' }, { name: 'llama3.1:8b', family: 'llama' }]);
+    const f = server({
+      '/api/show': (init) => {
+        const { model } = bodyOf(init) as { model: string };
+        const family = model === 'atelier:latest' ? 'qwen3_5_moe' : 'autre';
+        return json({ parameters: 'num_ctx 32768', details: { family } });
+      },
+    });
+    const models = await describeModels(tags, { baseUrl: 'https://llm', fetch: f });
+    // Une famille donnée par /api/tags garde la priorité.
+    expect(models.map((m) => m.family)).toEqual(['qwen3_5_moe', 'llama']);
   });
 
   it('enrichit chaque modèle ; un échec laisse ses champs absents', async () => {
