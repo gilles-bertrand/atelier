@@ -139,6 +139,13 @@ describe('AgentRuntimeHost', () => {
     expect(MAX_RUNTIMES).toBe(3);
   });
 
+  it('« atelier » et « atelier:latest » partagent un runtime', async () => {
+    const { built, open } = fakeHost(() => configured());
+    await open('atelier');
+    await open('atelier:latest');
+    expect(built).toEqual(['atelier']);
+  });
+
   it('ne lit les capacités du modèle que sans modèle vision dans les Réglages', async () => {
     let settings = configured();
     const capabilities = vi.fn<CapabilityLookup>(() => Promise.resolve(['completion', 'tools']));

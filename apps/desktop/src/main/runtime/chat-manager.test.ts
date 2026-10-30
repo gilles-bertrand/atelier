@@ -115,7 +115,7 @@ class FakeAgentSession implements AgentSessionLike {
   }
 }
 
-/** Serveur factice : `9b` et `35b` utilisables, `embed` sans outils, le reste absent. */
+/** Serveur factice : `9b`, `35b` et `atelier:latest` utilisables, `embed` sans outils, le reste absent. */
 class FakeModels implements ModelValidator {
   readonly checked: string[] = [];
   assertUsable(model: string): Promise<void> {
@@ -125,7 +125,7 @@ class FakeModels implements ModelValidator {
         new AtelierError('llm/model_unsupported', 'sans outils', { details: { missing: 'tools' } }),
       );
     }
-    if (!['qwen3.5:9b', 'qwen3.5:35b'].includes(model)) {
+    if (!['qwen3.5:9b', 'qwen3.5:35b', 'atelier:latest'].includes(model)) {
       return Promise.reject(new AtelierError('llm/model_not_found', 'absent'));
     }
     return Promise.resolve();
@@ -468,6 +468,38 @@ describe('ChatManager', () => {
 });
 
 describe('ChatManager : modèle par conversation (#13)', () => {
+  it('« atelier » et « atelier:latest » sont le même modèle : ni vérification, ni recréation, une ligne d’usage', async () => {
+    const usage = new InMemoryUsageStore();
+    const { chats, store, created, models, wait, setDefault } = setup(
+      () => 'ok',
+      false,
+      undefined,
+      undefined,
+      usage,
+    );
+    setDefault('atelier');
+    const session = chats.create('/w');
+    // Le sélecteur propose le nom du serveur : même modèle, rien à vérifier ni à enregistrer.
+    expect((await chats.setModel(session.id, 'atelier:latest')).model).toBe('atelier');
+    expect(models.checked).toEqual([]);
+
+    // Conversation antérieure qui suit le défaut « atelier », puis choisit « atelier:latest ».
+    const legacy = store.create({
+      id: 'ancienne',
+      title: 'Ancienne',
+      workspace: '/w',
+      createdAt: '2026-10-01T09:00:00.000Z',
+      updatedAt: '2026-10-01T09:00:00.000Z',
+    });
+    chats.send(legacy.id, 'Un');
+    await wait(legacy.id);
+    await chats.setModel(legacy.id, 'atelier:latest');
+    chats.send(legacy.id, 'Deux');
+    await wait(legacy.id);
+    expect(created).toHaveLength(1);
+    expect(usage.all().map((r) => r.model)).toEqual(['atelier', 'atelier']);
+  });
+
   it('copie le modèle par défaut à la création : le changer ensuite ne touche pas la conversation', async () => {
     const { chats, created, store, wait, setDefault } = setup(() => 'ok');
     const session = chats.create('/w');

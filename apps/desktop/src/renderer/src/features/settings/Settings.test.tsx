@@ -6,14 +6,14 @@ import { App } from '@renderer/App';
 import { defaultTestSettings, installFakeApi, type FakeApi } from '@renderer/test/fake-api';
 import { jsonError } from './ExtensionsSettings';
 
-function setup(): FakeApi {
+function setup(defaultModel = 'qwen3.5:35b'): FakeApi {
   return installFakeApi({
     'settings:get': () =>
       defaultTestSettings({
         onboardingCompleted: true,
         llm: {
           baseUrl: 'https://llm.exemple.fr',
-          model: 'qwen3.5:35b',
+          model: defaultModel,
           thinking: true,
           visionModel: 'qwen3-vl:8b',
           numCtx: 65536,
@@ -28,6 +28,7 @@ function setup(): FakeApi {
       { name: 'qwen3.5:35b' },
       { name: 'qwen3.5:9b' },
       { name: 'qwen3-vl:8b' },
+      { name: 'atelier:latest' },
       { name: 'llama-texte', capabilities: ['completion'] },
       { name: 'nomic-embed-text' },
     ],
@@ -120,6 +121,16 @@ describe('réglages : serveur et modèle', () => {
     expect(api.callsTo('settings:update')).toContainEqual({
       llm: { model: 'qwen3.5:9b', visionModel: '', numCtx: 0 },
     });
+  });
+
+  it('« atelier » enregistré : l’entrée « atelier:latest » du serveur est sélectionnée, sans doublon', async () => {
+    setup('atelier');
+    await openSettings();
+    const model = screen.getByLabelText('Modèle par défaut des nouvelles conversations');
+    await waitFor(() => {
+      expect(model).toHaveValue('atelier:latest');
+    });
+    expect(within(model).queryByRole('option', { name: 'atelier' })).not.toBeInTheDocument();
   });
 
   it('refuse un contexte trop petit', async () => {

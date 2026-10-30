@@ -174,6 +174,11 @@ Modelfile `qa-9b-ctx8k` (`FROM qwen3.5:9b`, `PARAMETER num_ctx 8192`). Premier t
 
 `docs/SERVER.md` et `docs/DEMO.md` font saisir le modèle `atelier`, alors que `/api/tags` le liste comme `atelier:latest`. Le sélecteur compare les noms exactement (vérifié en mock) : le bouton affiche « Modèle : atelier », aucune entrée n'est cochée, et la pastille prêt / à froid ainsi que l'avertissement à froid ne fonctionnent pas pour le modèle courant. Choisir `atelier:latest` dans la liste en ferait un autre modèle : séparateur et ligne d'utilisation distincts pour le même modèle.
 
+**Corrigé** (branche `fix/ui-model-name-latest`, décision de Gilles) : l'app traite `x` et `x:latest` comme le même modèle partout où elle compare des noms (`common/model-name.ts`).
+
+- Ce qui en tient compte : sélecteur, séparateur, pastille et avertissement à froid, Réglages, validation de `session:set-model`, runtimes, statistiques d'utilisation.
+- Le nom envoyé au serveur ne change pas : vLLM sert `atelier` sans étiquette.
+
 ## Bugs relevés
 
 | Issue | Sujet                                                                                            | Agent(s)            | État                                          |

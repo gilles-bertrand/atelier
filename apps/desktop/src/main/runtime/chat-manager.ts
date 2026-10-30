@@ -36,6 +36,7 @@ import {
   settleRunningTools,
   userModelText,
 } from '../../common/chat-reducer.js';
+import { modelKey, sameModel } from '../../common/model-name.js';
 import type { PermissionBroker } from './permission-broker.js';
 import { sessionNotFound, type SessionStore } from './session-store.js';
 import { usageRecord, type UsageStore } from './usage-store.js';
@@ -162,7 +163,10 @@ export class ChatManager {
     this.#assertIdle(runtime);
     const name = model === null ? null : model.trim();
     if (name === '') throw new AtelierError('tool/invalid_input', 'Nom de modèle vide.');
-    if (name === (session.model ?? null)) return session;
+    // Même modèle (« atelier » et « atelier:latest » compris) : rien à changer ni à vérifier.
+    if (name === null ? session.model === undefined : sameModel(name, session.model)) {
+      return session;
+    }
     if (name !== null) await this.#o.models?.assertUsable(name);
     // Un tour a pu démarrer pendant la vérification auprès du serveur.
     this.#assertIdle(runtime);
@@ -370,7 +374,8 @@ export class ChatManager {
         usageRecord({
           turnId,
           sessionId,
-          model,
+          // « atelier » et « atelier:latest » : une seule ligne par modèle dans les statistiques.
+          model: modelKey(model),
           outcome: result.reason,
           usage,
           compactions,
@@ -402,7 +407,12 @@ export class ChatManager {
   ): Promise<AgentSessionLike> {
     const generation = this.#o.agents.generation();
     const current = runtime.agent;
-    if (current && current.generation === generation && current.model === model && !resetHistory) {
+    if (
+      current &&
+      current.generation === generation &&
+      sameModel(current.model, model) &&
+      !resetHistory
+    ) {
       return current.session;
     }
     // Recréation (Réglages LLM ou modèle changés) : la consommation du dernier tour

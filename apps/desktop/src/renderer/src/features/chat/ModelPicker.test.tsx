@@ -154,6 +154,18 @@ describe('sélecteur de modèle', () => {
     expect(api.callsTo('llm:list-models')).toHaveLength(2);
   });
 
+  it('« mistral-small » et « mistral-small:latest » : même modèle, entrée cochée, aucun changement', async () => {
+    const api = setup({ summary: { ...session, model: 'mistral-small' } });
+    const user = await openSession();
+    const listbox = await openList(user);
+    const entry = within(listbox)
+      .getAllByRole('option')
+      .find((o) => o.textContent.includes('mistral-small:latest'));
+    expect(entry).toHaveAttribute('aria-selected', 'true');
+    await user.click(entry as HTMLElement);
+    expect(api.callsTo('session:set-model')).toEqual([]);
+  });
+
   it('clavier : flèches, Entrée sur une entrée grisée sans effet, Échap rend le focus', async () => {
     const api = setup();
     const user = await openSession();

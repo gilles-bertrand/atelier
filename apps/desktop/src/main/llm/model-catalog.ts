@@ -16,6 +16,7 @@ import {
   type ServerQueryOptions,
 } from '@atelier/agent-core';
 import { AtelierError, type LlmModelInfo, type ModelCapability } from '@atelier/shared';
+import { modelKey, sameModel } from '../../common/model-name.js';
 
 /** Durée de vie des détails d'un modèle en cache. */
 export const MODEL_DETAILS_TTL_MS = 5 * 60_000;
@@ -124,7 +125,8 @@ export class ModelCatalog {
    */
   async assertUsable(model: string): Promise<void> {
     const models = await this.#o.source.list();
-    const installed = models.find((m) => m.name === model);
+    // « atelier » (Réglages, ancienne doc) est installé si le serveur liste « atelier:latest ».
+    const installed = models.find((m) => sameModel(m.name, model));
     if (!installed) {
       throw new AtelierError(
         'llm/model_not_found',
@@ -151,15 +153,17 @@ export class ModelCatalog {
   /** Détails en cache (partagés par les appels simultanés) ; un échec n'est jamais gardé. */
   #detailsOf(model: string): Promise<ModelDetailsInfo> {
     const now = (this.#o.now ?? Date.now)();
-    const cached = this.#details.get(model);
+    // « atelier » et « atelier:latest » partagent leurs détails.
+    const key = modelKey(model);
+    const cached = this.#details.get(key);
     if (cached && now - cached.at < (this.#o.ttlMs ?? MODEL_DETAILS_TTL_MS)) return cached.value;
     const entry: CachedDetails = { at: now, value: Promise.resolve({}) };
     entry.value = this.#o.source.details(model).catch(() => {
       // Serveur injoignable ou réponse illisible : capacités inconnues, réessayé au prochain appel.
-      if (this.#details.get(model) === entry) this.#details.delete(model);
+      if (this.#details.get(key) === entry) this.#details.delete(key);
       return {};
     });
-    this.#details.set(model, entry);
+    this.#details.set(key, entry);
     return entry.value;
   }
 }

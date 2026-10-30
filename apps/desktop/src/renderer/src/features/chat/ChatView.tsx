@@ -27,6 +27,7 @@ import { useApp } from '@renderer/state/app-state';
 import { isRunning } from '@renderer/state/chat-reducer';
 import { useChat, useSessionView } from '@renderer/state/chat-store';
 import { deriveSessionTitle } from '../../../../common/chat-reducer';
+import { sameModel } from '../../../../common/model-name';
 import { headerInset, SidebarOpenButton, useShellChrome } from '../sidebar/shell-chrome';
 import { Composer, type PendingAttachment } from './Composer';
 import { ContextGauge } from './ContextGauge';
@@ -113,7 +114,8 @@ export function ChatView({
   const [models, setModels] = useState<LlmModelInfo[] | undefined>();
   const [coldChoice, setColdChoice] = useState<string | undefined>();
   const [modelLoading, setModelLoading] = useState(false);
-  const modelInfo = models?.find((m) => m.name === model);
+  // « atelier » (conversation) correspond à « atelier:latest » (liste du serveur).
+  const modelInfo = models?.find((m) => sameModel(m.name, model));
   const isCold = modelInfo?.loaded === false;
   const hasImage = pending.some((p) => isImage(p.attachment.mimeType));
   const visionSet = visionModel !== undefined && visionModel !== '';
@@ -220,7 +222,9 @@ export function ChatView({
     setModelLoading(isCold);
     setColdChoice(undefined);
     if (isCold) {
-      setModels((list) => list?.map((m) => (m.name === model ? { ...m, loaded: true } : m)));
+      setModels((list) =>
+        list?.map((m) => (sameModel(m.name, model) ? { ...m, loaded: true } : m)),
+      );
     }
     try {
       await actions.send(session.id, text, attachments, model);

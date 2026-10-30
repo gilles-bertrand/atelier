@@ -3,10 +3,11 @@
  * proposés, compatibilité avec Atelier (D2), famille testée, vision (D4).
  */
 import { DEFAULT_MODEL, MODEL_PROFILES, type LlmModelInfo } from '@atelier/shared';
+import { sameModel } from '../../../common/model-name';
 
 /** Libellé de profil connu (« Recommandé (32 Go et plus) »), s'il existe. */
 export function profileLabel(model: string): string | undefined {
-  return MODEL_PROFILES.find((p) => p.model === model)?.label;
+  return MODEL_PROFILES.find((p) => sameModel(p.model, model))?.label;
 }
 
 /** Vrai pour un modèle d'embedding (inutilisable pour discuter). */
@@ -21,8 +22,8 @@ export function isEmbeddingModel(model: LlmModelInfo): boolean {
  */
 export function chatModels(models: readonly LlmModelInfo[]): LlmModelInfo[] {
   const rank = (name: string): number => {
-    if (name === DEFAULT_MODEL) return -1;
-    const index = MODEL_PROFILES.findIndex((p) => p.model === name);
+    if (sameModel(name, DEFAULT_MODEL)) return -1;
+    const index = MODEL_PROFILES.findIndex((p) => sameModel(p.model, name));
     return index < 0 ? MODEL_PROFILES.length : index;
   };
   return models
@@ -63,9 +64,12 @@ export function isTestedModel(model: LlmModelInfo, all: readonly LlmModelInfo[])
 /** Modèle à présélectionner : celui demandé s'il est utilisable, sinon le défaut, sinon le premier utilisable. */
 export function initialModel(models: readonly LlmModelInfo[], current: string): string | undefined {
   const usable = models.filter(supportsTools).map((m) => m.name);
-  if (usable.includes(current)) return current;
-  if (usable.includes(DEFAULT_MODEL)) return DEFAULT_MODEL;
-  return usable[0];
+  // Le nom du serveur est renvoyé : « atelier:latest » pour « atelier ».
+  return (
+    usable.find((name) => sameModel(name, current)) ??
+    usable.find((name) => sameModel(name, DEFAULT_MODEL)) ??
+    usable[0]
+  );
 }
 
 /**
