@@ -18,6 +18,7 @@ import {
   supportsTools,
 } from '@renderer/lib/models';
 import { cn } from '@renderer/lib/utils';
+import { sameModel } from '../../../../common/model-name';
 
 type ListState = { ok: true; models: LlmModelInfo[] } | { ok: false; error: string };
 
@@ -166,7 +167,7 @@ export function ModelPicker({
         setActive(
           Math.max(
             0,
-            shown.findIndex((m) => m.name === model),
+            shown.findIndex((m) => sameModel(m.name, model)),
           ),
         );
         onModels?.(all);
@@ -201,7 +202,8 @@ export function ModelPicker({
     const target = models[index];
     if (!target || !supportsTools(target)) return;
     close(true);
-    if (target.name !== model) onSelect(target);
+    // « atelier:latest » choisi pour une conversation sur « atelier » : même modèle, rien à changer.
+    if (!sameModel(target.name, model)) onSelect(target);
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLUListElement>): void => {
@@ -298,7 +300,7 @@ export function ModelPicker({
                 id={`${listId}-${String(i)}`}
                 model={m}
                 all={models}
-                selected={m.name === model}
+                selected={sameModel(m.name, model)}
                 active={i === active}
                 onPick={() => {
                   pick(i);

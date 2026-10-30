@@ -11,6 +11,7 @@ import { chatModels, NO_TOOLS_REASON, supportsTools } from '@renderer/lib/models
 import { useApp } from '@renderer/state/app-state';
 import { validateServerUrl } from '../onboarding/ServerStep';
 import { FeedbackLine, SettingsSection, useAction } from './common';
+import { sameModel } from '../../../../common/model-name';
 
 function ConnectionSettings() {
   const { state, actions } = useApp();
@@ -154,8 +155,10 @@ function ModelSettings() {
   }, [llm.baseUrl]);
 
   const names = models?.map((m) => m.name) ?? [];
+  // « atelier » enregistré, « atelier:latest » listé : l'entrée du serveur est sélectionnée.
+  const selected = names.find((name) => sameModel(name, model)) ?? model;
   const options: LlmModelInfo[] = [
-    ...(names.includes(model) ? [] : [{ name: model }]),
+    ...(names.includes(selected) ? [] : [{ name: model }]),
     ...(models ?? []),
   ];
   const ctxValue = numCtx.trim() === '' ? 0 : Number(numCtx);
@@ -168,14 +171,14 @@ function ModelSettings() {
           <Label htmlFor={ids.model}>Modèle par défaut des nouvelles conversations</Label>
           <Select
             id={ids.model}
-            value={model}
+            value={selected}
             onChange={(e) => {
               setModel(e.target.value);
             }}
           >
             {options.map((m) => {
               // Un modèle sans outils reste affiché, grisé, avec la raison (D2).
-              const usable = supportsTools(m) || m.name === model;
+              const usable = supportsTools(m) || m.name === selected;
               return (
                 <option key={m.name} value={m.name} disabled={!usable}>
                   {supportsTools(m) ? m.name : `${m.name} (${NO_TOOLS_REASON})`}

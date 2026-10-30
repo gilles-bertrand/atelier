@@ -35,6 +35,14 @@ describe('règles des modèles', () => {
     expect(initialModel(models, 'llama-sans-outils')).toBe('mistral');
   });
 
+  it('présélection : « atelier » enregistré donne le nom du serveur « atelier:latest »', () => {
+    const models: LlmModelInfo[] = [
+      { name: 'qwen3.5:35b' },
+      { name: 'atelier:latest', capabilities: ['completion', 'tools'] },
+    ];
+    expect(initialModel(models, 'atelier')).toBe('atelier:latest');
+  });
+
   it('embeddings écartés, même sans « embed » dans le nom', () => {
     expect(
       chatModels([{ name: 'vecteurs', capabilities: ['embedding'] }, { name: 'qwen3.5:9b' }]).map(

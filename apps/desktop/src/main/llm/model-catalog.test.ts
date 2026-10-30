@@ -144,6 +144,13 @@ describe('ModelCatalog', () => {
     await expect(catalog.assertUsable('llama3.1:8b')).resolves.toBeUndefined();
   });
 
+  it('« atelier » est installé si le serveur liste « atelier:latest », détails partagés', async () => {
+    const { catalog, calls } = setup({ models: [{ name: 'atelier:latest' }] });
+    await expect(catalog.assertUsable('atelier')).resolves.toBeUndefined();
+    await catalog.capabilities('atelier:latest');
+    expect(calls.details).toEqual(['atelier']);
+  });
+
   it('assertUsable se fie aux capacités de /api/tags quand le serveur les donne', async () => {
     const { catalog, calls } = setup({
       models: [{ name: 'bge-m3', capabilities: ['embedding'] }],

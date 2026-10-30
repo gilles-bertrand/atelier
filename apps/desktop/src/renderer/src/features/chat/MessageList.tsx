@@ -11,6 +11,7 @@ import { canRetry, errorMessage } from '@renderer/lib/error-messages';
 import type { SessionView, TurnView } from '@renderer/state/chat-reducer';
 import { Markdown } from './Markdown';
 import { AttachmentChip, ReasoningBlock, SourcesBadge, ToolCallBlock } from './MessageParts';
+import { sameModel } from '../../../../common/model-name';
 
 function UserMessage({ message }: { message: ChatMessage }) {
   return (
@@ -179,7 +180,8 @@ export function modelChanges(messages: readonly ChatMessage[]): Map<string, stri
   let previous: string | undefined;
   for (const message of messages) {
     if (message.role !== 'assistant' || message.model === undefined) continue;
-    if (previous !== undefined && message.model !== previous)
+    // « atelier » puis « atelier:latest » : même modèle, pas de séparateur.
+    if (previous !== undefined && !sameModel(message.model, previous))
       changes.set(message.id, message.model);
     previous = message.model;
   }

@@ -29,6 +29,7 @@ import {
   type SearchProviderId,
   type SkillInfo,
 } from '@atelier/shared';
+import { modelKey } from '../../common/model-name.js';
 import type { AgentSessionFactory, AgentSessionLike, NewAgentSession } from './chat-manager.js';
 import type { SandboxManager } from './sandbox-manager.js';
 
@@ -168,18 +169,20 @@ export class AgentRuntimeHost implements AgentSessionFactory {
 
   /** Runtime du modèle : réutilisé (et marqué récent), sinon créé en évinçant le plus ancien. */
   #runtimeFor(model: string): Promise<AgentRuntime> {
-    const cached = this.#runtimes.get(model);
+    // « atelier » et « atelier:latest » partagent un runtime ; le nom reçu part tel quel au serveur.
+    const key = modelKey(model);
+    const cached = this.#runtimes.get(key);
     if (cached) {
-      this.#runtimes.delete(model);
-      this.#runtimes.set(model, cached);
+      this.#runtimes.delete(key);
+      this.#runtimes.set(key, cached);
       return cached;
     }
     const created = this.#create(model);
     // Un échec (URL invalide) n'est pas mis en cache : réessayé au tour suivant.
     created.catch(() => {
-      if (this.#runtimes.get(model) === created) this.#runtimes.delete(model);
+      if (this.#runtimes.get(key) === created) this.#runtimes.delete(key);
     });
-    this.#runtimes.set(model, created);
+    this.#runtimes.set(key, created);
     // Un runtime évincé reste utilisable par les sessions qui le tiennent déjà.
     for (const oldest of this.#runtimes.keys()) {
       if (this.#runtimes.size <= MAX_RUNTIMES) break;
