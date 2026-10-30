@@ -33,6 +33,11 @@ export interface ContextWindowInfo {
 export interface ModelDetails extends ContextWindowInfo {
   /** Capacités annoncées par `/api/show`. Absent : inconnues (vLLM, Ollama ancien). */
   capabilities?: ModelCapability[];
+  /**
+   * Famille d'architecture (`details.family`), ex. `qwen3_5_moe`. Absent :
+   * inconnue. Les modèles MLX d'Ollama 0.40 ne la donnent qu'ici (vide dans `/api/tags`).
+   */
+  family?: string;
 }
 
 export interface ModelDetailsOptions {
@@ -70,15 +75,27 @@ export function parseCapabilities(value: unknown): ModelCapability[] | undefined
   return MODEL_CAPABILITIES.filter((capability) => value.includes(capability));
 }
 
+/**
+ * Famille d'architecture d'un bloc `details` (`/api/tags` ou `/api/show`) ;
+ * une chaîne vide (modèles MLX d'Ollama 0.40 dans `/api/tags`) vaut inconnue.
+ */
+export function parseFamily(details: unknown): string | undefined {
+  if (typeof details !== 'object' || details === null) return undefined;
+  const family = (details as Record<string, unknown>)['family'];
+  return typeof family === 'string' && family !== '' ? family : undefined;
+}
+
 /** Convertit la réponse de `/api/show` (Ollama). */
 export function parseModelShow(body: unknown): ModelDetails {
   const record = typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : {};
   const numCtx = parseNumCtx(record['parameters']);
   const modelMax = parseModelMaxContext(record['model_info']);
   const capabilities = parseCapabilities(record['capabilities']);
+  const family = parseFamily(record['details']);
   const extra = {
     ...(modelMax !== undefined ? { modelMaxContext: modelMax } : {}),
     ...(capabilities !== undefined ? { capabilities } : {}),
+    ...(family !== undefined ? { family } : {}),
   };
   if (numCtx !== undefined) return { contextWindow: numCtx, source: 'num_ctx', ...extra };
   return {

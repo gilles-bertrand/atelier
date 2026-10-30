@@ -16,7 +16,12 @@ import {
   type ServerHealth,
   type ServerStatus,
 } from '@atelier/shared';
-import { fetchContextWindow, fetchModelDetails, parseCapabilities } from './context-window.js';
+import {
+  fetchContextWindow,
+  fetchModelDetails,
+  parseCapabilities,
+  parseFamily,
+} from './context-window.js';
 import { toLlmError } from './errors.js';
 import type { FetchFunction } from './retry-fetch.js';
 
@@ -107,7 +112,9 @@ export function parseOllamaTags(body: unknown): LlmModelInfo[] {
     const details = asRecord(record['details']);
     const info: LlmModelInfo = { name };
     if (typeof record['size'] === 'number') info.sizeBytes = record['size'];
-    if (typeof details['family'] === 'string') info.family = details['family'];
+    // Vide pour les modèles MLX (Ollama 0.40) : laissée absente, `/api/show` la donne.
+    const family = parseFamily(details);
+    if (family !== undefined) info.family = family;
     if (typeof details['quantization_level'] === 'string') {
       info.quantization = details['quantization_level'];
     }
@@ -238,6 +245,7 @@ export async function describeModels(
     const info: LlmModelInfo = { ...model };
     const detail = details[index];
     if (detail?.capabilities !== undefined) info.capabilities = detail.capabilities;
+    if (info.family === undefined && detail?.family !== undefined) info.family = detail.family;
     if (detail !== undefined) info.contextWindow = detail.contextWindow;
     if (loaded !== undefined) info.loaded = loaded.includes(model.name);
     return info;
