@@ -39,6 +39,11 @@ export interface LaunchOptions {
   seed?: string[];
   /** Démarre l'app sur un `userData` vierge (onboarding), pour mesurer le premier lancement. */
   fresh?: boolean;
+  /**
+   * Dossier d'une app déjà lancée (`AtelierApp.root`, fermée avec `keep`) :
+   * relance sur le même `userData` et le même dossier de travail (réouverture).
+   */
+  root?: string;
 }
 
 export interface AtelierApp {
@@ -46,22 +51,26 @@ export interface AtelierApp {
   page: Page;
   workspace: string;
   userData: string;
+  /** Dossier temporaire racine (userData, dossier de travail, skills). */
+  root: string;
   /** Journal du process main (stdout + stderr). */
   logs: string[];
-  close: () => Promise<void>;
+  /** Ferme l'app ; `keep` garde ses fichiers pour une relance (`LaunchOptions.root`). */
+  close: (options?: { keep?: boolean }) => Promise<void>;
 }
 
 export async function launchAtelier(options: LaunchOptions): Promise<AtelierApp> {
-  const root = await realpath(await mkdtemp(join(tmpdir(), 'atelier-e2e-')));
+  const reopen = options.root !== undefined;
+  const root = options.root ?? (await realpath(await mkdtemp(join(tmpdir(), 'atelier-e2e-'))));
   const userData = join(root, 'userData');
   const workspace = join(root, 'workspace');
   const skillsDir = join(root, 'skills');
   await mkdir(userData, { recursive: true });
   await mkdir(workspace, { recursive: true });
-  for (const source of options.seed ?? []) {
+  for (const source of reopen ? [] : (options.seed ?? [])) {
     await cp(source, workspace, { recursive: true });
   }
-  if (!options.fresh) {
+  if (!options.fresh && !reopen) {
     await writeFile(
       join(userData, 'settings.json'),
       JSON.stringify(
@@ -127,10 +136,11 @@ export async function launchAtelier(options: LaunchOptions): Promise<AtelierApp>
     page,
     workspace,
     userData,
+    root,
     logs,
-    close: async () => {
+    close: async ({ keep = false } = {}) => {
       await app.close().catch(() => undefined);
-      if (process.env['ATELIER_E2E_KEEP'] !== '1') {
+      if (!keep && process.env['ATELIER_E2E_KEEP'] !== '1') {
         await rm(root, { recursive: true, force: true }).catch(() => undefined);
       }
     },

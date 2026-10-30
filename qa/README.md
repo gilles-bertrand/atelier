@@ -2,15 +2,15 @@
 
 Paquet `@atelier/qa` : les e2e des critères d'acceptation, la campagne de robustesse avec Qwen et les mesures de performance. Le rapport de synthèse est dans [`docs/QA.md`](../docs/QA.md).
 
-| Dossier                    | Contenu                                                                             |
-| -------------------------- | ----------------------------------------------------------------------------------- |
-| `e2e/`                     | Playwright pour Electron : critères 2 à 5, fumée, temps de lancement                |
-| `e2e/support/mock-llm.ts`  | faux serveur LLM (API OpenAI-compatible + routes Ollama) qui rejoue des scénarios   |
-| `e2e/support/scenarios.ts` | les scénarios mockés, avec les demandes du brief mot pour mot                       |
-| `robustness/`              | campagne avec un vrai modèle : injections, chemins piégés, boucles, sorties, réseau |
-| `bench/`                   | débit du modèle, démarrage de la VM, changement de dossier, premier lancement       |
-| `test/`                    | Vitest : le faux serveur reste compris par le provider de l'app (AI SDK)            |
-| `reports/`                 | rapports datés produits par `robustness` et `bench`                                 |
+| Dossier                    | Contenu                                                                                                 |
+| -------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `e2e/`                     | Playwright pour Electron : critères 2 à 5, modèle par conversation, fumée, lancement                    |
+| `e2e/support/mock-llm.ts`  | faux serveur LLM (API OpenAI-compatible + routes Ollama, dont `/api/ps`) : scénarios, plusieurs modèles |
+| `e2e/support/scenarios.ts` | les scénarios mockés, avec les demandes du brief mot pour mot                                           |
+| `robustness/`              | campagne avec un vrai modèle : injections, chemins piégés, boucles, sorties, réseau                     |
+| `bench/`                   | débit du modèle, démarrage de la VM, changement de dossier, premier lancement                           |
+| `test/`                    | Vitest : le faux serveur reste compris par le provider de l'app (AI SDK)                                |
+| `reports/`                 | rapports datés produits par `robustness` et `bench`                                                     |
 
 Les fichiers de test sont dans [`fixtures/`](../fixtures/) : `demo-ventes/` (3 CSV, janvier à juin 2026) et `demo-documents/` (rapport PDF de 30 pages, facture scannée, photo de ticket), générés par `fixtures/generate-demo-fixtures.py`.
 

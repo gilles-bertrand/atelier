@@ -122,6 +122,58 @@ Agent assemblé comme dans l'app (outils natifs + documents + web, VM réelle) ;
 | Premier token via `/v1` en streaming                         |            4,0 s | même prompt, cache de préfixe neutralisé                                                                                                                                       |
 | Requête de 78 000 tokens (critère 2, run 2)                  |       4 min 10 s | préremplissage seul, pic mémoire d'Ollama 38,7 Gio                                                                                                                             |
 
+## Modèle par conversation (#13, QA #18, 30/10/2026)
+
+`main` f512907 (PR #95, #97, #98, #99). Ollama **local** 0.40.12, M4 Max 64 Go. Specs : `qa/e2e/model-per-session.spec.ts` (mock, CI) et `qa/e2e/model-per-session.real.spec.ts` (réel, local seulement).
+
+### Mock (CI) : 7/7
+
+Le faux serveur sert maintenant `/api/ps` (état chargé réglable par test, un seul modèle en mémoire : une requête charge son modèle et décharge les autres) et plusieurs modèles : `qwen3.5:35b` (32 768), `qwen3.5:9b` (16 384), `llama3.1:8b` (hors Qwen, sans vision), `gemma3:4b` (sans outils), `nomic-embed-text` (embedding). Un modèle sans `tools` répond HTTP 400 « does not support tools », comme Ollama.
+
+| Cas                                                                                     | Résultat |
+| --------------------------------------------------------------------------------------- | -------- |
+| Liste : défaut en tête, profils, puis par nom ; embedding masqué                        | ✅       |
+| Pastille prêt / à froid ; contexte et profil affichés                                   | ✅       |
+| Badge « non testé » hors Qwen 3.5, absent sur les Qwen                                  | ✅       |
+| Modèle sans outils grisé, raison affichée, clic sans effet ; refusé aussi par le main   | ✅       |
+| Modèle absent refusé par le main (`llm/model_not_found`)                                | ✅       |
+| Clavier : flèches, Entrée, Échap, focus rendu au bouton                                 | ✅       |
+| Changement entre deux tours : avertissement à froid, « Chargement du modèle… »          | ✅       |
+| Séparateur « Modèle : X », modèle de chaque réponse gardé, requête sur le bon modèle    | ✅       |
+| Réglages › Utilisation : un tour par modèle                                             | ✅       |
+| Modèle conservé après redémarrage de l'app ; nouvelle conversation sur le défaut        | ✅       |
+| Changement refusé pendant un tour (bouton désactivé, `agent/busy`), possible après      | ✅       |
+| Serveur sans `/api/ps` : ni pastille ni avertissement                                   | ✅       |
+| Défaut sans outils : erreur lisible, « Choisir un autre modèle », « Réessayer » réussit | ✅       |
+
+### Réel : bascule qwen3.5:9b ↔ 35b
+
+Une conversation, demande « Réponds uniquement par le mot OK », serveur déchargé au départ (`keep_alive: 0`). Durée = envoi → fin du tour.
+
+| Tour | Modèle | État au choix | « Chargement du modèle… » |  Durée |
+| ---- | ------ | ------------- | ------------------------- | -----: |
+| 1    | 9b     | à froid       | affiché                   |  6,3 s |
+| 2    | 35b    | à froid       | affiché                   | 13,0 s |
+| 3    | 9b     | prêt          | non                       |  3,1 s |
+| 4    | 9b     | prêt          | non (témoin)              |  3,1 s |
+
+- Chargement seul, mesuré par `/api/generate` sans prompt : 9b 1,9 s, 35b 10,1 s.
+- L'avertissement à froid s'affiche au choix de 35b ; les séparateurs « Modèle : qwen3.5:35b » puis « Modèle : qwen3.5:9b » apparaissent.
+- Utilisation : 9b 3 tours (12,1 k en entrée, 97 tokens/s), 35b 1 tour (4 k, 107 tokens/s). Chaque tour coûte environ 4 000 tokens d'entrée (prompt système et outils).
+- L'Ollama local a gardé les deux modèles en mémoire au retour sur 9b (réglage local par défaut). Sur le serveur d'Atelier (`OLLAMA_MAX_LOADED_MODELS=1`), le retour sur 9b serait à froid et la bascule coûterait un rechargement à chaque fois.
+
+### Réel : compaction anticipée
+
+Modelfile `qa-9b-ctx8k` (`FROM qwen3.5:9b`, `PARAMETER num_ctx 8192`). Premier tour sur 9b avec ~5 000 tokens de notes (8,3 k en entrée, 26 % du contexte), puis passage à `qa-9b-ctx8k` et « Résume mes notes en une phrase ».
+
+- **1 compaction avant l'appel** (`compaction { replaced: 1 }` dans le journal du main) : le tour du petit modèle part avec 4,1 k en entrée (51 % de 8 192) et aboutit en 13,7 s.
+- Réglages › Utilisation compte la compaction sur la ligne `qa-9b-ctx8k:latest`.
+- Avec un Modelfile à 4 096, le prompt système et les outils (~4 000 tokens) remplissent déjà la fenêtre : 8 192 est le plus petit réglage exploitable.
+
+### Observation : modèle réglé sans étiquette (`atelier` au lieu de `atelier:latest`)
+
+`docs/SERVER.md` et `docs/DEMO.md` font saisir le modèle `atelier`, alors que `/api/tags` le liste comme `atelier:latest`. Le sélecteur compare les noms exactement (vérifié en mock) : le bouton affiche « Modèle : atelier », aucune entrée n'est cochée, et la pastille prêt / à froid ainsi que l'avertissement à froid ne fonctionnent pas pour le modèle courant. Choisir `atelier:latest` dans la liste en ferait un autre modèle : séparateur et ligne d'utilisation distincts pour le même modèle.
+
 ## Bugs relevés
 
 | Issue | Sujet                                                                                            | Agent(s)            | État                                          |
