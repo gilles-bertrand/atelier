@@ -15,6 +15,7 @@ import {
   sandboxStatus,
   send,
   sessionToolCalls,
+  sidebar,
   waitForSandbox,
   waitForTurnEnd,
 } from './support/app.js';
@@ -58,9 +59,7 @@ test('critère 5 : curl échoue dans la VM tant que le réseau est coupé', asyn
 
   // 2. Interrupteur de l'Environnement (pied de la colonne de gauche, à déplier)
   //    activé : la même commande réussit.
-  const environment = page
-    .getByRole('navigation', { name: 'Barre latérale' })
-    .getByRole('button', { name: /Environnement/ });
+  const environment = (await sidebar(page)).getByRole('button', { name: /Environnement/ });
   if ((await environment.getAttribute('aria-expanded')) !== 'true') await environment.click();
   const toggle = page.getByRole('switch', { name: 'Internet pour les commandes' });
   await expect(toggle).toBeEnabled();
