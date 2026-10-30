@@ -122,6 +122,16 @@ export interface CompactionEvent extends AgentEventBase {
   replacedMessages: number;
 }
 
+/**
+ * Usage cumulé du tour en cours, émis après chaque étape du modèle. Alimente la
+ * jauge de contexte en temps réel ; au mieux (un event perdu est corrigé par le
+ * suivant). Le registre persistant, lui, se fonde sur `TurnResult.usage`.
+ */
+export interface UsageEvent extends AgentEventBase {
+  type: 'usage';
+  usage: TokenUsage;
+}
+
 /** Raison de fin d'un tour. */
 export type DoneReason = 'stop' | 'aborted' | 'max_steps' | 'length';
 
@@ -152,6 +162,7 @@ export type AgentEvent =
   | SourcesEvent
   | LlmRetryEvent
   | CompactionEvent
+  | UsageEvent
   | DoneEvent
   | ErrorEvent;
 

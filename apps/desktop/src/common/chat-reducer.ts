@@ -95,6 +95,7 @@ export function applyAgentEvent(message: ChatMessage, event: AgentEvent): ChatMe
     case 'permission_request':
     case 'llm_retry':
     case 'compaction':
+    case 'usage':
     case 'done':
     case 'error':
       return message;

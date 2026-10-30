@@ -47,7 +47,7 @@ import { hasReasoning, stripReasoning } from './history.js';
 import { sourceText, unverifiedAmounts, verificationPrompt } from './numbers.js';
 import { createToolCallRepair } from './repair.js';
 import { skillAutoloadMessages } from './skill-autoload.js';
-import { TurnUsageMeter, type CoreAgentEvent, type TurnTokenUsage } from './usage.js';
+import { TurnUsageMeter, type TurnTokenUsage } from './usage.js';
 
 /** Nombre maximal d'étapes par tour (brief §1). */
 export const MAX_STEPS = 50;
@@ -216,16 +216,9 @@ export class Agent {
     const sources = new Map<string, WebSearchResult>();
 
     const usage = (): TurnTokenUsage => meter.snapshot();
-    // Event hors `AgentEvent` tant que le lot L0 n'est pas livré (ADR-001 §3).
     const emitUsage = (): void => {
       if (o.usageEvents !== true) return;
-      const event: CoreAgentEvent = {
-        type: 'usage',
-        usage: usage(),
-        sessionId: turn.sessionId,
-        turnId: turn.turnId,
-      };
-      (turn.emit as (event: CoreAgentEvent) => void)(event);
+      turn.emit({ type: 'usage', usage: usage(), sessionId: turn.sessionId, turnId: turn.turnId });
     };
     /**
      * `requestTokens` : taille (réelle ou estimée) de la requête qui a déclenché

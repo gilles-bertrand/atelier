@@ -138,7 +138,33 @@ export interface SessionSummary {
   updatedAt: string;
 }
 
-/** Consommation de tokens d'un tour (pilote la compaction). */
+/**
+ * Relance automatique d'un tour par la boucle agentique (message `[Atelier]`
+ * injecté). Les messages `summary` (compaction) et `skill` (autoload) n'en sont
+ * pas : ils ne signalent pas un écart du modèle.
+ */
+export type RelaunchKind =
+  | 'continuation'
+  | 'stream_cut'
+  | 'tool_call_parse'
+  | 'empty_final'
+  | 'announce_only'
+  | 'verification';
+
+/** Liste exhaustive des {@link RelaunchKind}, dans un ordre stable (affichage, SQL). */
+export const RELAUNCH_KINDS = [
+  'continuation',
+  'stream_cut',
+  'tool_call_parse',
+  'empty_final',
+  'announce_only',
+  'verification',
+] as const satisfies readonly RelaunchKind[];
+
+/**
+ * Consommation de tokens d'un tour (pilote la compaction, la jauge de contexte
+ * et les KPI d'utilisation, voir `docs/adr/ADR-001-consommation-tokens.md`).
+ */
 export interface TokenUsage {
   /** Tokens en entrée de la dernière étape. */
   inputTokens: number;
@@ -146,4 +172,14 @@ export interface TokenUsage {
   outputTokens: number;
   /** Fenêtre de contexte réelle du modèle (lue via `/api/show`). */
   contextWindow?: number;
+  /** Entrée cumulée sur toutes les étapes du tour (tokens réellement traités). */
+  totalInputTokens?: number;
+  /** Taille du contexte après la dernière étape (entrée + sortie de cette étape) : la jauge. */
+  contextTokens?: number;
+  /** Nombre d'appels au modèle pendant le tour. */
+  steps?: number;
+  /** Temps de génération cumulé (premier chunk → fin d'étape), en millisecondes. */
+  generationMs?: number;
+  /** Relances automatiques du tour, par type (absent = aucune). */
+  relaunches?: Partial<Record<RelaunchKind, number>>;
 }

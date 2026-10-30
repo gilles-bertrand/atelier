@@ -12,13 +12,14 @@
  */
 import type { SerializedAtelierError } from './errors.js';
 import type { AgentEvent } from './events.js';
-import type { Attachment, ChatMessage, SessionSummary } from './messages.js';
+import type { Attachment, ChatMessage, SessionSummary, TokenUsage } from './messages.js';
 import type { ConnectionTestResult, LlmModelInfo, ServerStatus } from './llm.js';
 import type { McpStatus } from './mcp.js';
 import type { PermissionDecision } from './permissions.js';
 import type { SandboxDiagnostics, SandboxProgress, SandboxStatus } from './sandbox.js';
 import type { AppSettings, AppSettingsPatch, SecretId, SecretsPresence } from './settings.js';
 import type { SkillInfo } from './skills.js';
+import type { UsagePeriod, UsageSummary } from './usage.js';
 
 /** Résultat d'un appel IPC : jamais d'exception qui traverse le pont, toujours un résultat typé. */
 export type IpcResult<T> = { ok: true; value: T } | { ok: false; error: SerializedAtelierError };
@@ -64,7 +65,12 @@ export interface IpcInvokeContract {
   'session:create': { request: { workspace: string }; response: SessionSummary };
   'session:open': {
     request: { sessionId: string };
-    response: { session: SessionSummary; messages: ChatMessage[] };
+    response: {
+      session: SessionSummary;
+      messages: ChatMessage[];
+      /** Dernier usage connu de la session (jauge de contexte dès la réouverture). */
+      usage?: TokenUsage;
+    };
   };
   'session:delete': { request: { sessionId: string }; response: undefined };
 
@@ -105,6 +111,9 @@ export interface IpcInvokeContract {
   'mcp:read-config': { request: undefined; response: string };
   'mcp:write-config': { request: { json: string }; response: undefined };
   'mcp:status': { request: undefined; response: McpStatus };
+
+  // --- Utilisation (tokens par modèle, KPI)
+  'usage:summary': { request: { period: UsagePeriod }; response: UsageSummary };
 }
 
 /** Canal d'invocation. */
@@ -165,6 +174,7 @@ export const IPC_INVOKE_CHANNELS = [
   'mcp:read-config',
   'mcp:write-config',
   'mcp:status',
+  'usage:summary',
 ] as const satisfies readonly IpcInvokeChannel[];
 
 /** Liste exhaustive des canaux d'événements. */

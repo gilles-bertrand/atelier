@@ -125,6 +125,9 @@ function applyEvent(session: SessionView, event: AgentEvent): SessionView {
           },
         },
       };
+    case 'usage':
+      // Jauge de contexte : état isolé, hors du reducer des messages.
+      return session;
     case 'compaction':
       return {
         ...next,
