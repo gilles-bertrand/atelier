@@ -28,6 +28,7 @@ import {
   fetchContextWindow,
   LocalSandbox,
   toLlmError,
+  usageLine,
   withSessionMemory,
 } from './index.js';
 
@@ -147,9 +148,7 @@ function createRenderer(): (event: AgentEvent) => void {
       case 'done':
         switchTo('none');
         process.stdout.write(
-          dim(
-            `— ${event.reason}${event.usage ? ` · contexte ${event.usage.inputTokens}/${event.usage.contextWindow ?? '?'} · sortie ${event.usage.outputTokens} tokens` : ''}\n`,
-          ),
+          dim(`— ${event.reason}${event.usage ? ` · ${usageLine(event.usage)}` : ''}\n`),
         );
         break;
       case 'error':
