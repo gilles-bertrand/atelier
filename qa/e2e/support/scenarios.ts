@@ -196,9 +196,36 @@ export const networkScenario: MockScenario = {
   ],
 };
 
+/** Demandes des e2e du modèle par conversation (#13, #18). */
+export const MODEL_PROMPTS = {
+  first: 'Présente-toi en une phrase',
+  second: 'Et maintenant, réponds avec l’autre modèle',
+  slow: 'Prends ton temps pour répondre',
+} as const;
+
+/** Délai de la réponse « lente » : assez long pour agir pendant le tour. */
+export const SLOW_REPLY_MS = 6_000;
+
+export const modelScenario: MockScenario = {
+  name: 'modèle par conversation',
+  match: (t) => t === MODEL_PROMPTS.first || t === MODEL_PROMPTS.second,
+  steps: [
+    // Un court délai laisse voir « Chargement du modèle… » sur un modèle à froid.
+    { text: 'Bonjour, je suis l’assistant d’Atelier.', promptTokens: 1_500, delayMs: 1_500 },
+  ],
+};
+
+export const slowScenario: MockScenario = {
+  name: 'tour lent',
+  match: (t) => t === MODEL_PROMPTS.slow,
+  steps: [{ text: 'Voilà, j’ai pris mon temps.', delayMs: SLOW_REPLY_MS }],
+};
+
 export const ALL_SCENARIOS: MockScenario[] = [
   excelScenario,
   nodeScenario,
   documentsScenario,
   networkScenario,
+  modelScenario,
+  slowScenario,
 ];

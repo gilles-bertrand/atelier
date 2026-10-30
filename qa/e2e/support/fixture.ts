@@ -5,7 +5,13 @@
 import { writeFile } from 'node:fs/promises';
 import { test as base } from '@playwright/test';
 import { IS_REAL, launchAtelier, type AtelierApp } from './app.js';
-import { startFakeSearxng, startMockLlm, type RecordedRequest } from './mock-llm.js';
+import {
+  startFakeSearxng,
+  startMockLlm,
+  type MockLlm,
+  type MockModel,
+  type RecordedRequest,
+} from './mock-llm.js';
 import { ALL_SCENARIOS, NODE_SOURCE } from './scenarios.js';
 
 export const REAL_LLM_URL = process.env['ATELIER_E2E_LLM_URL'] ?? 'http://localhost:11434';
@@ -16,24 +22,37 @@ interface Llm {
   model: string;
   /** Requêtes reçues (mode mock seulement). */
   requests: RecordedRequest[];
+  /** Faux serveur (mode mock seulement) : état chargé réglable. */
+  mock?: MockLlm;
 }
 
 interface Fixtures {
   llm: Llm;
   /** Fichiers à copier dans le dossier de travail (à surcharger avec `test.use`). */
   seed: string[];
+  /** Modèles du faux serveur (mode mock, défaut : `atelier:latest` seul). */
+  mockModels: MockModel[] | undefined;
+  /** Modèles en mémoire au démarrage du faux serveur (défaut : le premier). */
+  mockLoaded: string[] | undefined;
+  /** Modèle par défaut des Réglages (mode mock, défaut `atelier`). */
+  defaultModel: string;
   atelier: AtelierApp;
 }
 
 export const test = base.extend<Fixtures>({
   seed: [[], { option: true }],
-  // eslint-disable-next-line no-empty-pattern -- Playwright exige la déstructuration.
-  llm: async ({}, use) => {
+  mockModels: [undefined, { option: true }],
+  mockLoaded: [undefined, { option: true }],
+  defaultModel: ['atelier', { option: true }],
+  llm: async ({ mockModels, mockLoaded, defaultModel }, use) => {
     if (IS_REAL) {
       await use({ url: REAL_LLM_URL, model: REAL_MODEL, requests: [] });
       return;
     }
-    const llm = await startMockLlm(ALL_SCENARIOS);
+    const llm = await startMockLlm(ALL_SCENARIOS, {
+      ...(mockModels ? { models: mockModels } : {}),
+      ...(mockLoaded ? { loaded: mockLoaded } : {}),
+    });
     const searxng = await startFakeSearxng([
       {
         title: 'Node.js — Previous Releases',
@@ -41,7 +60,7 @@ export const test = base.extend<Fixtures>({
         content: 'Major Node.js versions enter Active LTS status…',
       },
     ]);
-    await use({ url: llm.url, model: 'atelier', requests: llm.requests });
+    await use({ url: llm.url, model: defaultModel, requests: llm.requests, mock: llm });
     await searxng?.close();
     await llm.close();
   },
