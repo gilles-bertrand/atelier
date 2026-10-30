@@ -70,7 +70,7 @@ export function PrivacyStep({ onBack, onDone }: { onBack: () => void; onDone: ()
           onChange={(e) => {
             setAccepted(e.target.checked);
           }}
-          className="mt-0.5 size-4 accent-primary"
+          className="mt-0.5 size-4 accent-brand"
         />
         <label htmlFor={checkboxId} className="text-sm">
           J’ai compris que mes documents sont envoyés au serveur {host}.

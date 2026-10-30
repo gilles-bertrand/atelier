@@ -4,6 +4,7 @@
  */
 import { useState } from 'react';
 import { FolderPlus, Loader2 } from 'lucide-react';
+import { AtelierMark } from '@renderer/components/AtelierMark';
 import { ServerStatusBadge } from '@renderer/components/status/ServerStatusBadge';
 import { Button } from '@renderer/components/ui/button';
 import { cn } from '@renderer/lib/utils';
@@ -39,6 +40,7 @@ export function Home({ onChooseFolder }: { onChooseFolder: () => Promise<void> }
       </header>
       <main className="flex flex-1 items-center overflow-y-auto">
         <section className="mx-auto w-full max-w-xl space-y-4 px-6 py-12 text-center">
+          <AtelierMark className="mx-auto block size-14" />
           <h1 className="text-2xl font-semibold tracking-tight">Sur quoi travaille-t-on ?</h1>
           <p className="text-sm text-muted-foreground">
             Choisissez le dossier qui contient vos documents. L’assistant pourra les lire, en créer

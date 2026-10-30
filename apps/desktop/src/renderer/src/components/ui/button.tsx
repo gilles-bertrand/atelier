@@ -12,7 +12,9 @@ const buttonVariants = cva(
         secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
         outline: 'border border-input bg-background hover:bg-accent hover:text-accent-foreground',
         ghost: 'hover:bg-accent hover:text-accent-foreground',
-        destructive: 'bg-destructive text-white hover:bg-destructive/90',
+        // En sombre, le rouge vif sous du texte blanc tomberait à 2,9:1 : fond atténué (6,5:1).
+        destructive:
+          'bg-destructive text-white hover:bg-destructive/90 dark:bg-destructive/60 dark:hover:bg-destructive/70',
       },
       size: {
         default: 'h-9 px-4 py-2',

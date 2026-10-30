@@ -11,7 +11,7 @@ export function HistoryBanner() {
   return (
     <div
       role="alert"
-      className="flex items-start gap-2 border-b border-amber-600/30 bg-amber-50 px-4 py-2 text-sm text-amber-950 dark:bg-amber-950/40 dark:text-amber-100"
+      className="flex items-start gap-2 border-b border-warning/40 bg-warning-soft px-4 py-2 text-sm text-warning-text"
     >
       <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
       <p>

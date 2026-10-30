@@ -15,6 +15,7 @@ import { ChatView } from './chat/ChatView';
 import { PermissionDialog } from './chat/PermissionDialog';
 import { Home } from './home/Home';
 import { Settings } from './settings/Settings';
+import { sessionActivity } from './sidebar/activity';
 import { ShellChromeProvider, type ShellChrome } from './sidebar/shell-chrome';
 import { Sidebar } from './sidebar/Sidebar';
 import { useSidebarState } from './sidebar/useSidebarState';
@@ -49,7 +50,9 @@ function upsert(list: readonly SessionSummary[], session: SessionSummary): Sessi
 }
 
 function WorkspaceViews() {
-  const { actions } = useChat();
+  const { state: chat, actions } = useChat();
+  // Pastilles de la colonne : l'assistant travaille, ou attend un accord.
+  const activity = useMemo(() => sessionActivity(chat), [chat]);
   const sidebar = useSidebarState();
   const [sessions, setSessions] = useState<SessionSummary[] | undefined>();
   const [current, setCurrent] = useState<SessionSummary | undefined>();
@@ -184,6 +187,7 @@ function WorkspaceViews() {
           {sidebarOpen ? (
             <Sidebar
               sessions={sessions}
+              activity={activity}
               current={current}
               settingsActive={settingsOpen}
               hiddenFolders={sidebar.hiddenFolders}

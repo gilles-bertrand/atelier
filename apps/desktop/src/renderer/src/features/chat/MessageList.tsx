@@ -99,10 +99,7 @@ function TurnStatus({
   if (turn.status === 'running') {
     if (turn.retry) {
       return (
-        <p
-          className="flex items-center gap-2 text-sm text-amber-700 dark:text-amber-400"
-          role="status"
-        >
+        <p className="flex items-center gap-2 text-sm text-warning-text" role="status">
           <Loader2 className="size-4 animate-spin" aria-hidden />
           Reconnexion au serveur…
           {turn.retry.maxAttempts !== undefined
@@ -113,7 +110,8 @@ function TurnStatus({
     }
     return hasLiveContent ? null : (
       <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status">
-        <Loader2 className="size-4 animate-spin" aria-hidden />
+        {/* L'orbe de l'icône respire pendant la réflexion (immobile si les animations sont réduites). */}
+        <span className="atelier-orb size-3.5 shrink-0 motion-safe:animate-breathe" aria-hidden />
         {modelLoading ? 'Chargement du modèle sur le serveur…' : 'L’assistant réfléchit…'}
       </p>
     );

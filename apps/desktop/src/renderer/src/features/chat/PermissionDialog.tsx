@@ -3,17 +3,47 @@
  * conversation / Refuser ». Une seule demande affichée à la fois ; Échap refuse.
  */
 import { useEffect, useId, useRef, type KeyboardEvent } from 'react';
-import { FilePen, Globe, Plug, ShieldAlert, Terminal, Trash2 } from 'lucide-react';
+import {
+  FilePen,
+  Globe,
+  Plug,
+  ShieldAlert,
+  SquareTerminal,
+  Trash2,
+  type LucideIcon,
+} from 'lucide-react';
 import type { PermissionDecision, PermissionKind, PermissionRequest } from '@atelier/shared';
 import { Button } from '@renderer/components/ui/button';
+import { cn } from '@renderer/lib/utils';
 
-const KIND: Record<PermissionKind, { icon: typeof Globe; heading: string }> = {
-  file_write: { icon: FilePen, heading: 'Modifier un fichier' },
-  file_delete: { icon: Trash2, heading: 'Supprimer un fichier' },
-  command: { icon: Terminal, heading: 'Exécuter une commande' },
-  network: { icon: Globe, heading: 'Accéder à internet' },
-  mcp_write: { icon: Plug, heading: 'Utiliser un connecteur' },
-  other: { icon: ShieldAlert, heading: 'Autoriser une action' },
+/**
+ * Niveau de risque, porté par la couleur : rouge pour une suppression ; ambre pour
+ * une commande, internet, un connecteur qui écrit ou une action inconnue ; bleu
+ * pour l'écriture d'un fichier du dossier de travail.
+ */
+export type PermissionRisk = 'high' | 'medium' | 'low';
+
+export const PERMISSION_KINDS: Record<
+  PermissionKind,
+  { icon: LucideIcon; heading: string; risk: PermissionRisk; allowLabel?: string }
+> = {
+  file_write: { icon: FilePen, heading: 'Modifier un fichier', risk: 'low' },
+  file_delete: {
+    icon: Trash2,
+    heading: 'Supprimer un fichier',
+    risk: 'high',
+    allowLabel: 'Supprimer une fois',
+  },
+  command: { icon: SquareTerminal, heading: 'Exécuter une commande', risk: 'medium' },
+  network: { icon: Globe, heading: 'Accéder à internet', risk: 'medium' },
+  mcp_write: { icon: Plug, heading: 'Utiliser un connecteur', risk: 'medium' },
+  other: { icon: ShieldAlert, heading: 'Autoriser une action', risk: 'medium' },
+};
+
+const RISK_CLASSES: Record<PermissionRisk, string> = {
+  high: 'bg-destructive-soft text-destructive-text',
+  medium: 'bg-warning-soft text-warning-text',
+  low: 'bg-info-soft text-info-text',
 };
 
 export function PermissionDialog({
@@ -31,7 +61,7 @@ export function PermissionDialog({
   const dialog = useRef<HTMLDivElement>(null);
   const firstButton = useRef<HTMLButtonElement>(null);
   const previousFocus = useRef<Element | null>(null);
-  const kind = KIND[request.kind];
+  const kind = PERMISSION_KINDS[request.kind];
   const Icon = kind.icon;
 
   useEffect(() => {
@@ -75,7 +105,13 @@ export function PermissionDialog({
         className="w-full max-w-lg space-y-4 rounded-xl border bg-background p-6 shadow-lg"
       >
         <div className="flex items-start gap-3">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200">
+          <span
+            data-risk={kind.risk}
+            className={cn(
+              'flex size-9 shrink-0 items-center justify-center rounded-full',
+              RISK_CLASSES[kind.risk],
+            )}
+          >
             <Icon className="size-4" aria-hidden />
           </span>
           <div className="min-w-0 space-y-1">
@@ -117,11 +153,12 @@ export function PermissionDialog({
             Toujours pour cette conversation
           </Button>
           <Button
+            variant={kind.risk === 'high' ? 'destructive' : 'default'}
             onClick={() => {
               onDecide('allow_once');
             }}
           >
-            Autoriser une fois
+            {kind.allowLabel ?? 'Autoriser une fois'}
           </Button>
         </div>
       </div>

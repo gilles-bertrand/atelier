@@ -1,7 +1,7 @@
 import { mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { app, BrowserWindow, dialog, safeStorage, session, shell } from 'electron';
+import { app, BrowserWindow, dialog, nativeTheme, safeStorage, session, shell } from 'electron';
 import { checkServerHealth } from '@atelier/agent-core';
 import type { AppHealth } from '@atelier/shared';
 import { loadMcpConfig, McpManager } from '@atelier/mcp-bridge';
@@ -53,7 +53,8 @@ function createMainWindow(): BrowserWindow {
     show: false,
     title: 'Atelier',
     titleBarStyle: 'hiddenInset',
-    backgroundColor: '#ffffff',
+    // Fond du thème courant (jeton --background du renderer) : pas de flash blanc en mode sombre.
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#0a0a0a' : '#ffffff',
     webPreferences: {
       preload: join(import.meta.dirname, '../preload/index.cjs'),
       contextIsolation: true,

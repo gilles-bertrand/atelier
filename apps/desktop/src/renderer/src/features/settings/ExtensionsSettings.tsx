@@ -1,11 +1,11 @@
 /** Skills (dossier, liste) et connecteurs MCP (état, édition de mcp.json). */
 import { useEffect, useId, useState } from 'react';
-import { Folder, Loader2 } from 'lucide-react';
+import { Folder, Loader2, Sparkles } from 'lucide-react';
 import type { McpServerState, McpStatus, SkillInfo } from '@atelier/shared';
+import { StatusDot, type StatusTone } from '@renderer/components/status/StatusDot';
 import { Button } from '@renderer/components/ui/button';
 import { Alert, Hint, Label } from '@renderer/components/ui/primitives';
 import { atelier, call } from '@renderer/lib/api';
-import { cn } from '@renderer/lib/utils';
 import { useApp } from '@renderer/state/app-state';
 import { FeedbackLine, SettingsSection, useAction } from './common';
 
@@ -60,9 +60,12 @@ export function SkillsSettings() {
       ) : (
         <ul className="divide-y rounded-lg border">
           {skills.map((skill) => (
-            <li key={skill.path} className="px-3 py-2.5">
-              <p className="text-sm font-medium">{skill.name}</p>
-              <p className="line-clamp-2 text-xs text-muted-foreground">{skill.description}</p>
+            <li key={skill.path} className="flex gap-2.5 px-3 py-2.5">
+              <Sparkles className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
+              <div className="min-w-0">
+                <p className="text-sm font-medium">{skill.name}</p>
+                <p className="line-clamp-2 text-xs text-muted-foreground">{skill.description}</p>
+              </div>
             </li>
           ))}
         </ul>
@@ -71,12 +74,12 @@ export function SkillsSettings() {
   );
 }
 
-const MCP_STATES: Record<McpServerState, { label: string; dot: string }> = {
-  connecting: { label: 'connexion…', dot: 'bg-amber-500' },
-  connected: { label: 'connecté', dot: 'bg-emerald-500' },
-  reconnecting: { label: 'reconnexion…', dot: 'bg-amber-500' },
-  failed: { label: 'en échec', dot: 'bg-red-500' },
-  stopped: { label: 'arrêté', dot: 'bg-muted-foreground/50' },
+const MCP_STATES: Record<McpServerState, { label: string; tone: StatusTone }> = {
+  connecting: { label: 'connexion…', tone: 'busy' },
+  connected: { label: 'connecté', tone: 'ok' },
+  reconnecting: { label: 'reconnexion…', tone: 'busy' },
+  failed: { label: 'en échec', tone: 'error' },
+  stopped: { label: 'arrêté', tone: 'idle' },
 };
 
 /** Erreur de syntaxe JSON lisible, ou `undefined`. */
@@ -127,10 +130,7 @@ export function McpSettings() {
           {status.servers.map((server) => (
             <li key={server.name} className="space-y-1 px-3 py-2.5">
               <p className="flex items-center gap-2 text-sm">
-                <span
-                  className={cn('size-2 rounded-full', MCP_STATES[server.state].dot)}
-                  aria-hidden
-                />
+                <StatusDot tone={MCP_STATES[server.state].tone} />
                 <span className="font-medium">{server.name}</span>
                 <span className="text-muted-foreground">
                   {MCP_STATES[server.state].label} · {server.toolCount} outil(s)

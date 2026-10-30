@@ -3,8 +3,18 @@
  * suivi), fil des messages, saisie, et dépôt de fichiers sur toute la zone.
  */
 import { useEffect, useId, useRef, useState, type DragEvent } from 'react';
-import { Folder, PanelRight, Upload } from 'lucide-react';
+import {
+  FileSpreadsheet,
+  FileText,
+  Folder,
+  Globe,
+  PanelRight,
+  ScanEye,
+  Upload,
+  type LucideIcon,
+} from 'lucide-react';
 import type { LlmModelInfo, SessionSummary } from '@atelier/shared';
+import { AtelierMark } from '@renderer/components/AtelierMark';
 import { ServerStatusBadge } from '@renderer/components/status/ServerStatusBadge';
 import { Button } from '@renderer/components/ui/button';
 import { Alert } from '@renderer/components/ui/primitives';
@@ -27,6 +37,42 @@ import { SidePanel } from './SidePanel';
 function hasFiles(event: DragEvent): boolean {
   return Array.from(event.dataTransfer.types).includes('Files');
 }
+
+/**
+ * Demandes types de la conversation vide : elles préremplissent la saisie (début
+ * de phrase à compléter) sans rien envoyer. Teintes des familles de fichiers.
+ */
+export const SUGGESTIONS: readonly {
+  label: string;
+  prompt: string;
+  icon: LucideIcon;
+  tile: string;
+}[] = [
+  {
+    label: 'Résumer un document',
+    prompt: 'Résume le document ',
+    icon: FileText,
+    tile: 'bg-file-doc-soft text-file-doc',
+  },
+  {
+    label: 'Créer un tableau Excel',
+    prompt: 'Crée un tableau Excel qui ',
+    icon: FileSpreadsheet,
+    tile: 'bg-file-sheet-soft text-file-sheet',
+  },
+  {
+    label: 'Chercher sur le web',
+    prompt: 'Cherche sur le web ',
+    icon: Globe,
+    tile: 'bg-info-soft text-info-text',
+  },
+  {
+    label: 'Lire une facture scannée',
+    prompt: 'Lis la facture scannée ',
+    icon: ScanEye,
+    tile: 'bg-file-image-soft text-file-image',
+  },
+];
 
 export function ChatView({
   session,
@@ -93,6 +139,17 @@ export function ChatView({
       setError(errorMessage(toSerializedError(e)));
     }
   };
+  const textarea = useRef<HTMLTextAreaElement>(null);
+  // Suggestion choisie : curseur en fin de saisie, une fois le texte affiché.
+  const [focusDraft, setFocusDraft] = useState(0);
+
+  useEffect(() => {
+    if (focusDraft === 0) return;
+    const field = textarea.current;
+    if (!field) return;
+    field.focus();
+    field.setSelectionRange(field.value.length, field.value.length);
+  }, [focusDraft]);
 
   useEffect(() => {
     if (view.loaded) return;
@@ -236,12 +293,44 @@ export function ChatView({
       <div className="flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
           {view.messages.length === 0 && !view.live && view.loaded ? (
-            <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
+            <div className="flex flex-1 flex-col items-center justify-center gap-2 overflow-y-auto px-6 py-6 text-center">
+              <AtelierMark className="mb-2 size-11" />
               <h2 className="text-lg font-semibold">Que puis-je faire pour vous ?</h2>
               <p className="max-w-md text-sm text-muted-foreground">
                 Je travaille dans le dossier « {fileName(session.workspace)} » : je peux lire vos
                 documents, en créer de nouveaux, chercher sur internet et faire des calculs.
               </p>
+              <ul
+                aria-label="Suggestions"
+                className="mt-4 grid w-full max-w-lg gap-2 sm:grid-cols-2"
+              >
+                {SUGGESTIONS.map((suggestion) => {
+                  const Icon = suggestion.icon;
+                  return (
+                    <li key={suggestion.label}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDraft(suggestion.prompt);
+                          setFocusDraft((n) => n + 1);
+                        }}
+                        className="flex w-full items-center gap-2.5 rounded-xl border bg-card px-3 py-2.5 text-left text-sm hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        <span
+                          className={cn(
+                            'flex size-7 shrink-0 items-center justify-center rounded-md',
+                            suggestion.tile,
+                          )}
+                          aria-hidden
+                        >
+                          <Icon className="size-4" />
+                        </span>
+                        {suggestion.label}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
             </div>
           ) : (
             <MessageList
@@ -311,6 +400,8 @@ export function ChatView({
                 </Alert>
               ) : undefined
             }
+            onAddFiles={(files) => void importFiles(files)}
+            textareaRef={textarea}
           />
         </div>
         {panelOpen ? <SidePanel id={panelId} view={view} /> : null}
@@ -319,9 +410,9 @@ export function ChatView({
       {dragging ? (
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-2 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-primary/50 bg-background/90 text-sm"
+          className="pointer-events-none absolute inset-2 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-brand/60 bg-background/90 text-sm"
         >
-          <Upload className="size-6 text-muted-foreground" />
+          <Upload className="size-6 text-brand" />
           Déposez vos fichiers : ils seront copiés dans le dossier de travail.
         </div>
       ) : null}

@@ -2,14 +2,16 @@
  * Menu « … » (motif ARIA menu button) : ouverture au clic ou au clavier, flèches
  * pour se déplacer, Échap ou clic extérieur pour fermer, focus rendu au bouton.
  */
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
-import { MoreHorizontal } from 'lucide-react';
+import { Fragment, useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
+import { MoreHorizontal, type LucideIcon } from 'lucide-react';
 import { cn } from '@renderer/lib/utils';
 
 export interface ActionMenuItem {
   label: string;
   onSelect: () => void;
+  /** Action irréversible : en rouge, séparée des autres par un trait. */
   destructive?: boolean;
+  icon?: LucideIcon;
 }
 
 export function ActionMenu({
@@ -105,25 +107,41 @@ export function ActionMenu({
           onKeyDown={onMenuKey}
           className="absolute right-0 top-7 z-20 min-w-48 rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
         >
-          {items.map((item) => (
-            <li key={item.label} role="none">
-              <button
-                type="button"
-                role="menuitem"
-                tabIndex={-1}
-                onClick={() => {
-                  close(false);
-                  item.onSelect();
-                }}
-                className={cn(
-                  'w-full rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none',
-                  item.destructive ? 'text-destructive' : undefined,
-                )}
-              >
-                {item.label}
-              </button>
-            </li>
-          ))}
+          {items.map((item, index) => {
+            const Icon = item.icon;
+            const separated = item.destructive === true && index > 0;
+            return (
+              <Fragment key={item.label}>
+                {separated ? <li role="separator" className="-mx-1 my-1 h-px bg-border" /> : null}
+                <li role="none">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    tabIndex={-1}
+                    onClick={() => {
+                      close(false);
+                      item.onSelect();
+                    }}
+                    className={cn(
+                      'flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none',
+                      item.destructive ? 'text-destructive' : undefined,
+                    )}
+                  >
+                    {Icon ? (
+                      <Icon
+                        className={cn(
+                          'size-4 shrink-0',
+                          item.destructive ? undefined : 'text-muted-foreground',
+                        )}
+                        aria-hidden
+                      />
+                    ) : null}
+                    {item.label}
+                  </button>
+                </li>
+              </Fragment>
+            );
+          })}
         </ul>
       ) : null}
     </div>

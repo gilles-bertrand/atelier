@@ -3,31 +3,24 @@
  * repliable, pièce jointe, badge « Sources ».
  */
 import { useId, useState } from 'react';
-import {
-  Ban,
-  Brain,
-  CheckCircle2,
-  ChevronRight,
-  FileText,
-  ImageIcon,
-  Link2,
-  Loader2,
-  XCircle,
-} from 'lucide-react';
+import { Ban, Brain, CheckCircle2, ChevronRight, Link2, Loader2, XCircle } from 'lucide-react';
 import type { Attachment, ToolCallPart, WebSearchResult } from '@atelier/shared';
+import { FILE_ICONS, FILE_ICON_CLASSES, fileType } from '@renderer/lib/file-types';
 import { formatBytes } from '@renderer/lib/format';
+import { TOOL_ICONS, toolIconName } from '@renderer/lib/tool-icons';
 import { toolLabel } from '@renderer/lib/tool-labels';
 import { cn } from '@renderer/lib/utils';
 import { FileCard, isProminentDisplay, ToolDisplayView, WebLink } from './ToolDisplays';
 
+/** Le statut porte la couleur ; l'icône de l'outil reste neutre. */
 const STATUS: Record<
   ToolCallPart['status'],
   { label: string; icon: typeof Loader2; className: string }
 > = {
-  running: { label: 'en cours', icon: Loader2, className: 'animate-spin text-muted-foreground' },
-  success: { label: 'terminé', icon: CheckCircle2, className: 'text-emerald-600' },
+  running: { label: 'en cours', icon: Loader2, className: 'animate-spin text-brand' },
+  success: { label: 'terminé', icon: CheckCircle2, className: 'text-success' },
   error: { label: 'échec', icon: XCircle, className: 'text-destructive' },
-  denied: { label: 'refusé', icon: Ban, className: 'text-amber-600' },
+  denied: { label: 'refusé', icon: Ban, className: 'text-warning-text' },
 };
 
 function inputPreview(input: unknown): string {
@@ -42,19 +35,26 @@ function inputPreview(input: unknown): string {
 export function ToolCallBlock({ part }: { part: ToolCallPart }) {
   const status = STATUS[part.status];
   const Icon = status.icon;
+  const ToolIcon = TOOL_ICONS[toolIconName(part.toolName, part.input)];
   const label = toolLabel(part.toolName, part.input);
   const prominent = part.display && isProminentDisplay(part.display) ? part.display : undefined;
   return (
     <div className="space-y-2">
       <details className="group rounded-lg border bg-muted/30 text-sm">
-        <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg px-3 py-2 hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+        <summary className="flex cursor-pointer list-none items-center gap-2.5 rounded-lg py-1.5 pl-1.5 pr-3 hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+          <span
+            className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-foreground/75"
+            aria-hidden
+          >
+            <ToolIcon className="size-3.5" />
+          </span>
+          <span className="min-w-0 flex-1 truncate">{label}</span>
+          <Icon className={cn('size-4 shrink-0', status.className)} aria-hidden />
+          <span className="sr-only">({status.label})</span>
           <ChevronRight
             className="size-3.5 shrink-0 text-muted-foreground transition-transform group-open:rotate-90"
             aria-hidden
           />
-          <span className="min-w-0 flex-1 truncate">{label}</span>
-          <Icon className={cn('size-4 shrink-0', status.className)} aria-hidden />
-          <span className="sr-only">({status.label})</span>
         </summary>
         <div className="space-y-3 border-t px-3 py-3">
           {part.display && !prominent ? <ToolDisplayView display={part.display} /> : null}
@@ -98,11 +98,11 @@ export function ReasoningBlock({ text, live }: { text: string; live: boolean }) 
 
 /** Pièce jointe (chip). */
 export function AttachmentChip({ attachment }: { attachment: Attachment }) {
-  const isImage = attachment.mimeType?.startsWith('image/') ?? false;
-  const Icon = isImage ? ImageIcon : FileText;
+  const kind = fileType(attachment.name, attachment.mimeType).kind;
+  const Icon = FILE_ICONS[kind];
   return (
     <span className="inline-flex max-w-full items-center gap-1.5 rounded-md border bg-background px-2 py-1 text-xs">
-      <Icon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+      <Icon className={cn('size-3.5 shrink-0', FILE_ICON_CLASSES[kind])} aria-hidden />
       <span className="truncate" title={attachment.path}>
         {attachment.name}
       </span>

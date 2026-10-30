@@ -3,32 +3,26 @@
  * résultats web, page lue, commande, modification, liste de tâches.
  */
 import { useState } from 'react';
-import {
-  CheckCircle2,
-  Circle,
-  CircleDot,
-  ExternalLink,
-  FileText,
-  FolderOpen,
-  Globe,
-} from 'lucide-react';
+import { CheckCircle2, Circle, CircleDot, ExternalLink, FolderOpen, Globe } from 'lucide-react';
 import type {
   FileCard as FileCardData,
   TodoItem,
   ToolDisplay,
   WebSearchResult,
 } from '@atelier/shared';
+import { FileTypeIcon } from '@renderer/components/FileTypeIcon';
 import { Button } from '@renderer/components/ui/button';
 import { call, toSerializedError } from '@renderer/lib/api';
 import { errorMessage } from '@renderer/lib/error-messages';
 import { formatBytes } from '@renderer/lib/format';
-import { fileName, hostname, safeHttpUrl } from '@renderer/lib/tool-labels';
+import { fileName, hostname, safeHttpUrl, siteMark } from '@renderer/lib/tool-labels';
 import { cn } from '@renderer/lib/utils';
 
-const ACTION_LABELS: Record<FileCardData['action'], string> = {
-  created: 'Créé',
-  modified: 'Modifié',
-  presented: 'Fichier',
+/** Étiquette de la carte : « Créé » en succès, « Modifié » en info. */
+const ACTIONS: Record<FileCardData['action'], { label: string; className: string }> = {
+  created: { label: 'Créé', className: 'bg-success-soft text-success-text' },
+  modified: { label: 'Modifié', className: 'bg-info-soft text-info-text' },
+  presented: { label: 'Fichier', className: 'bg-muted text-muted-foreground' },
 };
 
 /** Carte de fichier : ouverture avec l'application par défaut, ou dans le Finder. */
@@ -42,18 +36,29 @@ export function FileCard({ file, compact = false }: { file: FileCardData; compac
       setError(errorMessage(toSerializedError(e)));
     }
   };
+  const action = ACTIONS[file.action];
+  const details = [
+    file.size !== undefined ? formatBytes(file.size) : undefined,
+    !compact && file.path.includes('/') ? file.path : undefined,
+  ].filter((part) => part !== undefined);
   return (
     <div className="rounded-lg border bg-card">
       <div className="flex items-center gap-3 px-3 py-2.5">
-        <FileText className="size-5 shrink-0 text-muted-foreground" aria-hidden />
+        <FileTypeIcon name={file.path} />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium" title={file.path}>
             {fileName(file.path)}
           </p>
           <p className="truncate text-xs text-muted-foreground">
-            {ACTION_LABELS[file.action]}
-            {file.size !== undefined ? ` · ${formatBytes(file.size)}` : ''}
-            {!compact && file.path.includes('/') ? ` · ${file.path}` : ''}
+            <span
+              className={cn(
+                'mr-1.5 inline-block rounded-full px-1.5 py-px text-[0.6875rem] font-medium',
+                action.className,
+              )}
+            >
+              {action.label}
+            </span>
+            {details.join(' · ')}
           </p>
         </div>
         <Button size="sm" variant="outline" onClick={() => void run('file:open')}>
@@ -81,26 +86,40 @@ export function FileCard({ file, compact = false }: { file: FileCardData; compac
 /** Lien vers une page web (navigateur système). */
 export function WebLink({ result }: { result: WebSearchResult }) {
   const url = safeHttpUrl(result.url);
+  const mark = siteMark(result.url);
   return (
-    <li className="space-y-0.5">
-      {url ? (
-        <a
-          href={url}
-          target="_blank"
-          rel="noreferrer noopener"
-          className="inline-flex items-center gap-1 text-sm font-medium underline-offset-2 hover:underline"
-        >
-          {result.title || hostname(result.url)}
-          <ExternalLink className="size-3 text-muted-foreground" aria-hidden />
-          <span className="sr-only"> (s’ouvre dans le navigateur)</span>
-        </a>
-      ) : (
-        <span className="text-sm font-medium">{result.title}</span>
-      )}
-      <p className="text-xs text-muted-foreground">{hostname(result.url)}</p>
-      {result.snippet ? (
-        <p className="line-clamp-2 text-xs text-muted-foreground">{result.snippet}</p>
-      ) : null}
+    <li className="flex gap-2.5">
+      {/* Repère du site : initiale et teinte calculées localement, aucune favicon téléchargée. */}
+      <span
+        aria-hidden
+        className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-md text-[0.6875rem] font-bold"
+        style={{
+          backgroundColor: `oklch(var(--avatar-bg-l) var(--avatar-bg-c) ${String(mark.hue)})`,
+          color: `oklch(var(--avatar-fg-l) var(--avatar-fg-c) ${String(mark.hue)})`,
+        }}
+      >
+        {mark.initial}
+      </span>
+      <div className="min-w-0 space-y-0.5">
+        {url ? (
+          <a
+            href={url}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="inline-flex items-center gap-1 text-sm font-medium underline-offset-2 hover:underline"
+          >
+            {result.title || hostname(result.url)}
+            <ExternalLink className="size-3 text-muted-foreground" aria-hidden />
+            <span className="sr-only"> (s’ouvre dans le navigateur)</span>
+          </a>
+        ) : (
+          <span className="text-sm font-medium">{result.title}</span>
+        )}
+        <p className="text-xs text-muted-foreground">{hostname(result.url)}</p>
+        {result.snippet ? (
+          <p className="line-clamp-2 text-xs text-muted-foreground">{result.snippet}</p>
+        ) : null}
+      </div>
     </li>
   );
 }
@@ -115,6 +134,11 @@ const TODO_STATUS: Record<TodoItem['status'], string> = {
   in_progress: 'en cours',
   completed: 'terminée',
 };
+const TODO_COLORS: Record<TodoItem['status'], string> = {
+  pending: 'text-muted-foreground',
+  in_progress: 'text-brand',
+  completed: 'text-success',
+};
 
 export function TodoList({ todos }: { todos: readonly TodoItem[] }) {
   return (
@@ -123,13 +147,7 @@ export function TodoList({ todos }: { todos: readonly TodoItem[] }) {
         const Icon = TODO_ICONS[todo.status];
         return (
           <li key={todo.id} className="flex items-start gap-2 text-sm">
-            <Icon
-              className={cn(
-                'mt-0.5 size-4 shrink-0',
-                todo.status === 'completed' ? 'text-emerald-600' : 'text-muted-foreground',
-              )}
-              aria-hidden
-            />
+            <Icon className={cn('mt-0.5 size-4 shrink-0', TODO_COLORS[todo.status])} aria-hidden />
             <span
               className={cn(todo.status === 'completed' && 'text-muted-foreground line-through')}
             >
@@ -192,7 +210,14 @@ export function ToolDisplayView({ display }: { display: ToolDisplay }) {
               {display.output}
             </pre>
           ) : null}
-          <p className="text-xs text-muted-foreground">Code de sortie : {display.exitCode}</p>
+          <p
+            className={cn(
+              'text-xs',
+              display.exitCode === 0 ? 'text-muted-foreground' : 'text-destructive-text',
+            )}
+          >
+            Code de sortie : {display.exitCode}
+          </p>
         </div>
       );
     case 'diff':
@@ -200,13 +225,13 @@ export function ToolDisplayView({ display }: { display: ToolDisplay }) {
         <div className="grid gap-2 text-xs sm:grid-cols-2">
           <div>
             <p className="mb-1 font-medium text-muted-foreground">Avant</p>
-            <pre className="max-h-48 overflow-auto rounded-md bg-red-50 p-2 font-mono dark:bg-red-950/30">
+            <pre className="max-h-48 overflow-auto rounded-md bg-destructive-soft p-2 font-mono">
               {display.before}
             </pre>
           </div>
           <div>
             <p className="mb-1 font-medium text-muted-foreground">Après</p>
-            <pre className="max-h-48 overflow-auto rounded-md bg-emerald-50 p-2 font-mono dark:bg-emerald-950/30">
+            <pre className="max-h-48 overflow-auto rounded-md bg-success-soft p-2 font-mono">
               {display.after}
             </pre>
           </div>
