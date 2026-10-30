@@ -11,7 +11,7 @@
  * Résultats : docs/QA.md, « Modèle par conversation ».
  */
 import type { Page, TestInfo } from '@playwright/test';
-import { IS_REAL, openWorkspace, send, waitForTurnEnd } from './support/app.js';
+import { IS_REAL, openWorkspace, send, sidebar, waitForTurnEnd } from './support/app.js';
 import { expect, REAL_LLM_URL, test } from './support/fixture.js';
 
 const QWEN_9B = 'qwen3.5:9b';
@@ -97,10 +97,7 @@ async function report(testInfo: TestInfo, name: string, value: unknown): Promise
 }
 
 async function usageRows(page: Page): Promise<string[]> {
-  await page
-    .getByRole('navigation', { name: 'Barre latérale' })
-    .getByRole('button', { name: 'Réglages' })
-    .click();
+  await (await sidebar(page)).getByRole('button', { name: 'Réglages' }).click();
   await page
     .getByRole('navigation', { name: 'Rubriques des réglages' })
     .getByRole('button', { name: 'Utilisation' })

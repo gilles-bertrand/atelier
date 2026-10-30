@@ -122,7 +122,7 @@ Glisser dans le chat `rapport-annuel-2025.pdf`, `facture-scannee.pdf` et `ticket
 pnpm test && pnpm lint && pnpm typecheck
 ```
 
-- **Attendu :** les trois commandes passent, localement et dans la CI (`macos-14`).
+- **Attendu :** les trois commandes passent, localement et dans la CI (`macos-15`).
 
 ## Journal des répétitions
 

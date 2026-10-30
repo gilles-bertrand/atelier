@@ -13,7 +13,14 @@
  * anticipée) se fait à la main sur l'Ollama local : voir docs/QA.md.
  */
 import type { Page } from '@playwright/test';
-import { IS_REAL, launchAtelier, openWorkspace, send, waitForTurnEnd } from './support/app.js';
+import {
+  IS_REAL,
+  launchAtelier,
+  openWorkspace,
+  send,
+  sidebar,
+  waitForTurnEnd,
+} from './support/app.js';
 import { expect, test } from './support/fixture.js';
 import type { MockModel } from './support/mock-llm.js';
 import { MODEL_PROMPTS } from './support/scenarios.js';
@@ -237,10 +244,7 @@ test('changement entre deux tours : avertissement à froid, chargement, séparat
   expect(await assistantModels(page, session.id)).toEqual([QWEN_35B, QWEN_9B]);
 
   // Réglages › Utilisation : un tour par modèle.
-  await page
-    .getByRole('navigation', { name: 'Barre latérale' })
-    .getByRole('button', { name: 'Réglages' })
-    .click();
+  await (await sidebar(page)).getByRole('button', { name: 'Réglages' }).click();
   await page
     .getByRole('navigation', { name: 'Rubriques des réglages' })
     .getByRole('button', { name: 'Utilisation' })
@@ -274,17 +278,14 @@ test('modèle conservé à la réouverture, sans changer le défaut des nouvelle
   const again = await launchAtelier({ llmUrl: llm.url, model: QWEN_35B, root: atelier.root });
   try {
     const page2 = again.page;
-    await page2
-      .getByRole('navigation', { name: 'Barre latérale' })
-      .getByRole('button', { name: session.title })
-      .first()
-      .click();
+    await (await sidebar(page2)).getByRole('button', { name: session.title }).first().click();
     await expect(pickerButton(page2)).toHaveAccessibleName(`Modèle : ${LLAMA}`);
     expect(await assistantModels(page2, session.id)).toEqual([LLAMA]);
 
     // Une nouvelle conversation part du défaut des Réglages (D1).
-    await page2
-      .getByRole('navigation', { name: 'Barre latérale' })
+    await (
+      await sidebar(page2)
+    )
       .getByRole('button', { name: /^Nouvelle conversation/ })
       .first()
       .click();

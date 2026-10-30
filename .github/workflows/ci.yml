@@ -12,7 +12,7 @@ concurrency:
 jobs:
   check:
     name: test · lint · typecheck
-    runs-on: macos-14 # Apple Silicon (arm64), cible unique du projet
+    runs-on: macos-15 # Apple Silicon (arm64), cible unique du projet ; macos-14 retiré le 2026-11-02
     timeout-minutes: 20
     env:
       # Le binaire Electron n'est pas nécessaire pour les tests/lint/typecheck.
@@ -34,7 +34,7 @@ jobs:
 
   e2e:
     name: e2e (critères 2 à 5, modèle mocké)
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
