@@ -108,7 +108,7 @@ const result = await session.send(
 
 ### Serveur LLM (Réglages, onboarding, indicateur)
 
-Trois fonctions prêtes pour les canaux IPC `llm:*`, compatibles Ollama **et** vLLM (repli sur `GET /v1/models` quand `/api/tags`, `/api/version` ou `/api/show` répondent 404, voir `docs/SERVER.md` §5) :
+Trois fonctions prêtes pour les canaux IPC `llm:*`, compatibles Ollama **et** vLLM (repli sur `GET /v1/models` quand `/api/tags`, `/api/version` ou `/api/show` répondent 404, voir `docs/SERVER.md` §6) :
 
 ```ts
 import { checkServerHealth, listModels, testConnection } from '@atelier/agent-core';
