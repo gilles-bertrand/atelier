@@ -70,9 +70,7 @@ export function FeedbackLine({ feedback }: { feedback: Feedback }) {
     <p
       role={feedback.tone === 'error' ? 'alert' : 'status'}
       className={
-        feedback.tone === 'error'
-          ? 'text-sm text-destructive'
-          : 'text-sm text-emerald-700 dark:text-emerald-400'
+        feedback.tone === 'error' ? 'text-sm text-destructive' : 'text-sm text-success-text'
       }
     >
       {feedback.message}

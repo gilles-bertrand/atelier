@@ -133,7 +133,9 @@ describe('conversation', () => {
       },
     });
     expect(screen.getByText('(terminé)')).toBeInTheDocument();
-    await user.click(within(screen.getByRole('log')).getByRole('button', { name: 'Ouvrir' }));
+    await user.click(
+      within(screen.getByRole('log')).getByRole('button', { name: 'Ouvrir recap.md' }),
+    );
     expect(api.callsTo('file:open')).toEqual([{ absolutePath: '/Users/test/Ventes/recap.md' }]);
 
     emit({
@@ -184,7 +186,7 @@ describe('conversation', () => {
     expect(
       within(log).getByRole('button', { name: 'Afficher recap.xlsx dans le Finder' }),
     ).toBeInTheDocument();
-    await user.click(within(log).getByRole('button', { name: 'Ouvrir' }));
+    await user.click(within(log).getByRole('button', { name: 'Ouvrir recap.xlsx' }));
     expect(api.callsTo('file:open')).toEqual([{ absolutePath: '/Users/test/Ventes/recap.xlsx' }]);
   });
 
@@ -340,5 +342,101 @@ describe('conversation', () => {
         ],
       });
     });
+  });
+});
+
+describe('icônes et couleurs', () => {
+  it('les suggestions de la conversation vide préremplissent la saisie sans rien envoyer', async () => {
+    const user = await openSession();
+    await user.click(screen.getByRole('button', { name: 'Créer un tableau Excel' }));
+    const field = screen.getByLabelText('Votre message');
+    expect(field).toHaveValue('Crée un tableau Excel qui ');
+    await waitFor(() => {
+      expect(field).toHaveFocus();
+    });
+    expect(api.callsTo('agent:send')).toEqual([]);
+  });
+
+  it('le trombone importe les fichiers choisis comme un glisser-déposer', async () => {
+    const user = await openSession();
+    const input = document.querySelector<HTMLInputElement>('input[type="file"]');
+    if (!input) throw new Error('champ de fichiers absent');
+    expect(screen.getByRole('button', { name: 'Joindre des fichiers' })).toBeEnabled();
+    await user.upload(input, new File(['%PDF'], 'contrat-bail.pdf', { type: 'application/pdf' }));
+    expect(await screen.findByText('contrat-bail.pdf')).toBeInTheDocument();
+    expect(api.callsTo('attachment:import')).toEqual([
+      { sessionId: 's1', hostPaths: ['/fake/contrat-bail.pdf'] },
+    ]);
+  });
+
+  it('une suppression demande un accord en rouge, avec un bouton qui dit ce qu’il fait', async () => {
+    const user = await openSession();
+    await user.type(screen.getByLabelText('Votre message'), 'Fais le ménage{Enter}');
+    emit({
+      type: 'permission_request',
+      request: {
+        id: 'p3',
+        sessionId: 's1',
+        toolCallId: 'c3',
+        toolName: 'mcp__fichiers__delete',
+        kind: 'file_delete',
+        title: 'Supprimer brouillon-v1.docx',
+        input: {},
+      },
+    });
+    const dialog = screen.getByRole('alertdialog', { name: 'Supprimer brouillon-v1.docx' });
+    expect(dialog.querySelector('[data-risk]')).toHaveAttribute('data-risk', 'high');
+    expect(
+      within(dialog).queryByRole('button', { name: 'Autoriser une fois' }),
+    ).not.toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: 'Supprimer une fois' }));
+    expect(api.callsTo('permission:respond')).toEqual([
+      { requestId: 'p3', decision: 'allow_once' },
+    ]);
+  });
+
+  it('la colonne signale une conversation qui travaille, puis qui attend un accord', async () => {
+    const user = await openSession();
+    const recent = screen.getByRole('list', { name: 'Conversations récentes' });
+    expect(within(recent).queryByText('L’assistant travaille')).not.toBeInTheDocument();
+
+    await user.type(screen.getByLabelText('Votre message'), 'Fais un récap{Enter}');
+    expect(await within(recent).findByText('L’assistant travaille')).toBeInTheDocument();
+
+    emit({
+      type: 'permission_request',
+      request: {
+        id: 'p4',
+        sessionId: 's1',
+        toolCallId: 'c4',
+        toolName: 'bash',
+        kind: 'command',
+        title: 'Exécuter python3 recap.py',
+        input: {},
+      },
+    });
+    expect(within(recent).getByText('En attente de votre accord')).toBeInTheDocument();
+    expect(screen.getByRole('alertdialog').querySelector('[data-risk]')).toHaveAttribute(
+      'data-risk',
+      'medium',
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Autoriser une fois' }));
+    expect(within(recent).getByText('L’assistant travaille')).toBeInTheDocument();
+
+    emit({ type: 'done', reason: 'stop' });
+    expect(within(recent).queryByText('L’assistant travaille')).not.toBeInTheDocument();
+  });
+
+  it('le bloc d’outil reconnaît la lecture d’un skill', async () => {
+    const user = await openSession();
+    await user.type(screen.getByLabelText('Votre message'), 'Fais le classeur{Enter}');
+    emit({
+      type: 'tool_start',
+      toolCallId: 'c5',
+      toolName: 'read_file',
+      input: { path: '/opt/atelier/skills/xlsx/SKILL.md' },
+    });
+    expect(screen.getByText('Consultation du skill xlsx')).toBeInTheDocument();
   });
 });

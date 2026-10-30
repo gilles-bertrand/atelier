@@ -1,5 +1,6 @@
 import type { ServerStatus } from '@atelier/shared';
 import { cn } from '@renderer/lib/utils';
+import { StatusDot, type StatusTone } from './StatusDot';
 
 const LABELS: Record<ServerStatus['health'], string> = {
   connected: 'Serveur connecté',
@@ -8,11 +9,11 @@ const LABELS: Record<ServerStatus['health'], string> = {
   unknown: 'Serveur : vérification…',
 };
 
-const DOTS: Record<ServerStatus['health'], string> = {
-  connected: 'bg-emerald-500',
-  slow: 'bg-amber-500',
-  offline: 'bg-red-500',
-  unknown: 'bg-muted-foreground/50',
+export const SERVER_TONES: Record<ServerStatus['health'], StatusTone> = {
+  connected: 'ok',
+  slow: 'warning',
+  offline: 'error',
+  unknown: 'idle',
 };
 
 /** Texte complet (infobulle et lecteurs d'écran). */
@@ -41,7 +42,7 @@ export function ServerStatusBadge({
         className,
       )}
     >
-      <span className={cn('size-2 rounded-full', DOTS[status.health])} aria-hidden />
+      <StatusDot tone={SERVER_TONES[status.health]} />
       {text}
     </span>
   );

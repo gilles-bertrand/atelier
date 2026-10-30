@@ -10,6 +10,8 @@ import { Alert } from '@renderer/components/ui/primitives';
 import { canRetry, errorMessage } from '@renderer/lib/error-messages';
 import type { SessionView, TurnView } from '@renderer/state/chat-reducer';
 import { Markdown } from './Markdown';
+import { changedFiles } from './SidePanel';
+import { FileCard } from './ToolDisplays';
 import { AttachmentChip, ReasoningBlock, SourcesBadge, ToolCallBlock } from './MessageParts';
 
 function UserMessage({ message }: { message: ChatMessage }) {
@@ -40,6 +42,8 @@ function UserMessage({ message }: { message: ChatMessage }) {
 }
 
 export function AssistantMessage({ message, live }: { message: ChatMessage; live: boolean }) {
+  // Fichiers créés, modifiés ou présentés pendant la réponse, dans l'ordre d'apparition.
+  const files = changedFiles([message]).reverse();
   return (
     <div className="space-y-3" title={message.model ? `Modèle : ${message.model}` : undefined}>
       <h3 className="sr-only">Assistant</h3>
@@ -64,6 +68,15 @@ export function AssistantMessage({ message, live }: { message: ChatMessage; live
             return <AttachmentChip key={key} attachment={part.attachment} />;
         }
       })}
+      {files.length > 0 ? (
+        <ul aria-label="Fichiers de la réponse" className="grid gap-2 sm:grid-cols-2">
+          {files.map((file) => (
+            <li key={file.path} className="min-w-0">
+              <FileCard file={file} compact />
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }
@@ -99,10 +112,7 @@ function TurnStatus({
   if (turn.status === 'running') {
     if (turn.retry) {
       return (
-        <p
-          className="flex items-center gap-2 text-sm text-amber-700 dark:text-amber-400"
-          role="status"
-        >
+        <p className="flex items-center gap-2 text-sm text-warning-text" role="status">
           <Loader2 className="size-4 animate-spin" aria-hidden />
           Reconnexion au serveur…
           {turn.retry.maxAttempts !== undefined
@@ -113,7 +123,8 @@ function TurnStatus({
     }
     return hasLiveContent ? null : (
       <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status">
-        <Loader2 className="size-4 animate-spin" aria-hidden />
+        {/* L'orbe de l'icône respire pendant la réflexion (immobile si les animations sont réduites). */}
+        <span className="atelier-orb size-3.5 shrink-0 motion-safe:animate-breathe" aria-hidden />
         {modelLoading ? 'Chargement du modèle sur le serveur…' : 'L’assistant réfléchit…'}
       </p>
     );

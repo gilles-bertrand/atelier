@@ -7,6 +7,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { Brain, Check, ChevronDown, Eye, Loader2, Wrench } from 'lucide-react';
 import type { LlmModelInfo } from '@atelier/shared';
+import { StatusDot } from '@renderer/components/status/StatusDot';
 import { call, toSerializedError } from '@renderer/lib/api';
 import { errorMessage } from '@renderer/lib/error-messages';
 import { formatBytes, formatContext } from '@renderer/lib/format';
@@ -27,10 +28,7 @@ export function ReadyDot({ loaded }: { loaded: boolean | undefined }) {
   const label = loaded ? 'prêt' : 'à froid';
   return (
     <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-      <span
-        className={cn('size-2 rounded-full', loaded ? 'bg-emerald-500' : 'bg-muted-foreground/40')}
-        aria-hidden
-      />
+      <StatusDot tone={loaded ? 'ok' : 'idle'} />
       {label}
     </span>
   );
@@ -87,7 +85,7 @@ function ModelOption({
       )}
     >
       <Check
-        className={cn('mt-0.5 size-4 shrink-0', selected ? 'opacity-100' : 'opacity-0')}
+        className={cn('mt-0.5 size-4 shrink-0 text-brand', selected ? 'opacity-100' : 'opacity-0')}
         aria-hidden
       />
       <span className="min-w-0 flex-1 space-y-0.5">
