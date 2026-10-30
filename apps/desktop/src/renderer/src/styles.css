@@ -1,10 +1,18 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
-@custom-variant dark (&:is(.dark *));
+/* Le thème suit macOS (prefers-color-scheme) : la variante dark: aussi, comme les jetons. */
+@custom-variant dark (@media (prefers-color-scheme: dark));
 
-/* Jetons de thème shadcn/ui (palette neutral). */
+/*
+ * Jetons de thème shadcn/ui (palette neutral), complétés par ceux d'Atelier :
+ * marque (le jade de l'orbe de l'icône), états, types de fichiers et initiales
+ * des sources web. Chaque jeton a une valeur claire et une valeur sombre ; les
+ * couleurs ne s'écrivent jamais en dur dans les composants.
+ */
 :root {
+  /* Barres de défilement et contrôles natifs dans le thème courant. */
+  color-scheme: light dark;
   --radius: 0.625rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -23,7 +31,55 @@
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --ring: oklch(0.53 0.13 155);
+
+  /* Marque : le jade de l'icône (4,96:1 sur blanc). Réservé à ce qui est actif, sélectionné ou réussi. */
+  --brand: oklch(0.53 0.13 155);
+  --brand-foreground: oklch(0.99 0 0);
+  --brand-soft: oklch(0.965 0.03 155);
+  --brand-text: oklch(0.45 0.11 155);
+
+  /* États. Le succès reprend le vert de marque ; « -soft » pour les fonds, « -text » pour le texte posé dessus. */
+  --success: var(--brand);
+  --success-soft: var(--brand-soft);
+  --success-text: var(--brand-text);
+  --warning: oklch(0.75 0.16 70);
+  --warning-soft: oklch(0.975 0.035 85);
+  --warning-text: oklch(0.47 0.11 55);
+  --destructive-soft: oklch(0.97 0.02 20);
+  --destructive-text: oklch(0.5 0.19 27);
+  --info: oklch(0.55 0.15 255);
+  --info-soft: oklch(0.97 0.02 250);
+  --info-text: oklch(0.48 0.14 255);
+
+  /* Types de fichiers : couleur de l'icône et fond de sa tuile. */
+  --file-sheet: oklch(0.5 0.12 150);
+  --file-sheet-soft: oklch(0.96 0.03 150);
+  --file-doc: oklch(0.5 0.15 260);
+  --file-doc-soft: oklch(0.96 0.025 260);
+  --file-pdf: oklch(0.53 0.19 27);
+  --file-pdf-soft: oklch(0.965 0.02 25);
+  --file-slides: oklch(0.58 0.16 45);
+  --file-slides-soft: oklch(0.965 0.03 50);
+  --file-image: oklch(0.52 0.17 300);
+  --file-image-soft: oklch(0.965 0.025 300);
+  --file-code: oklch(0.45 0.03 260);
+  --file-code-soft: oklch(0.96 0.008 260);
+  --file-data: oklch(0.5 0.1 200);
+  --file-data-soft: oklch(0.96 0.02 200);
+  --file-archive: oklch(0.5 0.09 75);
+  --file-archive-soft: oklch(0.965 0.03 80);
+
+  /* Initiales des sources web : luminosité et chroma ; la teinte vient du domaine. */
+  --avatar-bg-l: 0.93;
+  --avatar-bg-c: 0.045;
+  --avatar-fg-l: 0.42;
+  --avatar-fg-c: 0.11;
+
+  /* Orbe de l'icône, identique dans les deux thèmes. */
+  --orb-light: oklch(0.93 0.09 152);
+  --orb: oklch(0.82 0.17 152);
+  --orb-deep: oklch(0.61 0.134 155);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -45,7 +101,43 @@
     --destructive: oklch(0.704 0.191 22.216);
     --border: oklch(1 0 0 / 10%);
     --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
+    --ring: oklch(0.8 0.16 152);
+
+    --brand: oklch(0.8 0.16 152);
+    --brand-foreground: oklch(0.2 0.04 155);
+    --brand-soft: oklch(0.27 0.05 155);
+    --brand-text: oklch(0.85 0.13 152);
+
+    --warning: oklch(0.8 0.15 75);
+    --warning-soft: oklch(0.28 0.05 70);
+    --warning-text: oklch(0.85 0.12 85);
+    --destructive-soft: oklch(0.27 0.06 22);
+    --destructive-text: oklch(0.8 0.12 22);
+    --info: oklch(0.72 0.12 250);
+    --info-soft: oklch(0.27 0.05 255);
+    --info-text: oklch(0.82 0.09 250);
+
+    --file-sheet: oklch(0.8 0.13 150);
+    --file-sheet-soft: oklch(0.27 0.04 150);
+    --file-doc: oklch(0.78 0.1 260);
+    --file-doc-soft: oklch(0.27 0.05 260);
+    --file-pdf: oklch(0.78 0.13 25);
+    --file-pdf-soft: oklch(0.27 0.05 25);
+    --file-slides: oklch(0.8 0.12 50);
+    --file-slides-soft: oklch(0.28 0.05 50);
+    --file-image: oklch(0.78 0.12 300);
+    --file-image-soft: oklch(0.27 0.05 300);
+    --file-code: oklch(0.8 0.02 260);
+    --file-code-soft: oklch(0.27 0.01 260);
+    --file-data: oklch(0.8 0.09 200);
+    --file-data-soft: oklch(0.27 0.04 200);
+    --file-archive: oklch(0.8 0.09 80);
+    --file-archive-soft: oklch(0.28 0.04 80);
+
+    --avatar-bg-l: 0.32;
+    --avatar-bg-c: 0.06;
+    --avatar-fg-l: 0.87;
+    --avatar-fg-c: 0.09;
   }
 }
 
@@ -72,6 +164,56 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-text: var(--brand-text);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-success-text: var(--success-text);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-text: var(--warning-text);
+  --color-destructive-soft: var(--destructive-soft);
+  --color-destructive-text: var(--destructive-text);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-info-text: var(--info-text);
+
+  --color-file-sheet: var(--file-sheet);
+  --color-file-sheet-soft: var(--file-sheet-soft);
+  --color-file-doc: var(--file-doc);
+  --color-file-doc-soft: var(--file-doc-soft);
+  --color-file-pdf: var(--file-pdf);
+  --color-file-pdf-soft: var(--file-pdf-soft);
+  --color-file-slides: var(--file-slides);
+  --color-file-slides-soft: var(--file-slides-soft);
+  --color-file-image: var(--file-image);
+  --color-file-image-soft: var(--file-image-soft);
+  --color-file-code: var(--file-code);
+  --color-file-code-soft: var(--file-code-soft);
+  --color-file-data: var(--file-data);
+  --color-file-data-soft: var(--file-data-soft);
+  --color-file-archive: var(--file-archive);
+  --color-file-archive-soft: var(--file-archive-soft);
+}
+
+/* L'orbe « respire » pendant la réflexion de l'assistant (coupé si le système réduit les animations). */
+@theme {
+  --animate-breathe: breathe 2.4s ease-in-out infinite;
+
+  @keyframes breathe {
+    0%,
+    100% {
+      transform: scale(0.88);
+      box-shadow: 0 0 0 0 color-mix(in oklab, var(--orb) 45%, transparent);
+    }
+    50% {
+      transform: scale(1);
+      box-shadow: 0 0 0 5px color-mix(in oklab, var(--orb) 0%, transparent);
+    }
+  }
 }
 
 @layer base {
@@ -90,8 +232,19 @@
   }
 }
 
-/* Réponses de l'assistant (markdown). */
 @layer components {
+  /* Orbe de l'icône d'Atelier (indicateur de réflexion). */
+  .atelier-orb {
+    border-radius: 9999px;
+    background: radial-gradient(
+      circle at 35% 30%,
+      var(--orb-light),
+      var(--orb) 48%,
+      var(--orb-deep)
+    );
+  }
+
+  /* Réponses de l'assistant (markdown). */
   .markdown {
     @apply space-y-3 text-sm leading-relaxed break-words;
   }
@@ -113,7 +266,7 @@
     @apply list-decimal space-y-1 pl-5;
   }
   .markdown a {
-    @apply underline underline-offset-2 hover:text-foreground/80;
+    @apply text-brand-text underline decoration-brand/40 underline-offset-2 hover:decoration-brand;
   }
   .markdown code {
     @apply rounded bg-muted px-1 py-0.5 font-mono text-[0.85em];

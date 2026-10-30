@@ -6,6 +6,7 @@
 import { useState } from 'react';
 import { Check } from 'lucide-react';
 import type { ConnectionTestResult } from '@atelier/shared';
+import { AtelierMark } from '@renderer/components/AtelierMark';
 import { cn } from '@renderer/lib/utils';
 import { ModelStep } from './ModelStep';
 import { PrivacyStep } from './PrivacyStep';
@@ -29,7 +30,8 @@ export function Onboarding() {
       {/* Barre de titre masquée (hiddenInset) : bande de déplacement de la fenêtre. */}
       <div className="fixed inset-x-0 top-0 h-10 [-webkit-app-region:drag]" aria-hidden />
       <div className="w-full max-w-xl space-y-6">
-        <header className="space-y-1 text-center">
+        <header className="flex flex-col items-center gap-1 text-center">
+          <AtelierMark className="mb-3 size-14" />
           <h1 className="text-2xl font-semibold tracking-tight">Bienvenue dans Atelier</h1>
           <p className="text-sm text-muted-foreground">
             Quelques réglages et votre assistant est prêt.
@@ -50,8 +52,8 @@ export function Onboarding() {
                   <span
                     className={cn(
                       'flex size-6 shrink-0 items-center justify-center rounded-full border text-[11px] font-medium',
-                      done && 'border-primary bg-primary text-primary-foreground',
-                      current && 'border-primary text-foreground',
+                      done && 'border-brand bg-brand text-brand-foreground',
+                      current && 'border-brand text-foreground',
                       !done && !current && 'text-muted-foreground',
                     )}
                     aria-hidden

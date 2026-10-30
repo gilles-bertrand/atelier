@@ -122,10 +122,10 @@ function DailyChart({ bars }: { bars: readonly DayBar[] }) {
         Tokens par jour
         <span className="flex items-center gap-3 text-xs font-normal text-muted-foreground">
           <span className="flex items-center gap-1">
-            <span className="size-2 rounded-sm bg-primary/40" aria-hidden /> Entrée
+            <span className="size-2 rounded-sm bg-brand/35" aria-hidden /> Entrée
           </span>
           <span className="flex items-center gap-1">
-            <span className="size-2 rounded-sm bg-primary" aria-hidden /> Sortie
+            <span className="size-2 rounded-sm bg-brand" aria-hidden /> Sortie
           </span>
         </span>
       </figcaption>
@@ -144,12 +144,12 @@ function DailyChart({ bars }: { bars: readonly DayBar[] }) {
               <span className="sr-only">{label}</span>
               <span
                 aria-hidden
-                className="block bg-primary"
+                className="block rounded-t-[2px] bg-brand"
                 style={{ height: `${String((bar.outputTokens / max) * 100)}%` }}
               />
               <span
                 aria-hidden
-                className={cn('block bg-primary/40', total > 0 ? 'min-h-px' : undefined)}
+                className={cn('block bg-brand/35', total > 0 ? 'min-h-px' : undefined)}
                 style={{ height: `${String((bar.inputTokens / max) * 100)}%` }}
               />
             </li>
@@ -286,7 +286,7 @@ export function UsageSettings({
             className={cn(
               'rounded px-3 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
               period === p.id
-                ? 'bg-accent font-medium'
+                ? 'bg-brand-soft font-medium text-brand-text'
                 : 'text-muted-foreground hover:bg-accent/60',
             )}
           >

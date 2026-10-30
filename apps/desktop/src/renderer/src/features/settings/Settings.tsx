@@ -1,6 +1,6 @@
 /** Écran des Réglages : navigation par rubrique, une rubrique affichée à la fois. */
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Box, ChartColumn, Globe, Plug, Server, Sparkles } from 'lucide-react';
 import { ServerStatusBadge } from '@renderer/components/status/ServerStatusBadge';
 import { Button } from '@renderer/components/ui/button';
 import { cn } from '@renderer/lib/utils';
@@ -13,12 +13,12 @@ import { ServerSettings } from './ServerSettings';
 import { UsageSettings } from './UsageSettings';
 
 const SECTIONS = [
-  { id: 'server', label: 'Serveur et modèle' },
-  { id: 'usage', label: 'Utilisation' },
-  { id: 'sandbox', label: 'Machine isolée' },
-  { id: 'search', label: 'Recherche web' },
-  { id: 'skills', label: 'Skills' },
-  { id: 'mcp', label: 'Connecteurs' },
+  { id: 'server', label: 'Serveur et modèle', icon: Server },
+  { id: 'usage', label: 'Utilisation', icon: ChartColumn },
+  { id: 'sandbox', label: 'Machine isolée', icon: Box },
+  { id: 'search', label: 'Recherche web', icon: Globe },
+  { id: 'skills', label: 'Skills', icon: Sparkles },
+  { id: 'mcp', label: 'Connecteurs', icon: Plug },
 ] as const;
 
 type SectionId = (typeof SECTIONS)[number]['id'];
@@ -60,25 +60,33 @@ export function Settings({ onClose }: { onClose: () => void }) {
       <div className="flex min-h-0 flex-1">
         <nav aria-label="Rubriques des réglages" className="w-56 shrink-0 border-r bg-muted/20 p-3">
           <ul className="space-y-1">
-            {SECTIONS.map((s) => (
-              <li key={s.id}>
-                <button
-                  type="button"
-                  aria-current={section === s.id ? 'page' : undefined}
-                  onClick={() => {
-                    setSection(s.id);
-                  }}
-                  className={cn(
-                    'w-full rounded-md px-3 py-2 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                    section === s.id
-                      ? 'bg-accent font-medium'
-                      : 'text-muted-foreground hover:bg-accent/60',
-                  )}
-                >
-                  {s.label}
-                </button>
-              </li>
-            ))}
+            {SECTIONS.map((s) => {
+              const Icon = s.icon;
+              const active = section === s.id;
+              return (
+                <li key={s.id}>
+                  <button
+                    type="button"
+                    aria-current={active ? 'page' : undefined}
+                    onClick={() => {
+                      setSection(s.id);
+                    }}
+                    className={cn(
+                      'flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                      active
+                        ? 'bg-brand-soft font-medium'
+                        : 'text-muted-foreground hover:bg-accent/60',
+                    )}
+                  >
+                    <Icon
+                      className={cn('size-4 shrink-0', active ? 'text-brand-text' : undefined)}
+                      aria-hidden
+                    />
+                    {s.label}
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         </nav>
         <main className="flex-1 overflow-y-auto">

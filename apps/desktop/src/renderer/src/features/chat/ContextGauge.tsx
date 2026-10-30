@@ -46,12 +46,43 @@ export function gaugeState(usage: TokenUsage | undefined): GaugeState {
   };
 }
 
-const DOTS: Record<GaugeTone, string> = {
-  unknown: 'bg-muted-foreground/40',
-  ok: 'bg-emerald-500',
-  warning: 'bg-amber-500',
-  danger: 'bg-red-500',
+/** Couleur de l'arc : jade sous 50 %, ambre jusqu'au seuil de compaction, rouge au-delà. */
+const ARCS: Record<Exclude<GaugeTone, 'unknown'>, string> = {
+  ok: 'stroke-success',
+  warning: 'stroke-warning',
+  danger: 'stroke-destructive',
 };
+
+/** Anneau qui se remplit ; seul le fond s'affiche tant que le remplissage est inconnu. */
+function GaugeRing({ tone, percent }: { tone: GaugeTone; percent: number | undefined }) {
+  // Un arc minimal reste visible quand le contexte est presque vide.
+  const arc = tone !== 'unknown' && percent !== undefined ? Math.max(percent, 3) : undefined;
+  return (
+    <svg viewBox="0 0 16 16" className="size-3.5 shrink-0 -rotate-90" aria-hidden>
+      <circle
+        cx="8"
+        cy="8"
+        r="6"
+        fill="none"
+        strokeWidth="2.5"
+        className="stroke-muted-foreground/25"
+      />
+      {arc !== undefined && tone !== 'unknown' ? (
+        <circle
+          cx="8"
+          cy="8"
+          r="6"
+          fill="none"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          pathLength={100}
+          strokeDasharray={`${String(arc)} 100`}
+          className={ARCS[tone]}
+        />
+      ) : null}
+    </svg>
+  );
+}
 
 export function ContextGauge({ sessionId }: { sessionId: string }) {
   const state = gaugeState(useSessionUsage(sessionId));
@@ -71,7 +102,7 @@ export function ContextGauge({ sessionId }: { sessionId: string }) {
         state.tone === 'unknown' ? 'text-muted-foreground' : 'text-foreground',
       )}
     >
-      <span className={cn('size-2 rounded-full', DOTS[state.tone])} aria-hidden />
+      <GaugeRing tone={state.tone} percent={state.percent} />
       {state.label}
     </span>
   );

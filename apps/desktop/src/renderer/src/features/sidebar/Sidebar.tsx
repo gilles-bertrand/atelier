@@ -5,9 +5,11 @@
 import { useId, useMemo, useState, type RefObject } from 'react';
 import {
   ChevronRight,
+  EyeOff,
   Folder,
   FolderPlus,
   Loader2,
+  MessageSquarePlus,
   PanelLeftClose,
   Plus,
   Search,
@@ -19,6 +21,7 @@ import { fileName } from '@renderer/lib/tool-labels';
 import { cn } from '@renderer/lib/utils';
 import { useApp } from '@renderer/state/app-state';
 import { ActionMenu } from './ActionMenu';
+import type { SessionActivity } from './activity';
 import { ConversationList } from './ConversationList';
 import { EnvironmentStatus } from './EnvironmentStatus';
 
@@ -76,9 +79,12 @@ export function Sidebar({
   onHideFolder,
   onOpenSettings,
   onCollapse,
+  activity,
 }: {
   /** `undefined` pendant le chargement. */
   sessions: readonly SessionSummary[] | undefined;
+  /** Conversations où l'assistant travaille ou attend un accord. */
+  activity?: ReadonlyMap<string, SessionActivity>;
   current: SessionSummary | undefined;
   settingsActive: boolean;
   hiddenFolders: readonly string[];
@@ -189,6 +195,7 @@ export function Sidebar({
                 currentId={currentId}
                 onOpen={onOpen}
                 onDelete={onDelete}
+                activity={activity}
                 showFolder
               />
             ) : (
@@ -208,6 +215,7 @@ export function Sidebar({
                   currentId={currentId}
                   onOpen={onOpen}
                   onDelete={onDelete}
+                  activity={activity}
                   showFolder
                 />
               ) : (
@@ -267,12 +275,14 @@ export function Sidebar({
                             items={[
                               {
                                 label: 'Nouvelle conversation ici',
+                                icon: MessageSquarePlus,
                                 onSelect: () => {
                                   onNewIn(folder.workspace);
                                 },
                               },
                               {
                                 label: 'Retirer de la liste',
+                                icon: EyeOff,
                                 onSelect: () => {
                                   onHideFolder(folder.workspace);
                                 },
@@ -288,6 +298,7 @@ export function Sidebar({
                               currentId={currentId}
                               onOpen={onOpen}
                               onDelete={onDelete}
+                              activity={activity}
                             />
                           </div>
                         ) : null}
@@ -315,10 +326,13 @@ export function Sidebar({
             onClick={onOpenSettings}
             className={cn(
               'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-              settingsActive ? 'bg-accent font-medium' : 'hover:bg-accent/60',
+              settingsActive ? 'bg-brand-soft font-medium' : 'hover:bg-accent/60',
             )}
           >
-            <Settings className="size-4 text-muted-foreground" aria-hidden />
+            <Settings
+              className={cn('size-4', settingsActive ? 'text-brand-text' : 'text-muted-foreground')}
+              aria-hidden
+            />
             Réglages
           </button>
         </div>

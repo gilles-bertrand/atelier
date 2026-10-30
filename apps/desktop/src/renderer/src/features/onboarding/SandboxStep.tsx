@@ -105,7 +105,7 @@ export function SandboxStep({ onBack }: { onBack: () => void }) {
 
       {phase === 'ready' ? (
         <p className="flex items-center gap-2 text-sm" role="status">
-          <CheckCircle2 className="size-4 text-emerald-600" aria-hidden />
+          <CheckCircle2 className="size-4 text-success" aria-hidden />
           L’environnement est prêt.
         </p>
       ) : null}
