@@ -26,7 +26,6 @@ import {
   type SerializedAtelierError,
   type SkillInfo,
   type TodoItem,
-  type TokenUsage,
   type ToolRegistry,
   type WebSearchResult,
 } from '@atelier/shared';
@@ -48,6 +47,7 @@ import { hasReasoning, stripReasoning } from './history.js';
 import { sourceText, unverifiedAmounts, verificationPrompt } from './numbers.js';
 import { createToolCallRepair } from './repair.js';
 import { skillAutoloadMessages } from './skill-autoload.js';
+import { TurnUsageMeter, type CoreAgentEvent, type TurnTokenUsage } from './usage.js';
 
 /** Nombre maximal d'étapes par tour (brief §1). */
 export const MAX_STEPS = 50;
@@ -95,6 +95,14 @@ export interface AgentOptions {
   keepRecentOnCompaction?: number;
   /** Horloge injectable (tests). */
   now?: () => Date;
+  /** Horloge monotone en ms pour mesurer la génération (défaut `performance.now`, tests). */
+  clock?: () => number;
+  /**
+   * Émet un event `usage` après chaque étape (jauge de contexte, ticket #10). Désactivé
+   * par défaut tant que `usage` n'est pas dans `AgentEvent` (lot L0) : les reducers
+   * actuels de l'app ne savent pas l'ignorer.
+   */
+  usageEvents?: boolean;
   /** Journal de diagnostic (réparations, compaction…). */
   log?: (message: string, data?: Record<string, unknown>) => void;
 }
@@ -125,8 +133,8 @@ export interface RunTurnOptions {
 export interface TurnResult {
   /** Historique complet à conserver pour le tour suivant (raisonnement retiré). */
   messages: ModelMessage[];
-  /** Consommation (dernière étape en entrée, total en sortie). */
-  usage?: TokenUsage;
+  /** Consommation (dernière étape en entrée, total en sortie, cumuls, débit, relances). */
+  usage?: TurnTokenUsage;
   /** Raison de fin, ou `error`. */
   reason: DoneReason | 'error';
   error?: SerializedAtelierError;
@@ -204,16 +212,21 @@ export class Agent {
       ...skillMessages,
     ];
     let responseOffset = 0;
-    let lastInputTokens: number | undefined;
-    let outputTokens = 0;
-    let steps = 0;
+    const meter = new TurnUsageMeter(o.contextWindow, o.clock ?? (() => performance.now()));
     const sources = new Map<string, WebSearchResult>();
 
-    const usage = (): TokenUsage => ({
-      inputTokens: lastInputTokens ?? 0,
-      outputTokens,
-      contextWindow: o.contextWindow,
-    });
+    const usage = (): TurnTokenUsage => meter.snapshot();
+    // Event hors `AgentEvent` tant que le lot L0 n'est pas livré (ADR-001 §3).
+    const emitUsage = (): void => {
+      if (o.usageEvents !== true) return;
+      const event: CoreAgentEvent = {
+        type: 'usage',
+        usage: usage(),
+        sessionId: turn.sessionId,
+        turnId: turn.turnId,
+      };
+      (turn.emit as (event: CoreAgentEvent) => void)(event);
+    };
     /**
      * `requestTokens` : taille (réelle ou estimée) de la requête qui a déclenché
      * la compaction. L'écart avec l'estimation de l'historique est le surcoût fixe
@@ -308,7 +321,7 @@ export class Agent {
             messages: base,
             tools,
             ...(lazy ? { activeTools: activeTools() } : {}),
-            stopWhen: stepCountIs(Math.max(1, maxSteps - steps)),
+            stopWhen: stepCountIs(Math.max(1, maxSteps - meter.steps)),
             abortSignal: signal,
             // Les nouvelles tentatives réseau sont gérées par le fetch du provider.
             maxRetries: 0,
@@ -361,15 +374,23 @@ export class Agent {
             switch (part.type) {
               case 'start-step':
                 lastText = '';
+                meter.startStep();
                 break;
               case 'text-delta':
+                meter.chunk();
                 if (part.text !== '') emit({ type: 'text_delta', delta: part.text });
                 lastText += part.text;
                 break;
               case 'reasoning-delta':
+                meter.chunk();
                 if (part.text !== '') emit({ type: 'reasoning_delta', delta: part.text });
                 break;
+              case 'tool-input-start':
+              case 'tool-input-delta':
+                meter.chunk();
+                break;
               case 'tool-call':
+                meter.chunk();
                 usedTools = true;
                 emit({
                   type: 'tool_start',
@@ -421,9 +442,8 @@ export class Agent {
                 });
                 break;
               case 'finish-step':
-                steps += 1;
-                if (part.usage.inputTokens !== undefined) lastInputTokens = part.usage.inputTokens;
-                outputTokens += part.usage.outputTokens ?? 0;
+                meter.finishStep(part.usage);
+                emitUsage();
                 break;
               case 'finish':
                 finishReason = part.finishReason;
@@ -452,6 +472,7 @@ export class Agent {
             const attempt = cut === undefined ? 0 : (cutRetries.get(cut) ?? 0) + 1;
             if (cut === undefined || attempt > MAX_STREAM_CUT_RETRIES) break;
             cutRetries.set(cut, attempt);
+            meter.relaunch(cut);
             o.log?.('stream-cut:retry', { reason: cut, attempt, partialChars: lastText.length });
             if (lastText.trim() !== '') emit({ type: 'text_delta', delta: '\n\n' });
             const partial: ModelMessage[] =
@@ -463,7 +484,7 @@ export class Agent {
             streamError = undefined;
             continue;
           }
-          if (finishReason !== 'stop' || steps >= maxSteps) break;
+          if (finishReason !== 'stop' || meter.steps >= maxSteps) break;
           // Le modèle a rendu la main (« stop ») en laissant des tâches ouvertes : on le
           // relance, au plus MAX_CONTINUATIONS fois, sauf s'il pose une question.
           const open = openTodos(todos);
@@ -473,6 +494,7 @@ export class Agent {
             !lastText.trim().endsWith('?')
           ) {
             continuations += 1;
+            meter.relaunch('continuation');
             o.log?.('continuation', { attempt: continuations, open: open.length });
             base = [...messages, injectedMessage('continuation', continuationPrompt(open))];
             responseOffset = 0;
@@ -483,6 +505,7 @@ export class Agent {
           if (usedTools && lastText.trim() === '') {
             if (stallRetries < MAX_EMPTY_FINAL_RETRIES) {
               stallRetries += 1;
+              meter.relaunch('empty_final');
               o.log?.('empty-final', { attempt: stallRetries });
               base = [
                 ...withoutEmptyAssistant(messages),
@@ -499,6 +522,7 @@ export class Agent {
           // d'outil. Même budget que le pas vide ; au second échec, le texte reste.
           if (usedTools && stallRetries < MAX_EMPTY_FINAL_RETRIES && announcesAction(lastText)) {
             stallRetries += 1;
+            meter.relaunch('announce_only');
             o.log?.('announce-only', { attempt: stallRetries, tail: lastText.trim().slice(-120) });
             emit({ type: 'text_delta', delta: '\n\n' });
             base = [...messages, injectedMessage('announce_only', announceOnlyPrompt())];
@@ -511,6 +535,7 @@ export class Agent {
             const missing = unverifiedAmounts(lastText, sourceText(messages));
             if (missing.length > 0) {
               verified = true;
+              meter.relaunch('verification');
               o.log?.('verification', { amounts: missing });
               emit({ type: 'text_delta', delta: '\n\n' });
               base = [...messages, injectedMessage('verification', verificationPrompt(missing))];
@@ -545,7 +570,7 @@ export class Agent {
         const reason: DoneReason =
           finishReason === 'length'
             ? 'length'
-            : finishReason === 'tool-calls' && steps >= maxSteps
+            : finishReason === 'tool-calls' && meter.steps >= maxSteps
               ? 'max_steps'
               : 'stop';
         emit({ type: 'done', reason, usage: usage() });

@@ -59,6 +59,8 @@ export {
   transcript,
 } from './loop/compaction.js';
 export type { CompactOptions, CompactResult, InjectedKind } from './loop/compaction.js';
+export { RELAUNCH_KINDS, tokensPerSecond, TurnUsageMeter, usageLine } from './loop/usage.js';
+export type { CoreAgentEvent, RelaunchKind, TurnTokenUsage, UsageEvent } from './loop/usage.js';
 export { chatMessagesToModelMessages, stripReasoning } from './loop/history.js';
 export { createToolCallRepair, repairToolInput } from './loop/repair.js';
 export {
