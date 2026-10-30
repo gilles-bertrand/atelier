@@ -194,8 +194,6 @@ export class AgentRuntimeHost implements AgentSessionFactory {
       sandbox: () => sandbox.current(),
       skills: () => this.#skills,
       extraInstructions: () => mcpPromptSection(mcp),
-      // Event `usage` après chaque étape : jauge de contexte en temps réel (ADR-001).
-      usageEvents: true,
       ...(this.#o.log ? { log: this.#o.log } : {}),
     });
     return created.then((value) => (runtime = value));
