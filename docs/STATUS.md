@@ -130,6 +130,16 @@ _Dernière mise à jour : 2026-10-29, Lead._
 
 _Format : date, agent, type proposé, raison, packages impactés._
 
+- ✅ **Livrée (PR `feat/lead-shared-token-usage`), conforme au §3 plus la constante `RELAUNCH_KINDS`. Le `case 'usage'` est déjà ajouté aux trois `switch` exhaustifs (CLI, deux réducteurs) et le transtypage provisoire de Core est retiré. À brancher par l'UI (#92) ; Core retire ensuite `usageEvents` et ses types locaux.** **2026-10-30, architect (ticket #10, [ADR-001](adr/ADR-001-consommation-tokens.md) §3)** (impact : `shared`, `agent-core`, main, renderer). Raison : jauge de contexte permanente dans le Composer et rubrique Réglages › Utilisation (tokens par modèle, débit, contexte, fiabilité). Spec validée par Gilles le 2026-10-30. Demandes :
+  - `TokenUsage` gagne des champs optionnels : `totalInputTokens`, `contextTokens`, `steps`, `generationMs` et `relaunches?: Partial<Record<RelaunchKind, number>>`.
+  - Nouveau type `RelaunchKind`.
+  - Nouvel event **`UsageEvent`** (`type: 'usage'`, `usage: TokenUsage`), membre d'`AgentEvent`.
+  - Nouveau module `usage.ts` : `UsagePeriod`, `TurnOutcome`, `ModelUsageStats`, `UsageDailyPoint`, `UsageSummary`.
+  - Canal **`usage:summary`** (`{ period }` → `UsageSummary`).
+  - `session:open` renvoie `usage?: TokenUsage`.
+
+  PR proposée : `feat/lead-shared-token-usage`. ⚠️ Les `switch` exhaustifs sur `event.type` (chat-reducer, persistance) doivent traiter `usage`. Core (L1) et UI (L2, L3) démarrent avec des types locaux.
+
 - **2026-10-29, architect (cadrage #7)** (impact : `shared`, main, renderer) : canaux **`session:rename`** et **`session:pin`** dans `IPC_INVOKE_CHANNELS`, **`pinned?: boolean`** dans `SessionSummary`. Raison : Renommer et Épingler une conversation dans la colonne de gauche (ticket suivant le socle #8). ✅ Accepté sur le principe par le Lead ; PR `feat/lead-shared-session-rename-pin` au démarrage de ce ticket.
 
 - **2026-10-29, Core** (impact : `shared`, `agent-core`, main, renderer) : **`TextRetractEvent`** (`type: 'text_retract'`, `turnId`, `reason: 'verification'`), membre d'`AgentEvent`. Émis par la boucle juste avant la relance de vérification (#61) : le texte du dernier pas (réponse qui cite un montant introuvable) est déjà streamé ; l'UI le barre ou le replie (« Réponse corrigée ») et affiche la nouvelle à la suite. Le texte retiré se situe entre le dernier `tool_result` du tour et l'event : pas besoin d'offsets. En attendant, la relance demande au modèle d'ouvrir sa nouvelle réponse par une ligne « Correction : … » (PR `feat/core-verification-correction`). ⚠️ `switch` exhaustifs sur `event.type` à compléter (UI, persistance).

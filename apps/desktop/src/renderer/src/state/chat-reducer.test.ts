@@ -108,4 +108,13 @@ describe('chatReducer', () => {
     );
     expect(state['s1']?.permissions).toEqual([]);
   });
+
+  it('ignore l’event usage (la jauge a son propre état)', () => {
+    const during = run([{ ...ev, type: 'text_delta', delta: 'Bonjour' }]);
+    const after = run(
+      [{ ...ev, type: 'usage', usage: { inputTokens: 200, outputTokens: 10, contextTokens: 210 } }],
+      during,
+    );
+    expect(after['s1']).toBe(during['s1']);
+  });
 });

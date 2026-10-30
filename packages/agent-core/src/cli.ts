@@ -139,6 +139,9 @@ function createRenderer(): (event: AgentEvent) => void {
         switchTo('none');
         process.stdout.write(dim(`Sources : ${event.sources.map((s) => s.url).join(', ')}\n`));
         break;
+      case 'usage':
+        // Usage intermédiaire (jauge de l'app) : la CLI n'affiche que celui du `done`.
+        break;
       case 'compaction':
         switchTo('none');
         process.stdout.write(
