@@ -15,8 +15,9 @@ import {
 import { PermissionBroker } from './permission-broker.js';
 import { InMemorySessionStore, type SessionStore } from './session-store.js';
 import { SqliteSessionStore } from './sqlite-store.js';
+import { InMemoryUsageStore, type UsageStore } from './usage-store.js';
 
-type Mode = 'ok' | 'error' | 'hang' | 'tool';
+type Mode = 'ok' | 'error' | 'hang' | 'tool' | 'compact' | 'usage';
 
 interface SentTurn {
   input: string;
@@ -56,13 +57,30 @@ class FakeAgentSession implements AgentSessionLike {
       });
       emit({ ...ev, type: 'done', reason: 'aborted' });
       this.history = withUser;
-      return { messages: withUser, reason: 'aborted' };
+      return { messages: withUser, reason: 'aborted', usage: { inputTokens: 40, outputTokens: 3 } };
     }
     if (mode === 'error') {
       const error = { code: 'llm/unreachable' as const, message: 'down', retryable: true };
       emit({ ...ev, type: 'error', error });
       this.history = withUser;
-      return { messages: withUser, reason: 'error', error };
+      // L'usage reste présent en erreur (sans event `done`).
+      return {
+        messages: withUser,
+        reason: 'error',
+        error,
+        usage: { inputTokens: 50, outputTokens: 0, contextWindow: 32_768 },
+      };
+    }
+    if (mode === 'usage') {
+      emit({
+        ...ev,
+        type: 'usage',
+        usage: { inputTokens: 100, outputTokens: 2, contextTokens: 102, contextWindow: 32_768 },
+      });
+    }
+    if (mode === 'compact') {
+      emit({ ...ev, type: 'compaction', replacedMessages: 4 });
+      emit({ ...ev, type: 'compaction', replacedMessages: 2 });
     }
     if (mode === 'tool') {
       emit({ ...ev, type: 'tool_start', toolCallId: 'c1', toolName: 'bash', input: {} });
@@ -83,7 +101,15 @@ class FakeAgentSession implements AgentSessionLike {
     return {
       messages: [...this.history],
       reason: 'stop',
-      usage: { inputTokens: 100, outputTokens: 5 },
+      usage: {
+        inputTokens: 100,
+        outputTokens: 5,
+        contextWindow: 32_768,
+        totalInputTokens: 180,
+        contextTokens: 105,
+        steps: 2,
+        generationMs: 250,
+      },
     };
   }
 }
@@ -93,7 +119,9 @@ function setup(
   failCreate = false,
   store: SessionStore = new InMemorySessionStore(),
   trackChanges?: (workspace: string) => ChangeTracker,
+  usage: UsageStore = new InMemoryUsageStore(),
 ) {
+  let model = 'qwen3.5:35b';
   const events: AgentEvent[] = [];
   const llmErrors: string[] = [];
   const sent: SentTurn[] = [];
@@ -122,6 +150,8 @@ function setup(
     newId: () => `id${String((n += 1))}`,
     now: () => new Date('2026-10-28T10:00:00.000Z'),
     ...(trackChanges ? { trackChanges } : {}),
+    usage,
+    model: () => model,
   });
   const wait = async (sessionId: string): Promise<void> => {
     while (chats.isRunning(sessionId)) await new Promise((r) => setTimeout(r, 1));
@@ -129,7 +159,10 @@ function setup(
   const bump = (): void => {
     generation += 1;
   };
-  return { chats, store, events, llmErrors, sent, created, prepared, wait, bump };
+  const setModel = (next: string): void => {
+    model = next;
+  };
+  return { chats, store, events, llmErrors, sent, created, prepared, wait, bump, usage, setModel };
 }
 
 describe('ChatManager', () => {
@@ -302,5 +335,98 @@ describe('ChatManager', () => {
       { role: 'assistant', content: 'Bonjour !' },
     ]);
     after.store.close?.();
+  });
+
+  it('enregistre un tour par modèle avec l’usage du TurnResult et le relaie à la réouverture', async () => {
+    const usage = new InMemoryUsageStore();
+    const { chats, wait, setModel } = setup(() => 'ok', false, undefined, undefined, usage);
+    const session = chats.create('/w');
+    const { turnId } = chats.send(session.id, 'Un');
+    await wait(session.id);
+    setModel('qwen3.5:9b');
+    chats.send(session.id, 'Deux');
+    await wait(session.id);
+    expect(usage.all()).toMatchObject([
+      {
+        turnId,
+        sessionId: session.id,
+        model: 'qwen3.5:35b',
+        outcome: 'stop',
+        day: '2026-10-28',
+        steps: 2,
+        inputTokens: 180,
+        outputTokens: 5,
+        contextTokens: 105,
+        contextWindow: 32_768,
+        generationMs: 250,
+        compactions: 0,
+      },
+      { model: 'qwen3.5:9b' },
+    ]);
+    expect(chats.open(session.id).usage).toMatchObject({
+      contextTokens: 105,
+      contextWindow: 32_768,
+    });
+  });
+
+  it('enregistre aussi un tour en erreur et un tour annulé', async () => {
+    let mode: Mode = 'error';
+    const usage = new InMemoryUsageStore();
+    const { chats, wait } = setup(() => mode, false, undefined, undefined, usage);
+    const session = chats.create('/w');
+    chats.send(session.id, 'Question');
+    await wait(session.id);
+    mode = 'hang';
+    chats.retry(session.id);
+    await new Promise((r) => setTimeout(r, 5));
+    await chats.stop(session.id);
+    await wait(session.id);
+    expect(usage.all().map((r) => [r.outcome, r.inputTokens])).toEqual([
+      ['error', 50],
+      ['aborted', 40],
+    ]);
+  });
+
+  it('compte les compactions vues pendant le tour', async () => {
+    const usage = new InMemoryUsageStore();
+    const { chats, events, wait } = setup(() => 'compact', false, undefined, undefined, usage);
+    const session = chats.create('/w');
+    chats.send(session.id, 'Long');
+    await wait(session.id);
+    expect(events.filter((e) => e.type === 'compaction')).toHaveLength(2);
+    expect(usage.all()[0]?.compactions).toBe(2);
+  });
+
+  it('relaie les events `usage` sans toucher au message persisté', async () => {
+    const { chats, store, events, wait } = setup(() => 'usage');
+    const session = chats.create('/w');
+    chats.send(session.id, 'Salut');
+    await wait(session.id);
+    expect(events.map((e) => e.type)).toEqual(['usage', 'text_delta', 'done']);
+    expect(store.messages(session.id).at(-1)?.parts).toEqual([{ type: 'text', text: 'Bonjour !' }]);
+  });
+
+  it('un registre en panne ne casse ni le tour ni la réouverture', async () => {
+    const broken: UsageStore = {
+      record: () => {
+        throw new Error('disque plein');
+      },
+      summary: () => {
+        throw new Error('disque plein');
+      },
+      lastForSession: () => {
+        throw new Error('disque plein');
+      },
+      detachSession: () => {
+        throw new Error('disque plein');
+      },
+    };
+    const { chats, events, wait } = setup(() => 'ok', false, undefined, undefined, broken);
+    const session = chats.create('/w');
+    chats.send(session.id, 'Salut');
+    await wait(session.id);
+    expect(events.map((e) => e.type)).toEqual(['text_delta', 'done']);
+    expect(chats.open(session.id).usage).toBeUndefined();
+    await expect(chats.delete(session.id)).resolves.toBeUndefined();
   });
 });

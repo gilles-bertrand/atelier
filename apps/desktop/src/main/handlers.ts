@@ -16,6 +16,7 @@ import type { ChatManager } from './runtime/chat-manager.js';
 import { resolveOpenable } from './safe-open.js';
 import type { PermissionBroker } from './runtime/permission-broker.js';
 import type { SandboxManager } from './runtime/sandbox-manager.js';
+import type { UsageStore } from './runtime/usage-store.js';
 import type { SecretsStore } from './settings/secrets-store.js';
 import type { SettingsStore } from './settings/settings-store.js';
 
@@ -31,6 +32,8 @@ export interface HandlerServices {
   secrets: SecretsStore;
   monitor: ServerMonitor;
   chats: ChatManager;
+  /** Registre de consommation (Réglages › Utilisation) ; absent : statistiques vides. */
+  usage?: UsageStore;
   permissions: PermissionBroker;
   sandbox: SandboxManager;
   mcp: McpManager;
@@ -168,6 +171,9 @@ export function createHandlers(s: HandlerServices): IpcHandlers {
       await s.chats.delete(sessionId);
       return undefined;
     },
+
+    // --- Utilisation (agrégats SQL du registre local, ADR-001)
+    'usage:summary': ({ period }) => s.usage?.summary(period) ?? { period, models: [], daily: [] },
 
     // --- Agent
     'agent:send': ({ sessionId, text, attachments }) => s.chats.send(sessionId, text, attachments),

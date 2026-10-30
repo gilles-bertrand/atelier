@@ -99,6 +99,10 @@ export function applyAgentEvent(message: ChatMessage, event: AgentEvent): ChatMe
     case 'done':
     case 'error':
       return message;
+    default:
+      // Event d'un agent-core plus récent que ce code : sans effet sur le contenu,
+      // et surtout jamais `undefined` (le tour serait perdu).
+      return message;
   }
 }
 

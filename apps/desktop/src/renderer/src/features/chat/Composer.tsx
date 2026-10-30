@@ -2,7 +2,7 @@
  * Zone de saisie : texte, pièces jointes en attente (vignettes pour les images),
  * envoi (Entrée) ou arrêt du tour en cours.
  */
-import { useId, useRef, type KeyboardEvent } from 'react';
+import { useId, useRef, type KeyboardEvent, type ReactNode } from 'react';
 import { ArrowUp, FileText, Square, X } from 'lucide-react';
 import type { Attachment } from '@atelier/shared';
 import { Button } from '@renderer/components/ui/button';
@@ -24,6 +24,7 @@ export function Composer({
   running,
   disabled,
   importing,
+  status,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -34,6 +35,8 @@ export function Composer({
   running: boolean;
   disabled: boolean;
   importing: boolean;
+  /** Indicateur à gauche du bouton d'envoi (jauge de contexte). */
+  status?: ReactNode;
 }) {
   const inputId = useId();
   const hintId = useId();
@@ -109,17 +112,20 @@ export function Composer({
                 ? 'Import des fichiers…'
                 : 'Entrée pour envoyer, Maj + Entrée pour aller à la ligne. Glissez des fichiers ici.'}
             </p>
-            {running ? (
-              <Button size="sm" variant="outline" onClick={onStop}>
-                <Square className="size-3.5 fill-current" aria-hidden />
-                Arrêter
-              </Button>
-            ) : (
-              <Button size="sm" onClick={onSend} disabled={!canSend}>
-                <ArrowUp className="size-4" aria-hidden />
-                Envoyer
-              </Button>
-            )}
+            <div className="flex shrink-0 items-center gap-2">
+              {status}
+              {running ? (
+                <Button size="sm" variant="outline" onClick={onStop}>
+                  <Square className="size-3.5 fill-current" aria-hidden />
+                  Arrêter
+                </Button>
+              ) : (
+                <Button size="sm" onClick={onSend} disabled={!canSend}>
+                  <ArrowUp className="size-4" aria-hidden />
+                  Envoyer
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       </div>

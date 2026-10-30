@@ -10,16 +10,17 @@
 import { randomUUID } from 'node:crypto';
 import { chatMessagesToModelMessages, type TurnResult } from '@atelier/agent-core';
 import {
-  AtelierError,
-  serializeError,
   type AgentEvent,
   type AgentEventSink,
+  AtelierError,
   type Attachment,
   type ChatMessage,
   type FileCard,
   type PermissionHandler,
   type SerializedAtelierError,
+  serializeError,
   type SessionSummary,
+  type TokenUsage,
   type ToolDisplay,
 } from '@atelier/shared';
 import type { ModelMessage } from 'ai';
@@ -33,6 +34,7 @@ import {
 } from '../../common/chat-reducer.js';
 import type { PermissionBroker } from './permission-broker.js';
 import { sessionNotFound, type SessionStore } from './session-store.js';
+import { usageRecord, type UsageStore } from './usage-store.js';
 import { WorkspaceChangeTracker } from './workspace-changes.js';
 
 /** Ce que le gestionnaire utilise d'une `AgentSession` d'agent-core. */
@@ -78,6 +80,12 @@ export interface ChatManagerOptions {
   onLlmError?: (error: SerializedAtelierError) => void;
   /** Suivi des fichiers produits pendant le tour (défaut : photo du dossier de travail). */
   trackChanges?: (workspace: string) => ChangeTracker;
+  /** Registre de consommation (une ligne par tour, ADR-001). */
+  usage?: UsageStore;
+  /** Modèle du runtime, lu au début de chaque tour (répartition juste par modèle). */
+  model?: () => string;
+  /** Journal des erreurs non bloquantes (registre de consommation…). */
+  log?: (message: string, data?: unknown) => void;
   newId?: () => string;
   now?: () => Date;
 }
@@ -124,9 +132,19 @@ export class ChatManager {
     });
   }
 
-  open(sessionId: string): { session: SessionSummary; messages: ChatMessage[] } {
+  /** Messages affichés et dernier usage connu (jauge de contexte dès la réouverture). */
+  open(sessionId: string): {
+    session: SessionSummary;
+    messages: ChatMessage[];
+    usage?: TokenUsage;
+  } {
     const session = this.#session(sessionId);
-    return { session, messages: this.#o.store.messages(sessionId) };
+    const usage = this.#safeUsage(() => this.#o.usage?.lastForSession(sessionId));
+    return {
+      session,
+      messages: this.#o.store.messages(sessionId),
+      ...(usage ? { usage } : {}),
+    };
   }
 
   /** Vrai si un tour tourne pour cette session. */
@@ -139,6 +157,10 @@ export class ChatManager {
     this.#o.permissions.forget(sessionId);
     this.#runtimes.delete(sessionId);
     this.#o.store.delete(sessionId);
+    // Les tours restent comptés dans les statistiques, sans lien vers la conversation.
+    this.#safeUsage(() => {
+      this.#o.usage?.detachSession(sessionId);
+    });
   }
 
   /** Lance un tour ; renvoie son identifiant sans attendre la fin. */
@@ -223,7 +245,11 @@ export class ChatManager {
     await Promise.resolve();
     const sessionId = session.id;
     let assistant = createAssistantMessage({ id: this.#id(), sessionId, createdAt: this.#now() });
+    // Modèle au moment du tour : changer de modèle ensuite ne réattribue rien.
+    const model = this.#o.model?.() ?? '';
+    let compactions = 0;
     const forward = (event: AgentEvent): void => {
+      if (event.type === 'compaction') compactions += 1;
       assistant = applyAgentEvent(assistant, event);
       this.#o.emit(event);
     };
@@ -260,6 +286,9 @@ export class ChatManager {
           { turnId },
         );
         outcome = result.reason;
+        await queue;
+        // `TurnResult.usage` fait foi (présent aussi en erreur, sans event `done`).
+        if (result.usage) this.#recordUsage(turnId, sessionId, model, result, compactions);
         // Historique modèle fidèle (compaction, paires outil/résultat) pour la reprise.
         this.#o.store.saveModelHistory(sessionId, result.messages);
         if (result.error?.code.startsWith('llm/')) this.#o.onLlmError?.(result.error);
@@ -282,6 +311,40 @@ export class ChatManager {
         runtime.retryable = { input, history: historyBefore };
       }
       runtime.running = undefined;
+    }
+  }
+
+  #recordUsage(
+    turnId: string,
+    sessionId: string,
+    model: string,
+    result: TurnResult,
+    compactions: number,
+  ): void {
+    const usage: TokenUsage | undefined = result.usage;
+    if (!usage) return;
+    this.#safeUsage(() => {
+      this.#o.usage?.record(
+        usageRecord({
+          turnId,
+          sessionId,
+          model,
+          outcome: result.reason,
+          usage,
+          compactions,
+          at: this.#o.now?.() ?? new Date(),
+        }),
+      );
+    });
+  }
+
+  /** Le registre ne doit jamais faire échouer un tour ni l'ouverture d'une conversation. */
+  #safeUsage<T>(task: () => T): T | undefined {
+    try {
+      return task();
+    } catch (error) {
+      this.#o.log?.('registre de consommation indisponible', error);
+      return undefined;
     }
   }
 

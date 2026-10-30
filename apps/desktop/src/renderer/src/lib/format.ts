@@ -28,3 +28,22 @@ export function hostOf(url: string): string {
     return url;
   }
 }
+
+const oneDecimal = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 1 });
+
+/** Nombre de tokens compact : « 980 », « 12,4 k », « 1,2 M ». */
+export function formatTokens(tokens: number): string {
+  if (tokens >= 1_000_000) return `${oneDecimal.format(tokens / 1_000_000)} M`;
+  if (tokens >= 1_000) return `${oneDecimal.format(tokens / 1_000)} k`;
+  return integer.format(Math.round(tokens));
+}
+
+/** Ratio 0..1 en pourcentage entier : « 6 % ». */
+export function formatPercent(ratio: number): string {
+  return `${integer.format(Math.round(ratio * 100))} %`;
+}
+
+/** Nombre décimal court : « 23,5 ». */
+export function formatDecimal(value: number): string {
+  return oneDecimal.format(value);
+}

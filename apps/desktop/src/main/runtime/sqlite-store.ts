@@ -36,6 +36,26 @@ const MIGRATIONS: readonly string[] = [
      session_id TEXT PRIMARY KEY REFERENCES sessions (id) ON DELETE CASCADE,
      messages TEXT NOT NULL
    );`,
+  // 2 : registre de consommation, une ligne par tour (ADR-001, voir `usage-store.ts`).
+  // Les statistiques survivent à la suppression des conversations (SET NULL).
+  `CREATE TABLE usage_turns (
+     turn_id TEXT PRIMARY KEY,
+     session_id TEXT REFERENCES sessions (id) ON DELETE SET NULL,
+     model TEXT NOT NULL,
+     outcome TEXT NOT NULL,
+     day TEXT NOT NULL,
+     steps INTEGER NOT NULL,
+     input_tokens INTEGER NOT NULL,
+     output_tokens INTEGER NOT NULL,
+     context_tokens INTEGER,
+     context_window INTEGER,
+     generation_ms INTEGER NOT NULL,
+     compactions INTEGER NOT NULL,
+     relaunches TEXT NOT NULL DEFAULT '{}',
+     created_at TEXT NOT NULL
+   );
+   CREATE INDEX usage_turns_day ON usage_turns (day);
+   CREATE INDEX usage_turns_session ON usage_turns (session_id);`,
 ];
 
 /** Version de schéma courante. */
