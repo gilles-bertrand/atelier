@@ -316,7 +316,7 @@ async function transcribePage(
   const { vision } = ctx.options;
   if (!vision)
     return {
-      note: 'page sans texte (scan probable) : aucun modèle vision disponible pour la transcrire (l’utilisateur peut choisir un modèle multimodal pour cette conversation, ou un modèle vision dans les Réglages)',
+      note: "page sans texte (scan probable) : aucun modèle vision disponible pour la transcrire (l'utilisateur peut choisir un modèle multimodal pour cette conversation, ou un modèle vision dans les Réglages)",
     };
   const key = { kind: 'pdf-page-transcription', file: fileHash, page, vision: vision.id };
   const cached = await ctx.cache.get(key);
