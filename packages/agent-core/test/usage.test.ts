@@ -5,7 +5,7 @@ import type { LanguageModelV4StreamPart } from '@ai-sdk/provider';
 import { InvalidResponseDataError } from 'ai';
 import { convertArrayToReadableStream, MockLanguageModelV4 } from 'ai/test';
 import { describe, expect, it } from 'vitest';
-import type { AgentEvent, TodoItem } from '@atelier/shared';
+import { RELAUNCH_KINDS, type AgentEvent, type TodoItem, type UsageEvent } from '@atelier/shared';
 import {
   Agent,
   createDefaultRegistry,
@@ -13,8 +13,7 @@ import {
   TurnUsageMeter,
   usageLine,
   type AgentOptions,
-  type CoreAgentEvent,
-  type UsageEvent,
+  type InjectedKind,
 } from '../src/index.js';
 import { permissions, scriptedModel, streamOf, usage, withTempDir } from './helpers.js';
 
@@ -33,13 +32,12 @@ function agentFor(
     workspace: ws,
     requestPermission: permissions(),
     contextWindow: 32_768,
-    usageEvents: true,
     ...extra,
   });
 }
 
 async function run(agent: Agent, input = 'Fais le travail.') {
-  const events: CoreAgentEvent[] = [];
+  const events: AgentEvent[] = [];
   const result = await agent.runTurn({
     sessionId: 's',
     turnId: 't',
@@ -90,15 +88,6 @@ describe('TokenUsage enrichi', () => {
       expect(usageEvents[0]).toMatchObject({ sessionId: 's', turnId: 't' });
       const types = events.map((e) => e.type);
       expect(types.lastIndexOf('usage')).toBeLessThan(types.indexOf('done'));
-    });
-  });
-
-  it('sans `usageEvents`, aucun event `usage` (reducers de l’app actuels)', async () => {
-    await withTempDir(async (ws) => {
-      const model = scriptedModel([{ text: 'Bonjour.' }]);
-      const { result, usageEvents } = await run(agentFor(ws, model, { usageEvents: false }));
-      expect(usageEvents).toHaveLength(0);
-      expect(result.usage?.steps).toBe(1);
     });
   });
 
@@ -190,6 +179,12 @@ describe('TokenUsage enrichi', () => {
 });
 
 describe('TurnUsageMeter', () => {
+  it('chaque relance de shared est un message injecté par la boucle', () => {
+    const kinds: readonly InjectedKind[] = RELAUNCH_KINDS;
+    expect(kinds).not.toContain('summary');
+    expect(kinds).not.toContain('skill');
+  });
+
   it('ignore le temps avant le premier chunk (prefill) et les chunks suivants', () => {
     let now = 0;
     const meter = new TurnUsageMeter(8192, () => now);

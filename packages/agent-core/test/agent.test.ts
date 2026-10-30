@@ -89,12 +89,16 @@ describe('boucle agentique', () => {
         'tool_result',
         'todo_update',
         'tool_result',
+        'usage',
         'tool_start',
         'permission_request',
         'tool_result',
+        'usage',
         'tool_start',
         'tool_display',
         'tool_result',
+        'usage',
+        'usage',
         'done',
       ]);
       // present_file publie sa carte pendant l'exécution, puis dans tool_result.
