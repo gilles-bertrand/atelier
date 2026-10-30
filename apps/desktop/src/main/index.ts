@@ -1,13 +1,23 @@
 import { mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { app, BrowserWindow, dialog, nativeTheme, safeStorage, session, shell } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  nativeTheme,
+  protocol,
+  safeStorage,
+  session,
+  shell,
+} from 'electron';
 import { checkServerHealth } from '@atelier/agent-core';
 import type { AppHealth } from '@atelier/shared';
 import { loadMcpConfig, McpManager } from '@atelier/mcp-bridge';
 import { LimaSandbox } from '@atelier/sandbox';
 import { installExampleSkills } from '@atelier/skills';
 import { broadcast } from './broadcast.js';
+import { handlePreviewRequest, PREVIEW_SCHEME } from './file-preview.js';
 import { createHandlers } from './handlers.js';
 import { registerIpcHandlers } from './ipc.js';
 import { ModelCatalog, serverModelSource } from './llm/model-catalog.js';
@@ -28,14 +38,33 @@ const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
   "script-src 'self'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
+  // atelier-file: aperçu des fichiers de la conversation (voir file-preview.ts).
+  `img-src 'self' data: blob: ${PREVIEW_SCHEME}:`,
   "font-src 'self' data:",
-  "connect-src 'self'",
+  `connect-src 'self' ${PREVIEW_SCHEME}:`,
+  `frame-src ${PREVIEW_SCHEME}:`,
   "object-src 'none'",
   "base-uri 'none'",
   "frame-ancestors 'none'",
   "form-action 'none'",
 ].join('; ');
+
+// Protocole d'aperçu : à déclarer avant `ready` (fetch, flux et visionneuse PDF).
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: PREVIEW_SCHEME,
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      stream: true,
+      corsEnabled: true,
+    },
+  },
+]);
+
+/** Identifiant fixe de la visionneuse PDF intégrée de Chromium / Electron. */
+const PDF_VIEWER_EXTENSION_ID = 'mhjfbmdgcfjbbpaeojofohoefgiehjai';
 
 const isDev = !app.isPackaged && Boolean(process.env['ELECTRON_RENDERER_URL']);
 
@@ -62,6 +91,8 @@ function createMainWindow(): BrowserWindow {
       sandbox: true,
       webSecurity: true,
       spellcheck: true,
+      // Visionneuse PDF intégrée de Chromium (aperçu des PDF dans le panneau droit).
+      plugins: true,
     },
   });
 
@@ -96,6 +127,15 @@ function installContentSecurityPolicy(): void {
   // En dev, Vite (HMR) a besoin de scripts inline et du websocket : CSP appliquée en production.
   if (isDev) return;
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    // L'aperçu (atelier-file:) fixe sa propre CSP ; la visionneuse PDF de Chromium
+    // (extension interne) doit pouvoir s'afficher dans l'iframe d'aperçu.
+    if (
+      details.url.startsWith(`${PREVIEW_SCHEME}:`) ||
+      details.url.startsWith(`chrome-extension://${PDF_VIEWER_EXTENSION_ID}/`)
+    ) {
+      callback({});
+      return;
+    }
     callback({
       responseHeaders: {
         ...details.responseHeaders,
@@ -269,6 +309,11 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
     if (next.mcpConfigPath !== previous.mcpConfigPath) void reloadMcp();
     if (next.onboardingCompleted && !previous.onboardingCompleted) monitor.start();
   });
+
+  // Aperçu : seulement les fichiers des dossiers de travail des conversations connues.
+  protocol.handle(PREVIEW_SCHEME, (request) =>
+    handlePreviewRequest(request.url, [...new Set(chats.list(1000).map((c) => c.workspace))]),
+  );
 
   registerIpcHandlers(
     createHandlers({

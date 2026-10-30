@@ -10,7 +10,7 @@ import { formatBytes } from '@renderer/lib/format';
 import { TOOL_ICONS, toolIconName } from '@renderer/lib/tool-icons';
 import { toolLabel } from '@renderer/lib/tool-labels';
 import { cn } from '@renderer/lib/utils';
-import { FileCard, isProminentDisplay, ToolDisplayView, WebLink } from './ToolDisplays';
+import { isProminentDisplay, ToolDisplayView, WebLink } from './ToolDisplays';
 
 /** Le statut porte la couleur ; l'icône de l'outil reste neutre. */
 const STATUS: Record<
@@ -37,7 +37,11 @@ export function ToolCallBlock({ part }: { part: ToolCallPart }) {
   const Icon = status.icon;
   const ToolIcon = TOOL_ICONS[toolIconName(part.toolName, part.input)];
   const label = toolLabel(part.toolName, part.input);
-  const prominent = part.display && isProminentDisplay(part.display) ? part.display : undefined;
+  // Les cartes de fichier sont regroupées en fin de réponse (MessageList), comme dans Claude.
+  const prominent =
+    part.display && isProminentDisplay(part.display) && part.display.type !== 'file'
+      ? part.display
+      : undefined;
   return (
     <div className="space-y-2">
       <details className="group rounded-lg border bg-muted/30 text-sm">
@@ -57,7 +61,9 @@ export function ToolCallBlock({ part }: { part: ToolCallPart }) {
           />
         </summary>
         <div className="space-y-3 border-t px-3 py-3">
-          {part.display && !prominent ? <ToolDisplayView display={part.display} /> : null}
+          {part.display && !isProminentDisplay(part.display) ? (
+            <ToolDisplayView display={part.display} />
+          ) : null}
           <div>
             <p className="mb-1 text-xs font-medium text-muted-foreground">Paramètres</p>
             <pre className="max-h-48 overflow-auto rounded-md bg-muted px-3 py-2 font-mono text-xs">
@@ -75,9 +81,6 @@ export function ToolCallBlock({ part }: { part: ToolCallPart }) {
         </div>
       </details>
       {prominent ? <ToolDisplayView display={prominent} /> : null}
-      {part.files?.map((file) => (
-        <FileCard key={file.path} file={file} />
-      ))}
     </div>
   );
 }

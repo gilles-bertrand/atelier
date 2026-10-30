@@ -2,7 +2,7 @@
  * Écran de conversation : en-tête (titre, dossier, état du serveur, panneau de
  * suivi), fil des messages, saisie, et dépôt de fichiers sur toute la zone.
  */
-import { useEffect, useId, useRef, useState, type DragEvent } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type DragEvent } from 'react';
 import {
   FileSpreadsheet,
   FileText,
@@ -13,7 +13,7 @@ import {
   Upload,
   type LucideIcon,
 } from 'lucide-react';
-import type { LlmModelInfo, SessionSummary } from '@atelier/shared';
+import type { FileCard, LlmModelInfo, SessionSummary } from '@atelier/shared';
 import { AtelierMark } from '@renderer/components/AtelierMark';
 import { ServerStatusBadge } from '@renderer/components/status/ServerStatusBadge';
 import { Button } from '@renderer/components/ui/button';
@@ -30,9 +30,11 @@ import { deriveSessionTitle } from '../../../../common/chat-reducer';
 import { headerInset, SidebarOpenButton, useShellChrome } from '../sidebar/shell-chrome';
 import { Composer, type PendingAttachment } from './Composer';
 import { ContextGauge } from './ContextGauge';
+import { FilePreviewContext, type FilePreviewControls } from './file-preview-context';
+import { FilePreview } from './FilePreview';
 import { MessageList } from './MessageList';
 import { ModelPicker } from './ModelPicker';
-import { SidePanel } from './SidePanel';
+import { changedFiles, fileRevisions, SidePanel } from './SidePanel';
 
 function hasFiles(event: DragEvent): boolean {
   return Array.from(event.dataTransfer.types).includes('Files');
@@ -97,6 +99,9 @@ export function ChatView({
   const [title, setTitle] = useState(session.title);
   const [panelOpen, setPanelOpen] = useState(true);
   const panelId = useId();
+  // Fichier affiché dans l'aperçu (panneau droit, à la place du suivi).
+  const [previewPath, setPreviewPath] = useState<string | undefined>();
+  const previewId = useId();
   const [error, setError] = useState<string | undefined>();
   const dragDepth = useRef(0);
   const running = isRunning(view);
@@ -224,6 +229,29 @@ export function ChatView({
     }
   };
 
+  // Dernière version connue de chaque fichier : l'aperçu suit les retouches de l'agent.
+  const { files, revisions } = useMemo(() => {
+    const all = view.live ? [...view.messages, view.live] : view.messages;
+    return { files: changedFiles(all), revisions: fileRevisions(all) };
+  }, [view.messages, view.live]);
+  const [previewFallback, setPreviewFallback] = useState<FileCard | undefined>();
+  const previewed =
+    previewPath === undefined
+      ? undefined
+      : (files.find((f) => f.absolutePath === previewPath) ?? previewFallback);
+  const previewControls = useMemo<FilePreviewControls>(
+    () => ({
+      selectedPath: previewPath,
+      toggle: (file) => {
+        setPreviewFallback(file);
+        setPreviewPath((current) =>
+          current === file.absolutePath ? undefined : file.absolutePath,
+        );
+      },
+    }),
+    [previewPath],
+  );
+
   const guard = (task: Promise<void>): void => {
     task.catch((e: unknown) => {
       setError(errorMessage(toSerializedError(e)));
@@ -278,11 +306,15 @@ export function ChatView({
             variant="ghost"
             size="icon"
             aria-label="Panneau de suivi"
-            aria-expanded={panelOpen}
+            aria-expanded={previewed ? false : panelOpen}
             aria-controls={panelId}
-            title={panelOpen ? 'Masquer le suivi' : 'Afficher le suivi'}
+            title={panelOpen && !previewed ? 'Masquer le suivi' : 'Afficher le suivi'}
             onClick={() => {
-              setPanelOpen((open) => !open);
+              // Depuis l'aperçu, le bouton revient au suivi.
+              if (previewed) {
+                setPreviewPath(undefined);
+                setPanelOpen(true);
+              } else setPanelOpen((open) => !open);
             }}
           >
             <PanelRight className="size-4" aria-hidden />
@@ -290,122 +322,136 @@ export function ChatView({
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1">
-        <div className="flex min-w-0 flex-1 flex-col">
-          {view.messages.length === 0 && !view.live && view.loaded ? (
-            <div className="flex flex-1 flex-col items-center justify-center gap-2 overflow-y-auto px-6 py-6 text-center">
-              <AtelierMark className="mb-2 size-11" />
-              <h2 className="text-lg font-semibold">Que puis-je faire pour vous ?</h2>
-              <p className="max-w-md text-sm text-muted-foreground">
-                Je travaille dans le dossier « {fileName(session.workspace)} » : je peux lire vos
-                documents, en créer de nouveaux, chercher sur internet et faire des calculs.
-              </p>
-              <ul
-                aria-label="Suggestions"
-                className="mt-4 grid w-full max-w-lg gap-2 sm:grid-cols-2"
-              >
-                {SUGGESTIONS.map((suggestion) => {
-                  const Icon = suggestion.icon;
-                  return (
-                    <li key={suggestion.label}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setDraft(suggestion.prompt);
-                          setFocusDraft((n) => n + 1);
-                        }}
-                        className="flex w-full items-center gap-2.5 rounded-xl border bg-card px-3 py-2.5 text-left text-sm hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      >
-                        <span
-                          className={cn(
-                            'flex size-7 shrink-0 items-center justify-center rounded-md',
-                            suggestion.tile,
-                          )}
-                          aria-hidden
+      <FilePreviewContext.Provider value={previewControls}>
+        <div className="flex min-h-0 flex-1">
+          <div className="flex min-w-0 flex-1 flex-col">
+            {view.messages.length === 0 && !view.live && view.loaded ? (
+              <div className="flex flex-1 flex-col items-center justify-center gap-2 overflow-y-auto px-6 py-6 text-center">
+                <AtelierMark className="mb-2 size-11" />
+                <h2 className="text-lg font-semibold">Que puis-je faire pour vous ?</h2>
+                <p className="max-w-md text-sm text-muted-foreground">
+                  Je travaille dans le dossier « {fileName(session.workspace)} » : je peux lire vos
+                  documents, en créer de nouveaux, chercher sur internet et faire des calculs.
+                </p>
+                <ul
+                  aria-label="Suggestions"
+                  className="mt-4 grid w-full max-w-lg gap-2 sm:grid-cols-2"
+                >
+                  {SUGGESTIONS.map((suggestion) => {
+                    const Icon = suggestion.icon;
+                    return (
+                      <li key={suggestion.label}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDraft(suggestion.prompt);
+                            setFocusDraft((n) => n + 1);
+                          }}
+                          className="flex w-full items-center gap-2.5 rounded-xl border bg-card px-3 py-2.5 text-left text-sm hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         >
-                          <Icon className="size-4" />
-                        </span>
-                        {suggestion.label}
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          ) : (
-            <MessageList
-              view={view}
-              modelLoading={modelLoading}
-              onRetry={() => {
-                setModelLoading(false);
-                guard(actions.retry(session.id, model));
+                          <span
+                            className={cn(
+                              'flex size-7 shrink-0 items-center justify-center rounded-md',
+                              suggestion.tile,
+                            )}
+                            aria-hidden
+                          >
+                            <Icon className="size-4" />
+                          </span>
+                          {suggestion.label}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ) : (
+              <MessageList
+                view={view}
+                modelLoading={modelLoading}
+                onRetry={() => {
+                  setModelLoading(false);
+                  guard(actions.retry(session.id, model));
+                }}
+                onChooseModel={() => {
+                  setPickerOpen(true);
+                }}
+              />
+            )}
+
+            {error ? (
+              <div className="mx-auto w-full max-w-3xl px-6 pb-2">
+                <Alert tone="error">{error}</Alert>
+              </div>
+            ) : null}
+
+            <Composer
+              value={draft}
+              onChange={setDraft}
+              attachments={pending}
+              onRemoveAttachment={(index) => {
+                setPending((current) => {
+                  const removed = current[index];
+                  revoke(removed?.previewUrl);
+                  return current.filter((_, i) => i !== index);
+                });
               }}
-              onChooseModel={() => {
-                setPickerOpen(true);
+              onSend={() => void send()}
+              onStop={() => {
+                guard(actions.stop(session.id));
+              }}
+              running={running}
+              disabled={!view.loaded}
+              importing={importing}
+              status={
+                <>
+                  <ModelPicker
+                    model={model}
+                    disabled={running || !view.loaded}
+                    open={pickerOpen}
+                    onOpenChange={setPickerOpen}
+                    onSelect={(next) => void chooseModel(next)}
+                    onModels={setModels}
+                  />
+                  <ContextGauge sessionId={session.id} />
+                </>
+              }
+              notice={
+                imageUnreadable ? (
+                  <Alert tone="warning">
+                    Le modèle {model} ne lit pas les images et aucun modèle pour les images n’est
+                    réglé : l’image jointe ne pourra pas être analysée. Choisissez un autre modèle,
+                    ou réglez-en un dans Réglages › Serveur et modèle.
+                  </Alert>
+                ) : undefined
+              }
+              footer={
+                coldChoice === model ? (
+                  <Alert tone="warning">
+                    Premier message plus lent : le serveur doit charger {model} (10 à 60 s). Les
+                    autres utilisateurs du serveur peuvent être ralentis.
+                  </Alert>
+                ) : undefined
+              }
+              onAddFiles={(files) => void importFiles(files)}
+              textareaRef={textarea}
+            />
+          </div>
+          {previewed ? (
+            <FilePreview
+              key={previewed.absolutePath}
+              id={previewId}
+              file={previewed}
+              revision={revisions.get(previewed.absolutePath) ?? 0}
+              onClose={() => {
+                setPreviewPath(undefined);
               }}
             />
-          )}
-
-          {error ? (
-            <div className="mx-auto w-full max-w-3xl px-6 pb-2">
-              <Alert tone="error">{error}</Alert>
-            </div>
+          ) : panelOpen ? (
+            <SidePanel id={panelId} view={view} />
           ) : null}
-
-          <Composer
-            value={draft}
-            onChange={setDraft}
-            attachments={pending}
-            onRemoveAttachment={(index) => {
-              setPending((current) => {
-                const removed = current[index];
-                revoke(removed?.previewUrl);
-                return current.filter((_, i) => i !== index);
-              });
-            }}
-            onSend={() => void send()}
-            onStop={() => {
-              guard(actions.stop(session.id));
-            }}
-            running={running}
-            disabled={!view.loaded}
-            importing={importing}
-            status={
-              <>
-                <ModelPicker
-                  model={model}
-                  disabled={running || !view.loaded}
-                  open={pickerOpen}
-                  onOpenChange={setPickerOpen}
-                  onSelect={(next) => void chooseModel(next)}
-                  onModels={setModels}
-                />
-                <ContextGauge sessionId={session.id} />
-              </>
-            }
-            notice={
-              imageUnreadable ? (
-                <Alert tone="warning">
-                  Le modèle {model} ne lit pas les images et aucun modèle pour les images n’est
-                  réglé : l’image jointe ne pourra pas être analysée. Choisissez un autre modèle, ou
-                  réglez-en un dans Réglages › Serveur et modèle.
-                </Alert>
-              ) : undefined
-            }
-            footer={
-              coldChoice === model ? (
-                <Alert tone="warning">
-                  Premier message plus lent : le serveur doit charger {model} (10 à 60 s). Les
-                  autres utilisateurs du serveur peuvent être ralentis.
-                </Alert>
-              ) : undefined
-            }
-            onAddFiles={(files) => void importFiles(files)}
-            textareaRef={textarea}
-          />
         </div>
-        {panelOpen ? <SidePanel id={panelId} view={view} /> : null}
-      </div>
+      </FilePreviewContext.Provider>
 
       {dragging ? (
         <div

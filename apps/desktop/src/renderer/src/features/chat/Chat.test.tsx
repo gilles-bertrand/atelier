@@ -133,7 +133,9 @@ describe('conversation', () => {
       },
     });
     expect(screen.getByText('(terminé)')).toBeInTheDocument();
-    await user.click(within(screen.getByRole('log')).getByRole('button', { name: 'Ouvrir' }));
+    await user.click(
+      within(screen.getByRole('log')).getByRole('button', { name: 'Ouvrir recap.md' }),
+    );
     expect(api.callsTo('file:open')).toEqual([{ absolutePath: '/Users/test/Ventes/recap.md' }]);
 
     emit({
@@ -184,7 +186,7 @@ describe('conversation', () => {
     expect(
       within(log).getByRole('button', { name: 'Afficher recap.xlsx dans le Finder' }),
     ).toBeInTheDocument();
-    await user.click(within(log).getByRole('button', { name: 'Ouvrir' }));
+    await user.click(within(log).getByRole('button', { name: 'Ouvrir recap.xlsx' }));
     expect(api.callsTo('file:open')).toEqual([{ absolutePath: '/Users/test/Ventes/recap.xlsx' }]);
   });
 

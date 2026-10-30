@@ -17,6 +17,7 @@ import { errorMessage } from '@renderer/lib/error-messages';
 import { formatBytes } from '@renderer/lib/format';
 import { fileName, hostname, safeHttpUrl, siteMark } from '@renderer/lib/tool-labels';
 import { cn } from '@renderer/lib/utils';
+import { useFilePreview } from './file-preview-context';
 
 /** Étiquette de la carte : « Créé » en succès, « Modifié » en info. */
 const ACTIONS: Record<FileCardData['action'], { label: string; className: string }> = {
@@ -25,9 +26,15 @@ const ACTIONS: Record<FileCardData['action'], { label: string; className: string
   presented: { label: 'Fichier', className: 'bg-muted text-muted-foreground' },
 };
 
-/** Carte de fichier : ouverture avec l'application par défaut, ou dans le Finder. */
+/**
+ * Carte de fichier. Un clic sur la carte affiche l'aperçu dans le panneau droit
+ * (quand la conversation le fournit) ; les icônes confient le fichier à
+ * l'application par défaut ou le montrent dans le Finder.
+ */
 export function FileCard({ file, compact = false }: { file: FileCardData; compact?: boolean }) {
   const [error, setError] = useState<string | undefined>();
+  const preview = useFilePreview();
+  const selected = preview?.selectedPath === file.absolutePath;
   const run = async (channel: 'file:open' | 'file:reveal'): Promise<void> => {
     setError(undefined);
     try {
@@ -36,38 +43,71 @@ export function FileCard({ file, compact = false }: { file: FileCardData; compac
       setError(errorMessage(toSerializedError(e)));
     }
   };
+  const name = fileName(file.path);
   const action = ACTIONS[file.action];
   const details = [
     file.size !== undefined ? formatBytes(file.size) : undefined,
     !compact && file.path.includes('/') ? file.path : undefined,
   ].filter((part) => part !== undefined);
+  const summary = (
+    <>
+      <FileTypeIcon name={file.path} />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium" title={file.path}>
+          {name}
+        </span>
+        <span className="block truncate text-xs text-muted-foreground">
+          <span
+            className={cn(
+              'mr-1.5 inline-block rounded-full px-1.5 py-px text-[0.6875rem] font-medium',
+              action.className,
+            )}
+          >
+            {action.label}
+          </span>
+          {details.join(' · ')}
+        </span>
+      </span>
+    </>
+  );
   return (
-    <div className="rounded-lg border bg-card">
-      <div className="flex items-center gap-3 px-3 py-2.5">
-        <FileTypeIcon name={file.path} />
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium" title={file.path}>
-            {fileName(file.path)}
-          </p>
-          <p className="truncate text-xs text-muted-foreground">
-            <span
-              className={cn(
-                'mr-1.5 inline-block rounded-full px-1.5 py-px text-[0.6875rem] font-medium',
-                action.className,
-              )}
-            >
-              {action.label}
-            </span>
-            {details.join(' · ')}
-          </p>
-        </div>
-        <Button size="sm" variant="outline" onClick={() => void run('file:open')}>
-          Ouvrir
+    <div
+      data-selected={selected || undefined}
+      className={cn(
+        'rounded-lg border bg-card transition-colors',
+        selected && 'border-brand/60 bg-brand/5 ring-1 ring-brand/30',
+      )}
+    >
+      <div className="flex items-center gap-1 py-1.5 pl-1.5 pr-2">
+        {preview ? (
+          <button
+            type="button"
+            aria-label={`Aperçu de ${name}`}
+            aria-pressed={selected}
+            title={selected ? 'Fermer l’aperçu' : 'Afficher l’aperçu'}
+            onClick={() => {
+              preview.toggle(file);
+            }}
+            className="flex min-w-0 flex-1 items-center gap-3 rounded-md px-1.5 py-1 text-left hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {summary}
+          </button>
+        ) : (
+          <div className="flex min-w-0 flex-1 items-center gap-3 px-1.5 py-1">{summary}</div>
+        )}
+        <Button
+          size="icon"
+          variant="ghost"
+          aria-label={`Ouvrir ${name}`}
+          title="Ouvrir avec l’application par défaut"
+          onClick={() => void run('file:open')}
+        >
+          <ExternalLink className="size-4" aria-hidden />
         </Button>
         <Button
           size="icon"
           variant="ghost"
-          aria-label={`Afficher ${fileName(file.path)} dans le Finder`}
+          aria-label={`Afficher ${name} dans le Finder`}
           title="Afficher dans le Finder"
           onClick={() => void run('file:reveal')}
         >
