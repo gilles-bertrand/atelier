@@ -48,7 +48,10 @@ export interface UsageStore {
   record(record: UsageRecord): void;
   /** Agrégats par modèle et par jour sur la période. */
   summary(period: UsagePeriod, now?: Date): UsageSummary;
-  /** Dernier usage connu d'une conversation (jauge à la réouverture). */
+  /**
+   * Dernier usage d'une conversation dont le contexte est connu (jauge à la
+   * réouverture) : un tour annulé avant sa première étape ne l'efface pas.
+   */
   lastForSession(sessionId: string): TurnUsage | undefined;
   /** Conversation supprimée : ses tours restent comptés, sans lien (SET NULL). */
   detachSession(sessionId: string): void;
@@ -219,7 +222,7 @@ export class InMemoryUsageStore implements UsageStore {
 
   lastForSession(sessionId: string): TurnUsage | undefined {
     const last = [...this.#records.values()]
-      .filter((r) => r.sessionId === sessionId)
+      .filter((r) => r.sessionId === sessionId && r.contextTokens !== undefined)
       .reduce<UsageRecord | undefined>(
         (latest, r) => (latest === undefined || r.createdAt >= latest.createdAt ? r : latest),
         undefined,
@@ -420,7 +423,8 @@ export class SqliteUsageStore implements UsageStore {
   lastForSession(sessionId: string): TurnUsage | undefined {
     const row = this.#db
       .prepare(
-        'SELECT * FROM usage_turns WHERE session_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1',
+        `SELECT * FROM usage_turns WHERE session_id = ? AND context_tokens IS NOT NULL
+         ORDER BY created_at DESC, rowid DESC LIMIT 1`,
       )
       .get(sessionId) as UsageRow | undefined;
     return row ? lastUsage(fromRow(row)) : undefined;

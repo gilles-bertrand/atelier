@@ -160,6 +160,22 @@ describe.each([
     });
     expect(store.lastForSession('inconnue')).toBeUndefined();
   });
+
+  it('un tour plus récent sans contexte (annulé tôt) ne masque pas le dernier contexte connu', async () => {
+    const store = await make();
+    store.record(
+      record({ turnId: 'a', contextTokens: 9000, createdAt: '2026-10-30T10:00:00.000Z' }),
+    );
+    store.record(
+      record({
+        turnId: 'b',
+        outcome: 'aborted',
+        contextTokens: undefined,
+        createdAt: '2026-10-30T10:05:00.000Z',
+      }),
+    );
+    expect(store.lastForSession('s1')?.contextTokens).toBe(9000);
+  });
 });
 
 describe('SqliteUsageStore', () => {
