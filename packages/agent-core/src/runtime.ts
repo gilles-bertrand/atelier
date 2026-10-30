@@ -54,8 +54,6 @@ export interface AgentRuntimeOptions {
   describePermission?: PermissionDescriber;
   maxSteps?: number;
   keepRecentOnCompaction?: number;
-  /** Event `usage` après chaque étape (voir {@link AgentOptions.usageEvents}). */
-  usageEvents?: boolean;
   log?: (message: string, data?: Record<string, unknown>) => void;
   /** Tests : modèles déjà construits (court-circuite `createLlmModels`). */
   models?: Pick<LlmModels, 'model' | 'fastModel'>;
@@ -155,7 +153,6 @@ export async function createAgentRuntime(options: AgentRuntimeOptions): Promise<
       ...(options.keepRecentOnCompaction !== undefined
         ? { keepRecentOnCompaction: options.keepRecentOnCompaction }
         : {}),
-      ...(options.usageEvents !== undefined ? { usageEvents: options.usageEvents } : {}),
       ...(options.log ? { log: options.log } : {}),
     });
     return new AgentSession(

@@ -26,6 +26,7 @@ import {
   type SerializedAtelierError,
   type SkillInfo,
   type TodoItem,
+  type TokenUsage,
   type ToolRegistry,
   type WebSearchResult,
 } from '@atelier/shared';
@@ -47,7 +48,7 @@ import { hasReasoning, stripReasoning } from './history.js';
 import { sourceText, unverifiedAmounts, verificationPrompt } from './numbers.js';
 import { createToolCallRepair } from './repair.js';
 import { skillAutoloadMessages } from './skill-autoload.js';
-import { TurnUsageMeter, type TurnTokenUsage } from './usage.js';
+import { TurnUsageMeter } from './usage.js';
 
 /** Nombre maximal d'étapes par tour (brief §1). */
 export const MAX_STEPS = 50;
@@ -97,12 +98,6 @@ export interface AgentOptions {
   now?: () => Date;
   /** Horloge monotone en ms pour mesurer la génération (défaut `performance.now`, tests). */
   clock?: () => number;
-  /**
-   * Émet un event `usage` après chaque étape (jauge de contexte, ticket #10). Désactivé
-   * par défaut tant que `usage` n'est pas dans `AgentEvent` (lot L0) : les reducers
-   * actuels de l'app ne savent pas l'ignorer.
-   */
-  usageEvents?: boolean;
   /** Journal de diagnostic (réparations, compaction…). */
   log?: (message: string, data?: Record<string, unknown>) => void;
 }
@@ -134,7 +129,7 @@ export interface TurnResult {
   /** Historique complet à conserver pour le tour suivant (raisonnement retiré). */
   messages: ModelMessage[];
   /** Consommation (dernière étape en entrée, total en sortie, cumuls, débit, relances). */
-  usage?: TurnTokenUsage;
+  usage?: TokenUsage;
   /** Raison de fin, ou `error`. */
   reason: DoneReason | 'error';
   error?: SerializedAtelierError;
@@ -215,9 +210,9 @@ export class Agent {
     const meter = new TurnUsageMeter(o.contextWindow, o.clock ?? (() => performance.now()));
     const sources = new Map<string, WebSearchResult>();
 
-    const usage = (): TurnTokenUsage => meter.snapshot();
+    const usage = (): TokenUsage => meter.snapshot();
+    // Usage cumulé après chaque étape : jauge de contexte en temps réel (ticket #10).
     const emitUsage = (): void => {
-      if (o.usageEvents !== true) return;
       turn.emit({ type: 'usage', usage: usage(), sessionId: turn.sessionId, turnId: turn.turnId });
     };
     /**

@@ -1,53 +1,11 @@
 /**
- * Consommation de tokens d'un tour, enrichie pour la jauge de contexte et les KPI
- * d'utilisation (ticket #10, ADR-001 §2 D1 à D5).
- *
- * Types locaux, miroirs du contrat §3 demandé à `@atelier/shared` : à remplacer
- * par ceux de shared au merge du lot L0 (`feat/lead-shared-token-usage`).
+ * Mesure de la consommation de tokens d'un tour, pour la jauge de contexte et les
+ * KPI d'utilisation (ticket #10, ADR-001 §2 D1 à D5). Types : `@atelier/shared`.
  */
-import type { AgentEvent, TokenUsage } from '@atelier/shared';
-import type { InjectedKind } from './compaction.js';
-
-/** Relances automatiques comptées (ni `summary` ni `skill`, qui n'en sont pas). */
-export type RelaunchKind = Exclude<InjectedKind, 'summary' | 'skill'>;
-
-/** Liste des relances comptées, dans l'ordre de l'ADR. */
-export const RELAUNCH_KINDS: readonly RelaunchKind[] = [
-  'continuation',
-  'stream_cut',
-  'tool_call_parse',
-  'empty_final',
-  'announce_only',
-  'verification',
-];
-
-/** `TokenUsage` enrichi (ADR-001 §3). Les champs existants gardent leur sens. */
-export interface TurnTokenUsage extends TokenUsage {
-  /** Entrée cumulée sur toutes les étapes du tour (tokens réellement traités). */
-  totalInputTokens?: number;
-  /** Taille du contexte après la dernière étape (entrée + sortie de cette étape) : la jauge. */
-  contextTokens?: number;
-  /** Nombre d'appels au modèle pendant le tour. */
-  steps?: number;
-  /** Temps de génération cumulé (1er chunk → fin d'étape), en ms. */
-  generationMs?: number;
-  /** Relances automatiques du tour, par type (absent = aucune). */
-  relaunches?: Partial<Record<RelaunchKind, number>>;
-}
-
-/** Usage cumulé du tour en cours, émis après chaque étape (jauge en temps réel). */
-export interface UsageEvent {
-  type: 'usage';
-  sessionId: string;
-  turnId: string;
-  usage: TurnTokenUsage;
-}
-
-/** Événements émis par la boucle : ceux de shared, plus `usage` en attendant L0. */
-export type CoreAgentEvent = AgentEvent | UsageEvent;
+import type { RelaunchKind, TokenUsage } from '@atelier/shared';
 
 /** Débit en tokens/s (sortie / temps de génération), ou `undefined` sans mesure. */
-export function tokensPerSecond(usage: TurnTokenUsage): number | undefined {
+export function tokensPerSecond(usage: TokenUsage): number | undefined {
   const ms = usage.generationMs;
   if (ms === undefined || ms <= 0) return undefined;
   return (usage.outputTokens / ms) * 1000;
@@ -115,7 +73,7 @@ export class TurnUsageMeter {
   }
 
   /** Usage cumulé jusqu'ici (copie). */
-  snapshot(): TurnTokenUsage {
+  snapshot(): TokenUsage {
     const relaunches =
       Object.keys(this.#relaunches).length > 0 ? { ...this.#relaunches } : undefined;
     return {
@@ -132,7 +90,7 @@ export class TurnUsageMeter {
 }
 
 /** Bilan de fin de tour : contexte, sortie, débit (tokens/s) et relances. */
-export function usageLine(usage: TurnTokenUsage): string {
+export function usageLine(usage: TokenUsage): string {
   const parts = [
     `contexte ${usage.contextTokens ?? usage.inputTokens}/${usage.contextWindow ?? '?'}`,
     `sortie ${usage.outputTokens} tokens`,
