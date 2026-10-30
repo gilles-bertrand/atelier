@@ -1,6 +1,6 @@
 /**
  * Interrogation du serveur LLM pour les Réglages et l'onboarding : liste des
- * modèles, version, test de connexion, santé.
+ * modèles (capacités, contexte, état chargé), version, test de connexion, santé.
  *
  * Ollama expose `/api/tags`, `/api/version`, `/api/show` ; vLLM (docs/SERVER.md
  * §5) n'expose que l'API OpenAI-compatible. Chaque fonction essaie d'abord la
@@ -16,7 +16,7 @@ import {
   type ServerHealth,
   type ServerStatus,
 } from '@atelier/shared';
-import { fetchContextWindow } from './context-window.js';
+import { fetchContextWindow, fetchModelDetails, parseCapabilities } from './context-window.js';
 import { toLlmError } from './errors.js';
 import type { FetchFunction } from './retry-fetch.js';
 
@@ -111,6 +111,9 @@ export function parseOllamaTags(body: unknown): LlmModelInfo[] {
     if (typeof details['quantization_level'] === 'string') {
       info.quantization = details['quantization_level'];
     }
+    // Ollama récent : capacités déjà dans `/api/tags` (sinon lues par `/api/show`).
+    const capabilities = parseCapabilities(record['capabilities']);
+    if (capabilities !== undefined) info.capabilities = capabilities;
     out.push(info);
   }
   return out;
@@ -155,6 +158,89 @@ export async function listModels(options: ServerQueryOptions): Promise<ModelList
   throw new AtelierError('llm/bad_response', `/api/tags a répondu HTTP ${response.status}.`, {
     retryable: response.status >= 500,
     details: { status: response.status },
+  });
+}
+
+/** Noms des modèles en mémoire, d'après la réponse de `/api/ps` (Ollama). */
+export function parseOllamaPs(body: unknown): string[] {
+  const models = asRecord(body)['models'];
+  if (!Array.isArray(models)) return [];
+  const names = new Set<string>();
+  for (const entry of models) {
+    const record = asRecord(entry);
+    for (const key of ['name', 'model']) {
+      const value = record[key];
+      if (typeof value === 'string' && value !== '') names.add(value);
+    }
+  }
+  return [...names];
+}
+
+/**
+ * Modèles en mémoire sur le serveur (`GET /api/ps`). `undefined` si la route
+ * n'existe pas (vLLM) : l'état chargé est alors inconnu.
+ */
+export async function fetchLoadedModels(
+  options: ServerQueryOptions,
+): Promise<string[] | undefined> {
+  const response = await get(`${rootUrl(options.baseUrl)}/api/ps`, options);
+  if (response.ok) return parseOllamaPs(await readJson(response, '/api/ps'));
+  if (response.status === 404 || response.status === 405) return undefined;
+  throw new AtelierError('llm/bad_response', `/api/ps a répondu HTTP ${response.status}.`, {
+    retryable: response.status >= 500,
+    details: { status: response.status },
+  });
+}
+
+/** Requêtes `/api/show` simultanées au plus pendant {@link describeModels}. */
+export const DESCRIBE_CONCURRENCY = 4;
+
+/** Applique `fn` à chaque élément, avec au plus `limit` appels en cours. */
+async function mapWithLimit<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    while (next < items.length) {
+      const index = next++;
+      results[index] = await fn(items[index] as T);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
+/**
+ * Enrichit une liste de modèles : capacités et fenêtre de contexte (`/api/show`,
+ * {@link DESCRIBE_CONCURRENCY} requêtes au plus en parallèle), état chargé
+ * (`/api/ps`). Ne lève pas : un modèle en échec garde ses champs absents.
+ */
+export async function describeModels(
+  models: readonly LlmModelInfo[],
+  options: ServerQueryOptions,
+): Promise<LlmModelInfo[]> {
+  const [loaded, details] = await Promise.all([
+    fetchLoadedModels(options).catch(() => undefined),
+    mapWithLimit(models, DESCRIBE_CONCURRENCY, (model) =>
+      fetchModelDetails({
+        baseUrl: options.baseUrl,
+        model: model.name,
+        ...(options.token !== undefined ? { token: options.token } : {}),
+        ...(options.fetch ? { fetch: options.fetch } : {}),
+        ...(options.signal ? { signal: options.signal } : {}),
+      }).catch(() => undefined),
+    ),
+  ]);
+  return models.map((model, index) => {
+    const info: LlmModelInfo = { ...model };
+    const detail = details[index];
+    if (detail?.capabilities !== undefined) info.capabilities = detail.capabilities;
+    if (detail !== undefined) info.contextWindow = detail.contextWindow;
+    if (loaded !== undefined) info.loaded = loaded.includes(model.name);
+    return info;
   });
 }
 

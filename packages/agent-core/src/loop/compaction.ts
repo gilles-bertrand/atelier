@@ -226,8 +226,9 @@ export function prunedResult(toolName: string, text: string): string {
 
 /**
  * Réduit les résultats d'outils, du plus ancien au plus récent, jusqu'à ce que
- * l'historique estimé passe sous `targetTokens`. Le dernier message `tool` (les
- * résultats que le modèle n'a pas encore lus) n'est jamais réduit.
+ * l'historique estimé passe sous `targetTokens`. Le dernier message `tool` n'est
+ * jamais réduit tant qu'aucune réponse de l'assistant ne le suit (résultats que
+ * le modèle n'a pas encore lus) ; ceux d'un tour précédent sont réductibles.
  */
 export function pruneToolResults(
   messages: readonly ModelMessage[],
@@ -237,7 +238,9 @@ export function pruneToolResults(
   let total = estimateMessagesTokens(out);
   let lastTool = -1;
   for (let i = out.length - 1; i >= 0; i--) {
-    if (out[i]?.role === 'tool') {
+    const role = out[i]?.role;
+    if (role === 'assistant') break;
+    if (role === 'tool') {
       lastTool = i;
       break;
     }

@@ -1,11 +1,17 @@
 /**
- * Lecture de la fenêtre de contexte réelle du modèle.
+ * Lecture de la fenêtre de contexte réelle du modèle et de ses capacités.
  *
  * L'endpoint `/v1` d'Ollama ignore `num_ctx` : le contexte est fixé côté serveur
  * (Modelfile `atelier` ou `OLLAMA_CONTEXT_LENGTH`). On lit donc `/api/show` ;
  * pour vLLM (pas d'`/api/show`), repli sur `/v1/models` (`max_model_len`).
  */
-import { AtelierError, MIN_CONTEXT_WINDOW, openAiCompatibleBaseUrl } from '@atelier/shared';
+import {
+  AtelierError,
+  MIN_CONTEXT_WINDOW,
+  MODEL_CAPABILITIES,
+  openAiCompatibleBaseUrl,
+  type ModelCapability,
+} from '@atelier/shared';
 import { toLlmError } from './errors.js';
 import type { FetchFunction } from './retry-fetch.js';
 
@@ -24,14 +30,22 @@ export interface ContextWindowInfo {
   source: ContextWindowSource;
 }
 
-export interface ContextWindowOptions {
+export interface ModelDetails extends ContextWindowInfo {
+  /** Capacités annoncées par `/api/show`. Absent : inconnues (vLLM, Ollama ancien). */
+  capabilities?: ModelCapability[];
+}
+
+export interface ModelDetailsOptions {
   baseUrl: string;
   model: string;
   token?: string;
-  /** Valeur forcée (réglage `numCtx`). */
-  override?: number;
   fetch?: FetchFunction;
   signal?: AbortSignal;
+}
+
+export interface ContextWindowOptions extends ModelDetailsOptions {
+  /** Valeur forcée (réglage `numCtx`). */
+  override?: number;
 }
 
 /** Extrait `num_ctx` de la chaîne `parameters` renvoyée par `/api/show`. */
@@ -50,6 +64,31 @@ export function parseModelMaxContext(modelInfo: unknown): number | undefined {
   return undefined;
 }
 
+/** Capacités connues de {@link ModelCapability}, sans doublon (ex. `audio` ignorée). */
+export function parseCapabilities(value: unknown): ModelCapability[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return MODEL_CAPABILITIES.filter((capability) => value.includes(capability));
+}
+
+/** Convertit la réponse de `/api/show` (Ollama). */
+export function parseModelShow(body: unknown): ModelDetails {
+  const record = typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : {};
+  const numCtx = parseNumCtx(record['parameters']);
+  const modelMax = parseModelMaxContext(record['model_info']);
+  const capabilities = parseCapabilities(record['capabilities']);
+  const extra = {
+    ...(modelMax !== undefined ? { modelMaxContext: modelMax } : {}),
+    ...(capabilities !== undefined ? { capabilities } : {}),
+  };
+  if (numCtx !== undefined) return { contextWindow: numCtx, source: 'num_ctx', ...extra };
+  return {
+    contextWindow:
+      modelMax !== undefined ? Math.min(modelMax, MIN_CONTEXT_WINDOW) : MIN_CONTEXT_WINDOW,
+    source: 'assumed',
+    ...extra,
+  };
+}
+
 function headers(token: string | undefined): Record<string, string> {
   return {
     'content-type': 'application/json',
@@ -64,6 +103,19 @@ export async function fetchContextWindow(
   if (options.override !== undefined && options.override > 0) {
     return { contextWindow: options.override, source: 'override' };
   }
+  const details = await fetchModelDetails(options);
+  return {
+    contextWindow: details.contextWindow,
+    source: details.source,
+    ...(details.modelMaxContext !== undefined ? { modelMaxContext: details.modelMaxContext } : {}),
+  };
+}
+
+/**
+ * Capacités et fenêtre de contexte d'un modèle, en un seul `POST /api/show`.
+ * vLLM (route absente) : pas de capacités, contexte lu via `max_model_len`.
+ */
+export async function fetchModelDetails(options: ModelDetailsOptions): Promise<ModelDetails> {
   const doFetch = options.fetch ?? globalThis.fetch;
   const root = options.baseUrl.replace(/\/+$/, '').replace(/\/v1$/, '');
   let response: Response;
@@ -80,21 +132,7 @@ export async function fetchContextWindow(
   if (response.status === 401 || response.status === 403) {
     throw new AtelierError('llm/unauthorized', `Jeton refusé par le serveur LLM (${root}).`);
   }
-  if (response.ok) {
-    const body: unknown = await response.json();
-    const record =
-      typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : {};
-    const numCtx = parseNumCtx(record['parameters']);
-    const modelMax = parseModelMaxContext(record['model_info']);
-    const extra = modelMax !== undefined ? { modelMaxContext: modelMax } : {};
-    if (numCtx !== undefined) return { contextWindow: numCtx, source: 'num_ctx', ...extra };
-    return {
-      contextWindow:
-        modelMax !== undefined ? Math.min(modelMax, MIN_CONTEXT_WINDOW) : MIN_CONTEXT_WINDOW,
-      source: 'assumed',
-      ...extra,
-    };
-  }
+  if (response.ok) return parseModelShow(await response.json());
   if (response.status === 404) {
     // Soit le modèle n'existe pas (Ollama), soit l'endpoint n'existe pas (vLLM).
     const text = await response.text().catch(() => '');
@@ -113,7 +151,7 @@ export async function fetchContextWindow(
 }
 
 async function fetchVllmContextWindow(
-  options: ContextWindowOptions,
+  options: ModelDetailsOptions,
   doFetch: FetchFunction,
 ): Promise<ContextWindowInfo> {
   const url = `${openAiCompatibleBaseUrl(options.baseUrl)}/models`;

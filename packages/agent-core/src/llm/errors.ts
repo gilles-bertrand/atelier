@@ -1,6 +1,11 @@
 /** Traduction des erreurs réseau / AI SDK en {@link AtelierError} explicites. */
 import { APICallError, RetryError } from 'ai';
-import { AtelierError, isAtelierError } from '@atelier/shared';
+import {
+  AtelierError,
+  isAtelierError,
+  MODEL_CAPABILITIES,
+  type ModelCapability,
+} from '@atelier/shared';
 
 const NETWORK_CODES = new Set([
   'ECONNREFUSED',
@@ -30,6 +35,25 @@ export function networkErrorCode(error: unknown): string | undefined {
 export function isNetworkError(error: unknown): boolean {
   if (networkErrorCode(error) !== undefined) return true;
   return error instanceof TypeError && /fetch failed|network/i.test(error.message);
+}
+
+/** Libellés français des capacités, pour les messages d'erreur. */
+const CAPABILITY_LABELS: Record<ModelCapability, string> = {
+  completion: 'la génération de texte',
+  tools: 'les outils',
+  vision: 'les images',
+  thinking: 'la réflexion',
+  embedding: 'les embeddings',
+};
+
+/**
+ * Capacité refusée par Ollama dans un HTTP 400 (« "x" does not support tools »),
+ * ou `undefined` si le message n'en annonce pas une connue.
+ */
+export function unsupportedCapability(message: string): ModelCapability | undefined {
+  const match = /does not support (\w+)/i.exec(message);
+  const name = match?.[1]?.toLowerCase();
+  return MODEL_CAPABILITIES.find((capability) => capability === name);
 }
 
 function isAbortError(error: unknown): boolean {
@@ -67,6 +91,17 @@ export function toLlmError(error: unknown, serverUrl?: string): AtelierError {
         `Modèle introuvable sur le serveur${where}. Vérifiez le nom du modèle (ollama list).`,
         { cause: error, details: { status } },
       );
+    }
+    if (status === 400) {
+      const missing =
+        unsupportedCapability(error.message) ?? unsupportedCapability(error.responseBody ?? '');
+      if (missing !== undefined) {
+        return new AtelierError(
+          'llm/model_unsupported',
+          `Ce modèle ne prend pas en charge ${CAPABILITY_LABELS[missing]}${where}. Choisissez un autre modèle.`,
+          { cause: error, details: { missing, status } },
+        );
+      }
     }
     if (status === 408 || status === 504) {
       return new AtelierError('llm/timeout', `Délai dépassé côté serveur LLM${where}.`, {

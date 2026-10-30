@@ -130,6 +130,17 @@ describe('pruneToolResults', () => {
     const { pruned } = pruneToolResults(messages, total - 100);
     expect(pruned).toBe(1);
   });
+
+  it('dernière étape d’un tour précédent (déjà lue) : réductible', () => {
+    const previous: ModelMessage[] = [
+      // Le tour précédent se termine sur les trois read_file, lus puis commentés.
+      ...issueHistory().slice(0, 3),
+      { role: 'assistant', content: 'Voici le récapitulatif.' },
+      { role: 'user', content: 'Merci, et pour avril ?' },
+    ];
+    const { pruned } = pruneToolResults(previous, 0);
+    expect(pruned).toBe(3);
+  });
 });
 
 describe('compactMessages', () => {
