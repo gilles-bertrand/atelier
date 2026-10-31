@@ -27,8 +27,13 @@ export function applySessionPatch(current: SessionSummary, patch: SessionPatch):
   return next;
 }
 
+export interface SessionListOptions {
+  /** Inclure les conversations des runs planifiés (exclues des « Récentes », ADR-002 D3). */
+  includeScheduled?: boolean;
+}
+
 export interface SessionStore {
-  list(limit?: number): SessionSummary[];
+  list(limit?: number, options?: SessionListOptions): SessionSummary[];
   get(sessionId: string): SessionSummary | undefined;
   create(session: SessionSummary): SessionSummary;
   /** Met à jour le titre, la date de dernière activité et/ou le modèle. */
@@ -58,8 +63,9 @@ export class InMemorySessionStore implements SessionStore {
   readonly #messages = new Map<string, ChatMessage[]>();
   readonly #modelHistory = new Map<string, readonly ModelMessage[]>();
 
-  list(limit = 50): SessionSummary[] {
+  list(limit = 50, options: SessionListOptions = {}): SessionSummary[] {
     return [...this.#sessions.values()]
+      .filter((s) => options.includeScheduled === true || s.scheduledTaskId === undefined)
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
       .slice(0, limit);
   }

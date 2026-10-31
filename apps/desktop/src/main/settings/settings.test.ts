@@ -20,6 +20,15 @@ describe('réglages', () => {
     expect(next.skillsDir).toBe('/Users/a/Atelier/skills');
   });
 
+  it('« Ouvrir Atelier à la connexion » : enregistré et relu (absent = non)', () => {
+    const base = defaultSettings('/h');
+    expect(base.openAtLogin).toBeUndefined();
+    const on = applySettingsPatch(base, { openAtLogin: true });
+    expect(on.openAtLogin).toBe(true);
+    expect(mergeWithDefaults(base, { ...on }).openAtLogin).toBe(true);
+    expect(mergeWithDefaults(base, { openAtLogin: 'oui' }).openAtLogin).toBeUndefined();
+  });
+
   it('refuse une URL http hors localhost / Tailscale', () => {
     let error: unknown;
     try {

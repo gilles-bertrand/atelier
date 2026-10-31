@@ -42,6 +42,7 @@ export function applySettingsPatch(current: AppSettings, patch: AppSettingsPatch
     ...(patch.privacyAcceptedAt !== undefined
       ? { privacyAcceptedAt: patch.privacyAcceptedAt }
       : {}),
+    ...(patch.openAtLogin !== undefined ? { openAtLogin: patch.openAtLogin } : {}),
     llm: clearOptionalLlm({ ...current.llm, ...stripUndefined(patch.llm) }),
     sandbox: { ...current.sandbox, ...stripUndefined(patch.sandbox) },
     search: { ...current.search, ...stripUndefined(patch.search) },
@@ -120,6 +121,7 @@ export function mergeWithDefaults(defaults: AppSettings, raw: unknown): AppSetti
     ...(typeof raw['privacyAcceptedAt'] === 'string'
       ? { privacyAcceptedAt: raw['privacyAcceptedAt'] }
       : {}),
+    ...(raw['openAtLogin'] === true ? { openAtLogin: true } : {}),
   };
   try {
     validateSettings(merged);

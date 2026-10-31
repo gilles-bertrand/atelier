@@ -10,6 +10,10 @@
  *
  * Modèle d'une conversation (D1 de #13) : celui de la session s'il est choisi,
  * sinon le modèle par défaut des Réglages (conversations antérieures à #13).
+ *
+ * Tours sans témoin (prompts planifiés, ADR-002 D3) : `runUnattended` joue un
+ * tour avec un gestionnaire de permissions non interactif et attend sa fin.
+ * Les tours interactifs prennent le bail de la VM (`WorkspaceLease`, D5).
  */
 import { randomUUID } from 'node:crypto';
 import { chatMessagesToModelMessages, type TurnResult } from '@atelier/agent-core';
@@ -37,6 +41,7 @@ import {
   userModelText,
 } from '../../common/chat-reducer.js';
 import { modelKey, sameModel } from '../../common/model-name.js';
+import type { Release, WorkspaceLease } from '../schedule/workspace-lease.js';
 import type { PermissionBroker } from './permission-broker.js';
 import { sessionNotFound, type SessionStore } from './session-store.js';
 import { usageRecord, type UsageStore } from './usage-store.js';
@@ -65,6 +70,8 @@ export interface NewAgentSession {
   history: readonly ModelMessage[];
   /** Reprise d'une session recréée : la compaction reste déclenchée à temps. */
   lastInputTokens?: number;
+  /** Consignes propres à cette session (mode autonome des runs planifiés). */
+  instructions?: string;
 }
 
 /** Ce que le gestionnaire utilise du catalogue des modèles (`ModelCatalog`). */
@@ -77,8 +84,11 @@ export interface ModelValidator {
 export interface AgentSessionFactory {
   /** Change quand le runtime est recréé (Réglages LLM). */
   generation(): number;
-  /** Prépare le tour : VM montée sur le dossier, skills relus… */
-  beforeTurn(sessionId: string, workspace: string): Promise<void>;
+  /**
+   * Prépare le tour : VM montée sur le dossier, skills relus… `sandbox: false`
+   * laisse la VM telle quelle (run planifié sans commandes, ADR-002 D5).
+   */
+  beforeTurn(sessionId: string, workspace: string, options?: { sandbox?: boolean }): Promise<void>;
   /** Crée une session agent ; rejette une `AtelierError` (serveur non configuré…). */
   createSession(options: NewAgentSession): Promise<AgentSessionLike>;
 }
@@ -104,6 +114,8 @@ export interface ChatManagerOptions {
   models?: ModelValidator;
   /** Journal des erreurs non bloquantes (registre de consommation…). */
   log?: (message: string, data?: unknown) => void;
+  /** Bail de la VM partagé avec les runs planifiés : un tour interactif attend un run d'un autre dossier. */
+  lease?: WorkspaceLease;
   newId?: () => string;
   now?: () => Date;
 }
@@ -119,10 +131,45 @@ interface PendingInput {
   attachments: readonly Attachment[];
 }
 
+/** Tour sans témoin d'un run planifié (ADR-002 D3, D4). */
+export interface UnattendedTurn {
+  /** Gestionnaire non interactif : accorde la politique de la tâche, refuse le reste. */
+  requestPermission: PermissionHandler;
+  /** Consignes du mode autonome (prompt système de la session). */
+  instructions?: string;
+  /** La VM sert-elle au tour ? Non : elle n'est ni remontée ni réservée. */
+  useSandbox: boolean;
+  /** Arrêt du run (bouton, durée maximale dépassée). */
+  signal?: AbortSignal;
+}
+
+/** Bilan d'un tour sans témoin. */
+export interface UnattendedResult {
+  turnId: string;
+  reason: TurnResult['reason'];
+  error?: SerializedAtelierError;
+  /** Message assistant final (compte rendu, fichiers produits, refus). */
+  message: ChatMessage;
+}
+
+/** Mode du tour : la session agent est recréée quand il change. */
+type TurnMode = { kind: 'interactive' } | ({ kind: 'unattended' } & UnattendedTurn);
+
+interface TurnReport {
+  reason: TurnResult['reason'];
+  error?: SerializedAtelierError;
+  message: ChatMessage;
+}
+
 interface SessionRuntime {
-  /** Session agent, génération du runtime qui l'a créée et modèle qu'elle utilise. */
-  agent?: { session: AgentSessionLike; generation: number; model: string };
-  running?: { turnId: string; controller: AbortController; done: Promise<void> };
+  /** Session agent, génération du runtime qui l'a créée, modèle et mode qu'elle utilise. */
+  agent?: {
+    session: AgentSessionLike;
+    generation: number;
+    model: string;
+    mode: TurnMode['kind'];
+  };
+  running?: { turnId: string; controller: AbortController; done: Promise<TurnReport> };
   /** Dernier tour en échec ou interrompu : relançable via `agent:retry`. */
   retryable?: { input: PendingInput; history: readonly ModelMessage[] };
 }
@@ -135,21 +182,32 @@ export class ChatManager {
     this.#o = options;
   }
 
-  list(limit?: number): SessionSummary[] {
-    return this.#o.store.list(limit);
+  /** Conversations récentes ; celles des runs planifiés seulement sur demande (ADR-002 D3). */
+  list(limit?: number, options?: { includeScheduled?: boolean }): SessionSummary[] {
+    return this.#o.store.list(limit, options);
   }
 
-  create(workspace: string): SessionSummary {
+  /**
+   * Nouvelle conversation. `scheduledTaskId` : conversation d'un run planifié
+   * (hors « Récentes »), avec son modèle et son titre.
+   */
+  create(
+    workspace: string,
+    options: { scheduledTaskId?: string; model?: string; title?: string } = {},
+  ): SessionSummary {
     const at = this.#now();
     // Copie du modèle par défaut : le changer ensuite dans les Réglages ne modifie pas cette conversation.
-    const model = this.#o.defaultModel?.() ?? '';
+    const model = options.model ?? this.#o.defaultModel?.() ?? '';
     return this.#o.store.create({
       id: this.#id(),
-      title: 'Nouvelle conversation',
+      title: options.title ?? 'Nouvelle conversation',
       workspace,
       createdAt: at,
       updatedAt: at,
       ...(model !== '' ? { model } : {}),
+      ...(options.scheduledTaskId !== undefined
+        ? { scheduledTaskId: options.scheduledTaskId }
+        : {}),
     });
   }
 
@@ -216,16 +274,71 @@ export class ChatManager {
     }
     const runtime = this.#runtime(sessionId);
     this.#assertIdle(runtime);
+    this.#saveUserMessage(session, text, attachments, true);
+    const { turnId } = this.#start(session, runtime, { text, attachments }, undefined, {
+      kind: 'interactive',
+    });
+    return { turnId };
+  }
 
+  /**
+   * Joue un tour sans témoin (run planifié) et attend sa fin. Le titre de la
+   * conversation n'est pas dérivé du prompt : il vient de la tâche.
+   */
+  async runUnattended(
+    sessionId: string,
+    text: string,
+    turn: UnattendedTurn,
+  ): Promise<UnattendedResult> {
+    const session = this.#session(sessionId);
+    if (text.trim() === '') throw new AtelierError('tool/invalid_input', 'Prompt vide.');
+    const runtime = this.#runtime(sessionId);
+    this.#assertIdle(runtime);
+    this.#saveUserMessage(session, text, [], false);
+    const { turnId, done } = this.#start(session, runtime, { text, attachments: [] }, undefined, {
+      kind: 'unattended',
+      ...turn,
+    });
+    const onAbort = (): void => {
+      void this.stop(sessionId);
+    };
+    if (turn.signal?.aborted) onAbort();
+    turn.signal?.addEventListener('abort', onAbort, { once: true });
+    try {
+      const report = await done;
+      return {
+        turnId,
+        reason: report.reason,
+        ...(report.error ? { error: report.error } : {}),
+        message: report.message,
+      };
+    } finally {
+      turn.signal?.removeEventListener('abort', onAbort);
+    }
+  }
+
+  #saveUserMessage(
+    session: SessionSummary,
+    text: string,
+    attachments: readonly Attachment[],
+    deriveTitle: boolean,
+  ): void {
     const at = this.#now();
-    const user = createUserMessage({ id: this.#id(), sessionId, text, attachments, createdAt: at });
+    const user = createUserMessage({
+      id: this.#id(),
+      sessionId: session.id,
+      text,
+      attachments,
+      createdAt: at,
+    });
     this.#o.store.saveMessage(user);
-    const isFirst = this.#o.store.messages(sessionId).filter((m) => m.role === 'user').length === 1;
-    this.#o.store.update(sessionId, {
+    const isFirst =
+      deriveTitle &&
+      this.#o.store.messages(session.id).filter((m) => m.role === 'user').length === 1;
+    this.#o.store.update(session.id, {
       updatedAt: at,
       ...(isFirst ? { title: deriveSessionTitle(text, attachments[0]?.name) } : {}),
     });
-    return this.#start(session, runtime, { text, attachments }, undefined);
   }
 
   /** Relance le dernier tour en échec (coupure réseau…) avec la même demande. */
@@ -239,7 +352,10 @@ export class ChatManager {
         details: { kind: 'nothing_to_retry' },
       });
     }
-    return this.#start(session, runtime, retryable.input, retryable.history);
+    const { turnId } = this.#start(session, runtime, retryable.input, retryable.history, {
+      kind: 'interactive',
+    });
+    return { turnId };
   }
 
   /** Bouton stop : annule le tour et refuse les permissions en attente. */
@@ -265,13 +381,14 @@ export class ChatManager {
     runtime: SessionRuntime,
     input: PendingInput,
     resetHistory: readonly ModelMessage[] | undefined,
-  ): { turnId: string } {
+    mode: TurnMode,
+  ): { turnId: string; done: Promise<TurnReport> } {
     const turnId = this.#id();
     const controller = new AbortController();
     runtime.retryable = undefined;
-    const done = this.#run(session, runtime, turnId, input, resetHistory, controller);
+    const done = this.#run(session, runtime, turnId, input, resetHistory, controller, mode);
     runtime.running = { turnId, controller, done };
-    return { turnId };
+    return { turnId, done };
   }
 
   async #run(
@@ -281,7 +398,8 @@ export class ChatManager {
     input: PendingInput,
     resetHistory: readonly ModelMessage[] | undefined,
     controller: AbortController,
-  ): Promise<void> {
+    mode: TurnMode,
+  ): Promise<TurnReport> {
     // Laisse `send` renvoyer le turnId avant le premier événement.
     await Promise.resolve();
     const sessionId = session.id;
@@ -297,6 +415,10 @@ export class ChatManager {
     const forward = (event: AgentEvent): void => {
       if (event.type === 'compaction') compactions += 1;
       assistant = applyAgentEvent(assistant, event);
+      // Run planifié : le gestionnaire répond seul, aucune modale ne doit
+      // s'ouvrir chez qui regarde le run en direct. Le refus reste visible par
+      // le `tool_result` (`denied`) et dans `scheduled_runs.denied`.
+      if (mode.kind === 'unattended' && event.type === 'permission_request') return;
       this.#o.emit(event);
     };
     const tracker = (this.#o.trackChanges ?? defaultTracker)(session.workspace);
@@ -317,10 +439,20 @@ export class ChatManager {
     };
     const historyBefore = resetHistory ?? this.#currentHistory(runtime, sessionId);
     let outcome: TurnResult['reason'] = 'error';
+    let turnError: SerializedAtelierError | undefined;
+    // Un run planifié réserve la VM lui-même avant de démarrer (attente bornée).
+    let release: Release | undefined;
     try {
-      await this.#o.agents.beforeTurn(sessionId, session.workspace);
+      if (mode.kind === 'interactive' && this.#o.lease) {
+        release = await this.#o.lease.acquire(
+          { workspace: session.workspace, sessionId },
+          { signal: controller.signal },
+        );
+      }
+      const useSandbox = mode.kind === 'interactive' || mode.useSandbox;
+      await this.#o.agents.beforeTurn(sessionId, session.workspace, { sandbox: useSandbox });
       await tracker.start().catch(() => undefined);
-      const agent = await this.#agentSession(session, runtime, resetHistory, model);
+      const agent = await this.#agentSession(session, runtime, resetHistory, model, mode);
       if (controller.signal.aborted) {
         outcome = 'aborted';
         emit({ type: 'done', sessionId, turnId, reason: 'aborted' });
@@ -332,6 +464,7 @@ export class ChatManager {
           { turnId },
         );
         outcome = result.reason;
+        turnError = result.error;
         await queue;
         // `TurnResult.usage` fait foi (présent aussi en erreur, sans event `done`).
         if (result.usage) this.#recordUsage(turnId, sessionId, model, result, compactions);
@@ -345,10 +478,12 @@ export class ChatManager {
         outcome = 'aborted';
         emit({ type: 'done', sessionId, turnId, reason: 'aborted' });
       } else {
+        turnError = serialized;
         emit({ type: 'error', sessionId, turnId, error: serialized });
         if (serialized.code.startsWith('llm/')) this.#o.onLlmError?.(serialized);
       }
     } finally {
+      release?.();
       await queue;
       assistant = settleRunningTools(assistant);
       if (assistant.parts.length > 0) this.#o.store.saveMessage(assistant);
@@ -358,6 +493,7 @@ export class ChatManager {
       }
       runtime.running = undefined;
     }
+    return { reason: outcome, ...(turnError ? { error: turnError } : {}), message: assistant };
   }
 
   #recordUsage(
@@ -404,6 +540,7 @@ export class ChatManager {
     runtime: SessionRuntime,
     resetHistory: readonly ModelMessage[] | undefined,
     model: string,
+    mode: TurnMode,
   ): Promise<AgentSessionLike> {
     const generation = this.#o.agents.generation();
     const current = runtime.agent;
@@ -411,6 +548,10 @@ export class ChatManager {
       current &&
       current.generation === generation &&
       sameModel(current.model, model) &&
+      // Un run planifié a ses propres permissions et consignes : jamais réutilisé
+      // tel quel, ni pour un tour interactif qui suit dans la même conversation.
+      current.mode === 'interactive' &&
+      mode.kind === 'interactive' &&
       !resetHistory
     ) {
       return current.session;
@@ -423,11 +564,17 @@ export class ChatManager {
       sessionId: session.id,
       workspace: session.workspace,
       model,
-      requestPermission: this.#o.permissions.handlerFor(session.id),
+      requestPermission:
+        mode.kind === 'unattended'
+          ? mode.requestPermission
+          : this.#o.permissions.handlerFor(session.id),
       history: resetHistory ?? this.#currentHistory(runtime, session.id),
       ...(lastInputTokens !== undefined ? { lastInputTokens } : {}),
+      ...(mode.kind === 'unattended' && mode.instructions !== undefined
+        ? { instructions: mode.instructions }
+        : {}),
     });
-    runtime.agent = { session: created, generation, model };
+    runtime.agent = { session: created, generation, model, mode: mode.kind };
     return created;
   }
 

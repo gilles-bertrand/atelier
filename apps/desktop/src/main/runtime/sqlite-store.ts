@@ -14,6 +14,7 @@ import type { ModelMessage } from 'ai';
 import {
   applySessionPatch,
   sessionNotFound,
+  type SessionListOptions,
   type SessionPatch,
   type SessionStore,
 } from './session-store.js';
@@ -66,6 +67,41 @@ export const MIGRATIONS: readonly string[] = [
   // produit la réponse (NULL : message utilisateur ou réponse antérieure).
   `ALTER TABLE sessions ADD COLUMN model TEXT;
    ALTER TABLE messages ADD COLUMN model TEXT;`,
+  // 4 : prompts planifiés (ADR-002 D6, voir `schedule/schedule-store.ts`). Une
+  // conversation créée par un run porte sa tâche (hors « Récentes »).
+  `ALTER TABLE sessions ADD COLUMN scheduled_task_id TEXT;
+   CREATE TABLE scheduled_tasks (
+     id TEXT PRIMARY KEY,
+     name TEXT NOT NULL,
+     prompt TEXT NOT NULL,
+     workspace TEXT NOT NULL,
+     model TEXT,
+     schedule TEXT NOT NULL,
+     permissions TEXT NOT NULL,
+     max_duration_min INTEGER NOT NULL DEFAULT 20,
+     enabled INTEGER NOT NULL DEFAULT 1,
+     next_run_at TEXT,
+     created_at TEXT NOT NULL,
+     updated_at TEXT NOT NULL
+   );
+   CREATE TABLE scheduled_runs (
+     id TEXT PRIMARY KEY,
+     task_id TEXT NOT NULL REFERENCES scheduled_tasks (id) ON DELETE CASCADE,
+     session_id TEXT REFERENCES sessions (id) ON DELETE SET NULL,
+     turn_id TEXT,
+     trigger TEXT NOT NULL,
+     status TEXT NOT NULL,
+     skip_reason TEXT,
+     scheduled_for TEXT NOT NULL,
+     started_at TEXT,
+     finished_at TEXT,
+     summary TEXT,
+     files TEXT,
+     denied TEXT,
+     error TEXT
+   );
+   CREATE INDEX scheduled_runs_task ON scheduled_runs (task_id, scheduled_for DESC);
+   CREATE INDEX scheduled_runs_day ON scheduled_runs (scheduled_for);`,
 ];
 
 /** Version de schéma courante. */
@@ -138,6 +174,7 @@ interface SessionRow {
   created_at: string;
   updated_at: string;
   model: string | null;
+  scheduled_task_id: string | null;
 }
 
 interface MessageRow {
@@ -157,6 +194,7 @@ function toSummary(row: SessionRow): SessionSummary {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     ...(row.model !== null ? { model: row.model } : {}),
+    ...(row.scheduled_task_id !== null ? { scheduledTaskId: row.scheduled_task_id } : {}),
   };
 }
 
@@ -181,9 +219,10 @@ export class SqliteSessionStore implements SessionStore {
     return new SqliteSessionStore(await openDatabase(file));
   }
 
-  list(limit = 50): SessionSummary[] {
+  list(limit = 50, options: SessionListOptions = {}): SessionSummary[] {
+    const where = options.includeScheduled ? '' : 'WHERE scheduled_task_id IS NULL';
     const rows = this.#db
-      .prepare('SELECT * FROM sessions ORDER BY updated_at DESC, rowid DESC LIMIT ?')
+      .prepare(`SELECT * FROM sessions ${where} ORDER BY updated_at DESC, rowid DESC LIMIT ?`)
       .all(limit) as unknown as SessionRow[];
     return rows.map(toSummary);
   }
@@ -197,8 +236,8 @@ export class SqliteSessionStore implements SessionStore {
   create(session: SessionSummary): SessionSummary {
     this.#db
       .prepare(
-        `INSERT INTO sessions (id, title, workspace, created_at, updated_at, model)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO sessions (id, title, workspace, created_at, updated_at, model, scheduled_task_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         session.id,
@@ -207,6 +246,7 @@ export class SqliteSessionStore implements SessionStore {
         session.createdAt,
         session.updatedAt,
         session.model ?? null,
+        session.scheduledTaskId ?? null,
       );
     return session;
   }

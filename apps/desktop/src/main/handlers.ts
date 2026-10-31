@@ -17,6 +17,7 @@ import type { ChatManager } from './runtime/chat-manager.js';
 import { resolveOpenable } from './safe-open.js';
 import type { PermissionBroker } from './runtime/permission-broker.js';
 import type { SandboxManager } from './runtime/sandbox-manager.js';
+import type { TaskScheduler } from './schedule/task-scheduler.js';
 import type { UsageStore } from './runtime/usage-store.js';
 import type { SecretsStore } from './settings/secrets-store.js';
 import type { SettingsStore } from './settings/settings-store.js';
@@ -37,6 +38,18 @@ export interface HandlerServices {
   chats: ChatManager;
   /** Registre de consommation (Réglages › Utilisation) ; absent : statistiques vides. */
   usage?: UsageStore;
+  /** Prompts planifiés (ADR-002) ; absent : canaux `schedule:*` non implémentés. */
+  scheduler?: Pick<
+    TaskScheduler,
+    | 'listTasks'
+    | 'saveTask'
+    | 'deleteTask'
+    | 'setEnabled'
+    | 'runNow'
+    | 'stopRun'
+    | 'dashboard'
+    | 'runs'
+  >;
   permissions: PermissionBroker;
   sandbox: SandboxManager;
   mcp: McpManager;
@@ -159,7 +172,8 @@ export function createHandlers(s: HandlerServices): IpcHandlers {
         ...(title !== undefined ? { title } : {}),
         ...(defaultPath !== undefined ? { defaultPath } : {}),
       }),
-    'session:list': ({ limit }) => s.chats.list(limit),
+    'session:list': ({ limit, includeScheduled }) =>
+      s.chats.list(limit, includeScheduled ? { includeScheduled } : {}),
     'session:create': async ({ workspace }) =>
       s.chats.create(await assertWorkspace(workspace, home)),
     'session:open': ({ sessionId }) => s.chats.open(sessionId),
@@ -171,6 +185,9 @@ export function createHandlers(s: HandlerServices): IpcHandlers {
 
     // --- Utilisation (agrégats SQL du registre local, ADR-001)
     'usage:summary': ({ period }) => s.usage?.summary(period) ?? { period, models: [], daily: [] },
+
+    // --- Prompts planifiés (ADR-002)
+    ...(s.scheduler ? scheduleHandlers(s.scheduler, home) : {}),
 
     // --- Agent
     'agent:send': ({ sessionId, text, attachments }) => s.chats.send(sessionId, text, attachments),
@@ -241,5 +258,29 @@ export function createHandlers(s: HandlerServices): IpcHandlers {
       void s.mcp.apply(config);
       return undefined;
     },
+  };
+}
+
+function scheduleHandlers(
+  scheduler: NonNullable<HandlerServices['scheduler']>,
+  home: string,
+): IpcHandlers {
+  return {
+    'schedule:list': () => scheduler.listTasks(),
+    'schedule:save': async ({ id, task }) =>
+      // Même règle de dossier qu'une conversation : ni la racine ni le $HOME entier.
+      scheduler.saveTask({ ...task, workspace: await assertWorkspace(task.workspace, home) }, id),
+    'schedule:delete': async ({ id }) => {
+      await scheduler.deleteTask(id);
+      return undefined;
+    },
+    'schedule:set-enabled': ({ id, enabled }) => scheduler.setEnabled(id, enabled),
+    'schedule:run-now': ({ id }) => scheduler.runNow(id),
+    'schedule:stop-run': async ({ runId }) => {
+      await scheduler.stopRun(runId);
+      return undefined;
+    },
+    'schedule:dashboard': ({ period }) => scheduler.dashboard(period),
+    'schedule:runs': (query) => scheduler.runs(query),
   };
 }
