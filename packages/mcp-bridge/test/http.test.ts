@@ -134,6 +134,49 @@ describe('cycle de vie (transport en mémoire)', { timeout: 20_000 }, () => {
     await manager.stop();
   });
 
+  it('status() liste les outils des serveurs connectés, mis à jour par list_changed', async () => {
+    const memory = memoryFactory();
+    const manager = new McpManager({ createTransport: memory.factory });
+    await manager.apply(config(['meteo']));
+    expect(manager.status()[0]?.tools).toEqual([
+      { name: 'mcp__meteo__forecast', title: 'Prévisions', readOnly: true },
+    ]);
+
+    // Outil en écriture (sans readOnlyHint), annoncé par tools/list_changed.
+    memory.servers[0]?.registerTool(
+      'send_alert',
+      { description: 'Envoie une alerte', annotations: { title: 'Alerter' } },
+      () => ({ content: [{ type: 'text', text: 'envoyée' }] }),
+    );
+    await waitFor(() => manager.status()[0]?.tools?.length === 2);
+    expect(manager.status()[0]?.tools).toEqual([
+      { name: 'mcp__meteo__forecast', title: 'Prévisions', readOnly: true },
+      { name: 'mcp__meteo__send_alert', title: 'Alerter', readOnly: false },
+    ]);
+    // Le nom est la scopeKey des demandes de permission.
+    const write = manager.catalog().find((e) => e.toolName === 'send_alert');
+    expect(write?.definition.describePermission?.({}).scopeKey).toBe('mcp__meteo__send_alert');
+    await manager.stop();
+  });
+
+  it('status() : pas de `tools` tant que le serveur n’est pas connecté', async () => {
+    const memory = memoryFactory();
+    const manager = new McpManager({
+      createTransport: memory.factory,
+      reconnect: { baseDelayMs: 10, maxAttempts: 1 },
+    });
+    await manager.apply(config(['meteo']));
+    expect(manager.status()[0]?.tools).toHaveLength(1);
+
+    // Connexion perdue : le catalogue garde les outils (reconnexion), pas le statut.
+    memory.fail.next = true;
+    await memory.serverTransports[0]?.close();
+    await waitFor(() => manager.status()[0]?.state === 'failed');
+    const status = manager.status()[0];
+    expect(status && 'tools' in status).toBe(false);
+    await manager.stop();
+  });
+
   it('passe en échec après les tentatives, puis se reconnecte à la demande', async () => {
     const memory = memoryFactory();
     const manager = new McpManager({

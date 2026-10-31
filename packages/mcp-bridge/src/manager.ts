@@ -86,9 +86,23 @@ export class McpManager {
     this.#emit();
   }
 
-  /** État de chaque serveur configuré. */
+  /**
+   * État de chaque serveur configuré. Un serveur connecté liste aussi ses outils
+   * (`tools`, choix outil par outil des tâches planifiées, ADR-002 D4).
+   */
   status(): McpServerStatus[] {
-    return [...this.#connections.values()].map((c) => c.status());
+    return [...this.#connections.values()].map((connection) => {
+      const status = connection.status();
+      if (connection.state !== 'connected') return status;
+      return {
+        ...status,
+        tools: this.#entriesFor(connection).map((entry) => ({
+          name: entry.definition.name,
+          ...(entry.title !== undefined ? { title: entry.title } : {}),
+          readOnly: entry.readOnly,
+        })),
+      };
+    });
   }
 
   /** Connexion d'un serveur (diagnostics, tests). */
