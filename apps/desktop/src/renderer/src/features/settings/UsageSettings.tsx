@@ -12,8 +12,9 @@ import {
   type UsagePeriod,
   type UsageSummary,
 } from '@atelier/shared';
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
+import { formatDay, parseDay, StackedBars } from '@renderer/components/charts/StackedBars';
 import { Alert } from '@renderer/components/ui/primitives';
 import { toSerializedError } from '@renderer/lib/api';
 import { errorMessage } from '@renderer/lib/error-messages';
@@ -37,13 +38,6 @@ export const RELAUNCH_LABELS: Record<RelaunchKind, string> = {
   announce_only: 'Annonce sans action',
   verification: 'Vérification',
 };
-
-const dayLabel = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short' });
-
-function parseDay(day: string): Date {
-  const [y, m, d] = day.split('-').map(Number);
-  return new Date(y ?? 1970, (m ?? 1) - 1, d ?? 1);
-}
 
 function rate(part: number, total: number): string {
   return total > 0 ? formatPercent(part / total) : '—';
@@ -114,55 +108,21 @@ function Tile({ label, value, detail }: { label: string; value: string; detail?:
 }
 
 function DailyChart({ bars }: { bars: readonly DayBar[] }) {
-  const titleId = useId();
-  const max = Math.max(1, ...bars.map((b) => b.inputTokens + b.outputTokens));
   return (
-    <figure aria-labelledby={titleId} className="space-y-2">
-      <figcaption id={titleId} className="flex items-center gap-4 text-sm font-medium">
-        Tokens par jour
-        <span className="flex items-center gap-3 text-xs font-normal text-muted-foreground">
-          <span className="flex items-center gap-1">
-            <span className="size-2 rounded-sm bg-brand/35" aria-hidden /> Entrée
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="size-2 rounded-sm bg-brand" aria-hidden /> Sortie
-          </span>
-        </span>
-      </figcaption>
-      <ol className="flex h-32 items-end gap-px border-b">
-        {bars.map((bar) => {
-          const total = bar.inputTokens + bar.outputTokens;
-          const label = `${dayLabel.format(parseDay(bar.day))} : ${formatTokens(
-            bar.inputTokens,
-          )} en entrée, ${formatTokens(bar.outputTokens)} en sortie`;
-          return (
-            <li
-              key={bar.day}
-              title={label}
-              className="flex h-full min-w-0 flex-1 flex-col justify-end"
-            >
-              <span className="sr-only">{label}</span>
-              <span
-                aria-hidden
-                className="block rounded-t-[2px] bg-brand"
-                style={{ height: `${String((bar.outputTokens / max) * 100)}%` }}
-              />
-              <span
-                aria-hidden
-                className={cn('block bg-brand/35', total > 0 ? 'min-h-px' : undefined)}
-                style={{ height: `${String((bar.inputTokens / max) * 100)}%` }}
-              />
-            </li>
-          );
-        })}
-      </ol>
-      {bars.length > 0 ? (
-        <div className="flex justify-between text-xs text-muted-foreground" aria-hidden>
-          <span>{dayLabel.format(parseDay(bars[0]?.day ?? ''))}</span>
-          <span>{dayLabel.format(parseDay(bars.at(-1)?.day ?? ''))}</span>
-        </div>
-      ) : null}
-    </figure>
+    <StackedBars
+      title="Tokens par jour"
+      series={[
+        { key: 'inputTokens', label: 'Entrée', className: 'bg-brand/35' },
+        { key: 'outputTokens', label: 'Sortie', className: 'bg-brand' },
+      ]}
+      bars={bars.map((bar) => ({
+        day: bar.day,
+        values: { inputTokens: bar.inputTokens, outputTokens: bar.outputTokens },
+        label: `${formatDay(bar.day)} : ${formatTokens(bar.inputTokens)} en entrée, ${formatTokens(
+          bar.outputTokens,
+        )} en sortie`,
+      }))}
+    />
   );
 }
 

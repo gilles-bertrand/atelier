@@ -12,6 +12,7 @@ import {
   MessageSquarePlus,
   PanelLeftClose,
   Plus,
+  CalendarClock,
   Search,
   Settings,
 } from 'lucide-react';
@@ -69,6 +70,7 @@ export function Sidebar({
   sessions,
   current,
   settingsActive,
+  scheduleActive = false,
   hiddenFolders,
   searchRef,
   onNewConversation,
@@ -78,6 +80,7 @@ export function Sidebar({
   onDelete,
   onHideFolder,
   onOpenSettings,
+  onOpenSchedule,
   onCollapse,
   activity,
 }: {
@@ -87,6 +90,8 @@ export function Sidebar({
   activity?: ReadonlyMap<string, SessionActivity>;
   current: SessionSummary | undefined;
   settingsActive: boolean;
+  /** Tableau de bord des tâches planifiées affiché. */
+  scheduleActive?: boolean;
   hiddenFolders: readonly string[];
   searchRef: RefObject<HTMLInputElement | null>;
   onNewConversation: () => void;
@@ -96,6 +101,8 @@ export function Sidebar({
   onDelete: (session: SessionSummary) => Promise<void>;
   onHideFolder: (workspace: string) => void;
   onOpenSettings: () => void;
+  /** Absent : pas d'entrée « Tâches planifiées ». */
+  onOpenSchedule?: () => void;
   onCollapse: () => void;
 }) {
   const { state } = useApp();
@@ -105,7 +112,7 @@ export function Sidebar({
   const recentId = useId();
   const foldersId = useId();
   const resultsId = useId();
-  const currentId = settingsActive ? undefined : current?.id;
+  const currentId = settingsActive || scheduleActive ? undefined : current?.id;
 
   const folders = useMemo(
     () => groupByFolder(sessions ?? [], hiddenFolders),
@@ -313,6 +320,28 @@ export function Sidebar({
       </div>
 
       <div className="shrink-0">
+        {onOpenSchedule ? (
+          <div className="border-t p-2">
+            <button
+              type="button"
+              aria-current={scheduleActive ? 'page' : undefined}
+              onClick={onOpenSchedule}
+              className={cn(
+                'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                scheduleActive ? 'bg-brand-soft font-medium' : 'hover:bg-accent/60',
+              )}
+            >
+              <CalendarClock
+                className={cn(
+                  'size-4',
+                  scheduleActive ? 'text-brand-text' : 'text-muted-foreground',
+                )}
+                aria-hidden
+              />
+              Tâches planifiées
+            </button>
+          </div>
+        ) : null}
         <EnvironmentStatus
           session={current}
           sandbox={state.sandbox}
