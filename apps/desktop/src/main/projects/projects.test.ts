@@ -452,9 +452,14 @@ describe('ProjectService', () => {
     await refused(join(root, 'absent'));
     await refused(home);
     await refused(forbidden);
-    await refused(join(main, 'sous').replace('/sous', '/Clients/sous'));
     await mkdir(join(main, 'sous'));
     await refused(join(main, 'sous'));
+    // Imbrication masquée par « .. » ou par un lien symbolique : vue sur le chemin
+    // canonique (realpath avant validateProjectInput, relecture du Lead sur PR #121).
+    await refused(join(root, 'Compta', '..', 'Clients', 'sous'));
+    const nestedLink = join(root, 'lien-sous');
+    await symlink(join(main, 'sous'), nestedLink);
+    await refused(nestedLink);
   });
 
   it('changer le dossier principal déplace les conversations et les tâches du projet', async () => {
