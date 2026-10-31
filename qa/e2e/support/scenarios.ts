@@ -221,6 +221,34 @@ export const slowScenario: MockScenario = {
   steps: [{ text: 'Voilà, j’ai pris mon temps.', delayMs: SLOW_REPLY_MS }],
 };
 
+/** Demande des tâches planifiées (ADR-002, QA #20) : une lecture, une écriture, un compte rendu. */
+export const SCHEDULE_PROMPT = 'Résume les ventes de Bruxelles dans note-ventes.md';
+export const SCHEDULE_FILE = 'note-ventes.md';
+
+export const scheduleScenario: MockScenario = {
+  name: 'tâche planifiée',
+  match: (t) => t === SCHEDULE_PROMPT,
+  steps: [
+    { toolCalls: [{ name: 'read_file', args: { path: 'ventes-bruxelles.csv' } }] },
+    {
+      toolCalls: [
+        {
+          name: 'write_file',
+          args: {
+            path: SCHEDULE_FILE,
+            content: '# Ventes de Bruxelles\n\nLes ventes sont stables sur le semestre.\n',
+          },
+        },
+      ],
+    },
+    at(({ toolResults }) => ({
+      text: /refus/i.test(toolResults.at(-1) ?? '')
+        ? `Lu ventes-bruxelles.csv.\nL’écriture de ${SCHEDULE_FILE} a été refusée : aucun fichier produit.`
+        : `Lu ventes-bruxelles.csv.\nFichier produit : ${SCHEDULE_FILE}.`,
+    })),
+  ],
+};
+
 export const ALL_SCENARIOS: MockScenario[] = [
   excelScenario,
   nodeScenario,
@@ -228,4 +256,5 @@ export const ALL_SCENARIOS: MockScenario[] = [
   networkScenario,
   modelScenario,
   slowScenario,
+  scheduleScenario,
 ];
