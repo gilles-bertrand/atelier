@@ -6,6 +6,7 @@
 import {
   serializeError,
   type Sandbox,
+  type SandboxFolderMount,
   type SandboxHolder,
   type SandboxDiagnostics,
   type SandboxProgress,
@@ -85,19 +86,23 @@ export class SandboxManager {
 
   /**
    * VM prête à servir un tour de `sessionId` dans `workspace` : monte le dossier
-   * (redémarrage si besoin) et applique le réseau de la session. Renvoie
-   * `undefined` si la VM n'est pas prête : l'outil `bash` répond alors « VM
-   * indisponible » au modèle au lieu de bloquer le tour.
+   * et les dossiers rattachés d'un projet (redémarrage si besoin), puis applique
+   * le réseau de la session. Renvoie `undefined` si la VM n'est pas prête :
+   * l'outil `bash` répond alors « VM indisponible » au modèle au lieu de bloquer le tour.
    */
-  async prepareForTurn(sessionId: string, workspace: string): Promise<Sandbox | undefined> {
+  async prepareForTurn(
+    sessionId: string,
+    workspace: string,
+    folders: readonly SandboxFolderMount[] = [],
+  ): Promise<Sandbox | undefined> {
     const sandbox = this.#sandbox;
     if (!sandbox || sandbox.status().state !== 'ready') {
-      // Le dossier sera monté au prochain démarrage.
-      if (sandbox) await sandbox.setWorkspace(workspace).catch(() => undefined);
+      // Les dossiers seront montés au prochain démarrage.
+      if (sandbox) await sandbox.setWorkspace(workspace, folders).catch(() => undefined);
       return undefined;
     }
     try {
-      await this.#track(() => sandbox.setWorkspace(workspace));
+      await this.#track(() => sandbox.setWorkspace(workspace, folders));
       const wanted = this.networkFor(sessionId);
       if (sandbox.status().networkEnabled !== wanted) await sandbox.setNetwork(wanted);
       this.#publish();

@@ -16,20 +16,27 @@
  * Les tours interactifs prennent le bail de la VM (`WorkspaceLease`, D5).
  */
 import { randomUUID } from 'node:crypto';
-import { chatMessagesToModelMessages, type TurnResult } from '@atelier/agent-core';
+import {
+  chatMessagesToModelMessages,
+  type PromptProject,
+  type TurnResult,
+} from '@atelier/agent-core';
 import {
   type AgentEvent,
+  type AnyToolDefinition,
   type AgentEventSink,
   AtelierError,
   type Attachment,
   type ChatMessage,
   type FileCard,
   type PermissionHandler,
+  type SandboxFolderMount,
   type SerializedAtelierError,
   serializeError,
   type SessionSummary,
   type TokenUsage,
   type ToolDisplay,
+  type WorkspaceFolder,
 } from '@atelier/shared';
 import type { ModelMessage } from 'ai';
 import {
@@ -41,11 +48,12 @@ import {
   userModelText,
 } from '../../common/chat-reducer.js';
 import { modelKey, sameModel } from '../../common/model-name.js';
+import { sandboxMounts } from '../projects/project-mounts.js';
 import type { Release, WorkspaceLease } from '../schedule/workspace-lease.js';
 import type { PermissionBroker } from './permission-broker.js';
 import { sessionNotFound, type SessionStore } from './session-store.js';
 import { usageRecord, type UsageStore } from './usage-store.js';
-import { WorkspaceChangeTracker } from './workspace-changes.js';
+import { FolderChangeTracker, WorkspaceChangeTracker } from './workspace-changes.js';
 
 /** Ce que le gestionnaire utilise d'une `AgentSession` d'agent-core. */
 export interface AgentSessionLike {
@@ -77,6 +85,22 @@ export interface NewAgentSession {
    * même une commande de la liste blanche, ne s'exécute jamais (ADR-002 D4).
    */
   sandbox?: false;
+  /** Projet de la conversation (ADR-003), relu par l'agent au début de chaque tour. */
+  project?: () => Promise<PromptProject | undefined>;
+  /** Outils propres à la conversation (mémoire du projet, publication d'artefacts). */
+  tools?: readonly AnyToolDefinition[];
+}
+
+/** Ce que le gestionnaire utilise des projets (ADR-003, `ProjectService`). */
+export interface SessionProjects {
+  /** Dossiers rattachés et montages d'une conversation pour ce tour ; `undefined` hors projet. */
+  turnFor(
+    session: SessionSummary,
+  ): { name: string; folders: readonly WorkspaceFolder[]; mounts: string } | undefined;
+  /** Contexte du prompt (dossiers, consignes, mémoire, artefacts), relu à chaque tour. */
+  promptProject(sessionId: string): () => Promise<PromptProject | undefined>;
+  /** Outils propres à la conversation. */
+  sessionTools(session: SessionSummary): readonly AnyToolDefinition[];
 }
 
 /** Ce que le gestionnaire utilise du catalogue des modèles (`ModelCatalog`). */
@@ -90,10 +114,15 @@ export interface AgentSessionFactory {
   /** Change quand le runtime est recréé (Réglages LLM). */
   generation(): number;
   /**
-   * Prépare le tour : VM montée sur le dossier, skills relus… `sandbox: false`
-   * laisse la VM telle quelle (run planifié sans commandes, ADR-002 D5).
+   * Prépare le tour : VM montée sur le dossier (et les dossiers rattachés d'un
+   * projet), skills relus… `sandbox: false` laisse la VM telle quelle (run
+   * planifié sans commandes, ADR-002 D5).
    */
-  beforeTurn(sessionId: string, workspace: string, options?: { sandbox?: boolean }): Promise<void>;
+  beforeTurn(
+    sessionId: string,
+    workspace: string,
+    options?: { sandbox?: boolean; folders?: readonly SandboxFolderMount[] },
+  ): Promise<void>;
   /** Crée une session agent ; rejette une `AtelierError` (serveur non configuré…). */
   createSession(options: NewAgentSession): Promise<AgentSessionLike>;
 }
@@ -106,8 +135,13 @@ export interface ChatManagerOptions {
   emit: (event: AgentEvent) => void;
   /** Erreur de tour liée au serveur (pour revérifier l'indicateur). */
   onLlmError?: (error: SerializedAtelierError) => void;
-  /** Suivi des fichiers produits pendant le tour (défaut : photo du dossier de travail). */
-  trackChanges?: (workspace: string) => ChangeTracker;
+  /**
+   * Suivi des fichiers produits pendant le tour (défaut : photo du dossier de
+   * travail et des dossiers rattachés en écriture d'un projet).
+   */
+  trackChanges?: (workspace: string, folders?: readonly WorkspaceFolder[]) => ChangeTracker;
+  /** Projets (ADR-003) : dossiers rattachés, montages, contexte du prompt, outils. */
+  projects?: SessionProjects;
   /** Registre de consommation (une ligne par tour, ADR-001). */
   usage?: UsageStore;
   /**
@@ -173,6 +207,8 @@ interface SessionRuntime {
     generation: number;
     model: string;
     mode: TurnMode['kind'];
+    /** Projet de la conversation à la création de la session agent (outils propres). */
+    projectId: string | undefined;
   };
   running?: { turnId: string; controller: AbortController; done: Promise<TurnReport> };
   /** Dernier tour en échec ou interrompu : relançable via `agent:retry`. */
@@ -187,8 +223,14 @@ export class ChatManager {
     this.#o = options;
   }
 
-  /** Conversations récentes ; celles des runs planifiés seulement sur demande (ADR-002 D3). */
-  list(limit?: number, options?: { includeScheduled?: boolean }): SessionSummary[] {
+  /**
+   * Conversations récentes ; celles des runs planifiés seulement sur demande
+   * (ADR-002 D3) ; `projectId` : celles d'un projet (ADR-003).
+   */
+  list(
+    limit?: number,
+    options?: { includeScheduled?: boolean; projectId?: string },
+  ): SessionSummary[] {
     return this.#o.store.list(limit, options);
   }
 
@@ -198,7 +240,7 @@ export class ChatManager {
    */
   create(
     workspace: string,
-    options: { scheduledTaskId?: string; model?: string; title?: string } = {},
+    options: { scheduledTaskId?: string; model?: string; title?: string; projectId?: string } = {},
   ): SessionSummary {
     const at = this.#now();
     // Copie du modèle par défaut : le changer ensuite dans les Réglages ne modifie pas cette conversation.
@@ -213,6 +255,7 @@ export class ChatManager {
       ...(options.scheduledTaskId !== undefined
         ? { scheduledTaskId: options.scheduledTaskId }
         : {}),
+      ...(options.projectId !== undefined ? { projectId: options.projectId } : {}),
     });
   }
 
@@ -426,7 +469,10 @@ export class ChatManager {
       if (mode.kind === 'unattended' && event.type === 'permission_request') return;
       this.#o.emit(event);
     };
-    const tracker = (this.#o.trackChanges ?? defaultTracker)(session.workspace);
+    // Projet (ADR-003) : dossiers rattachés montés et suivis, bail sur tous les montages.
+    const project = this.#o.projects?.turnFor(session);
+    const folders = project?.folders ?? [];
+    const tracker = (this.#o.trackChanges ?? defaultTracker)(session.workspace, folders);
     // File d'attente : l'ordre des événements est conservé pendant la photo du
     // dossier qui suit chaque outil (cartes des fichiers produits dans la VM…).
     let queue = Promise.resolve();
@@ -450,12 +496,19 @@ export class ChatManager {
     try {
       if (mode.kind === 'interactive' && this.#o.lease) {
         release = await this.#o.lease.acquire(
-          { workspace: session.workspace, sessionId },
+          {
+            workspace: session.workspace,
+            sessionId,
+            ...(project ? { projectName: project.name, mounts: project.mounts } : {}),
+          },
           { signal: controller.signal },
         );
       }
       const useSandbox = mode.kind === 'interactive' || mode.useSandbox;
-      await this.#o.agents.beforeTurn(sessionId, session.workspace, { sandbox: useSandbox });
+      await this.#o.agents.beforeTurn(sessionId, session.workspace, {
+        sandbox: useSandbox,
+        ...(folders.length > 0 ? { folders: sandboxMounts(folders) } : {}),
+      });
       await tracker.start().catch(() => undefined);
       const agent = await this.#agentSession(session, runtime, resetHistory, model, mode);
       if (controller.signal.aborted) {
@@ -557,6 +610,8 @@ export class ChatManager {
       // tel quel, ni pour un tour interactif qui suit dans la même conversation.
       current.mode === 'interactive' &&
       mode.kind === 'interactive' &&
+      // Conversation rattachée à un projet entre-temps : ses outils changent.
+      current.projectId === session.projectId &&
       !resetHistory
     ) {
       return current.session;
@@ -579,8 +634,18 @@ export class ChatManager {
         ? { instructions: mode.instructions }
         : {}),
       ...(mode.kind === 'unattended' && !mode.useSandbox ? { sandbox: false as const } : {}),
+      ...(this.#o.projects && session.projectId !== undefined
+        ? { project: this.#o.projects.promptProject(session.id) }
+        : {}),
+      ...(this.#o.projects ? { tools: this.#o.projects.sessionTools(session) } : {}),
     });
-    runtime.agent = { session: created, generation, model, mode: mode.kind };
+    runtime.agent = {
+      session: created,
+      generation,
+      model,
+      mode: mode.kind,
+      projectId: session.projectId,
+    };
     return created;
   }
 
@@ -635,6 +700,14 @@ export class ChatManager {
   }
 }
 
-function defaultTracker(workspace: string): ChangeTracker {
-  return new WorkspaceChangeTracker(workspace);
+function defaultTracker(
+  workspace: string,
+  folders: readonly WorkspaceFolder[] = [],
+): ChangeTracker {
+  const writable = folders.filter((f) => f.access === 'write');
+  if (writable.length === 0) return new WorkspaceChangeTracker(workspace);
+  return new FolderChangeTracker([
+    { path: workspace },
+    ...writable.map((f) => ({ path: f.path, label: f.label })),
+  ]);
 }

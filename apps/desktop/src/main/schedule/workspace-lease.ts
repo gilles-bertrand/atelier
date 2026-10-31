@@ -3,8 +3,9 @@
  * seul dossier, et préparer un tour la remonte : deux tours dans des dossiers
  * différents ne peuvent pas la tenir en même temps.
  *
- * Le bail est partagé par dossier : plusieurs détenteurs dans le même dossier
- * cohabitent, un détenteur d'un autre dossier attend que tous soient partis.
+ * Le bail est partagé par ensemble de montages : plusieurs détenteurs qui
+ * montent la même chose (même dossier, ou même projet avec les mêmes dossiers
+ * rattachés, ADR-003) cohabitent ; un autre attend que tous soient partis.
  * Les tours interactifs le prennent à chaque tour (attente sans limite, levée
  * par « Arrêter ») ; un run planifié ne le prend que s'il a le droit d'exécuter
  * des commandes, et attend au plus `timeoutMs` avant d'être sauté (`busy`).
@@ -14,9 +15,22 @@ import { systemClock, type Clock } from './clock.js';
 
 /**
  * Détenteur du bail : un run planifié (`runId`, `taskName`) ou une conversation
- * (`sessionId`), publié tel quel dans `SandboxStatus.heldBy`.
+ * (`sessionId`), publié dans `SandboxStatus.heldBy` (sans `mounts`).
+ * `mounts` : signature des montages d'un projet (`mountSignature`) ; absente,
+ * le dossier seul fait foi.
  */
-export type LeaseHolder = SandboxHolder;
+export type LeaseHolder = SandboxHolder & { mounts?: string };
+
+/** Ce qui doit être identique pour partager la VM : les montages, sinon le dossier. */
+function leaseKey(holder: LeaseHolder): string {
+  return holder.mounts ?? holder.workspace;
+}
+
+/** Détenteur tel qu'affiché (`SandboxStatus.heldBy`). */
+function published(holder: LeaseHolder): SandboxHolder {
+  const { mounts: _mounts, ...shown } = holder;
+  return shown;
+}
 
 /** Libère le bail ; idempotent. */
 export type Release = () => void;
@@ -59,19 +73,19 @@ export class WorkspaceLease {
 
   /** Qui tient la VM : un run planifié en priorité (on peut l'arrêter), sinon une conversation. */
   holder(): SandboxHolder | undefined {
-    let first: SandboxHolder | undefined;
+    let first: LeaseHolder | undefined;
     for (const holder of this.#holders) {
-      if (holder.runId !== undefined) return { ...holder };
+      if (holder.runId !== undefined) return published(holder);
       first ??= holder;
     }
-    return first ? { ...first } : undefined;
+    return first ? published(first) : undefined;
   }
 
   /** Prend le bail tout de suite si c'est possible. */
   tryAcquire(holder: LeaseHolder): Release | undefined {
-    // Même dossier que les détenteurs : jamais d'attente (D5), même si un run
+    // Mêmes montages que les détenteurs : jamais d'attente (D5), même si un run
     // d'un autre dossier attend déjà (il sera sauté après son délai).
-    if (!this.#compatible(holder.workspace)) return undefined;
+    if (!this.#compatible(holder)) return undefined;
     return this.#grant(holder);
   }
 
@@ -123,9 +137,9 @@ export class WorkspaceLease {
     });
   }
 
-  #compatible(workspace: string): boolean {
-    const current = this.workspace();
-    return current === undefined || current === workspace;
+  #compatible(holder: LeaseHolder): boolean {
+    const current = this.#holders.values().next().value;
+    return current === undefined || leaseKey(current) === leaseKey(holder);
   }
 
   #grant(holder: LeaseHolder): Release {
@@ -147,7 +161,7 @@ export class WorkspaceLease {
   #drain(): void {
     while (this.#waiters.length > 0) {
       const next = this.#waiters[0];
-      if (!next || !this.#compatible(next.holder.workspace)) return;
+      if (!next || !this.#compatible(next.holder)) return;
       this.#waiters.shift();
       next.grant(this.#grant(next.holder));
     }

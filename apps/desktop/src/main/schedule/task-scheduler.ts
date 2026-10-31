@@ -320,10 +320,12 @@ export class TaskScheduler {
       );
     }
     const model = input.model?.trim();
+    const projectId = input.projectId?.trim();
     return {
       name,
       prompt,
       workspace,
+      ...(projectId ? { projectId } : {}),
       ...(model ? { model } : {}),
       schedule: input.schedule,
       permissions: input.permissions,

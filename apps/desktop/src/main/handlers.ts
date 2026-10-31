@@ -2,9 +2,10 @@
  * Gestionnaires des canaux IPC (`IpcInvokeContract`). Les services sont
  * injectés et Electron n'est pas importé ici : tout est testable sous Node.
  */
-import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
+import { assertWorkspace } from './workspace-rules.js';
 import { importAttachments } from '@atelier/documents';
 import { parseMcpConfigText, type McpManager } from '@atelier/mcp-bridge';
 import { testConnection, type FetchFunction } from '@atelier/agent-core';
@@ -16,6 +17,7 @@ import type { ServerMonitor } from './llm/server-monitor.js';
 import type { ChatManager } from './runtime/chat-manager.js';
 import { resolveOpenable } from './safe-open.js';
 import type { PermissionBroker } from './runtime/permission-broker.js';
+import type { ProjectService } from './projects/project-service.js';
 import type { SandboxManager } from './runtime/sandbox-manager.js';
 import type { TaskScheduler } from './schedule/task-scheduler.js';
 import type { UsageStore } from './runtime/usage-store.js';
@@ -51,6 +53,8 @@ export interface HandlerServices {
     | 'runs'
   >;
   permissions: PermissionBroker;
+  /** Projets et artefacts (ADR-003) ; absent : canaux `project:*` et `artifact:*` non implémentés. */
+  projects?: ProjectService;
   sandbox: SandboxManager;
   mcp: McpManager;
   shell: DesktopShell;
@@ -99,34 +103,19 @@ export function isWithin(dir: string, path: string): boolean {
   return rel === '' || (!rel.startsWith(`..${sep}`) && rel !== '..' && !isAbsolute(rel));
 }
 
-/** Dossier de travail acceptable : absolu, existant, ni la racine ni le `$HOME` complet. */
-export async function assertWorkspace(dir: string, home: string): Promise<string> {
-  if (!isAbsolute(dir)) throw new AtelierError('sandbox/invalid_workspace', 'Chemin non absolu.');
-  const normalized = resolve(dir);
-  if (normalized === sep || normalized === resolve(home)) {
-    throw new AtelierError(
-      'sandbox/invalid_workspace',
-      'Choisissez un dossier précis : ni la racine du disque ni votre dossier personnel entier.',
-    );
-  }
-  let info;
-  try {
-    info = await stat(normalized);
-  } catch (error) {
-    throw new AtelierError('sandbox/invalid_workspace', `Dossier introuvable : ${normalized}`, {
-      cause: error,
-    });
-  }
-  if (!info.isDirectory())
-    throw new AtelierError('sandbox/invalid_workspace', `Pas un dossier : ${normalized}`);
-  return normalized;
-}
+/** Règle des dossiers de travail (déplacée dans `workspace-rules.ts`, ADR-003). */
+export { assertWorkspace } from './workspace-rules.js';
 
 export function createHandlers(s: HandlerServices): IpcHandlers {
   const home = s.home ?? homedir();
 
-  /** Dossiers de travail des conversations connues (seuls lieux ouvrables). */
-  const workspaces = (): string[] => [...new Set(s.chats.list(1000).map((c) => c.workspace))];
+  /** Dossiers des conversations connues et des projets (seuls lieux ouvrables). */
+  const workspaces = (): string[] => [
+    ...new Set([
+      ...s.chats.list(1000).map((c) => c.workspace),
+      ...(s.projects?.openableRoots() ?? []),
+    ]),
+  ];
 
   return {
     // --- Application
@@ -172,10 +161,28 @@ export function createHandlers(s: HandlerServices): IpcHandlers {
         ...(title !== undefined ? { title } : {}),
         ...(defaultPath !== undefined ? { defaultPath } : {}),
       }),
-    'session:list': ({ limit, includeScheduled }) =>
-      s.chats.list(limit, includeScheduled ? { includeScheduled } : {}),
-    'session:create': async ({ workspace }) =>
-      s.chats.create(await assertWorkspace(workspace, home)),
+    'session:list': ({ limit, includeScheduled, projectId }) =>
+      s.chats.list(limit, {
+        ...(includeScheduled ? { includeScheduled } : {}),
+        ...(projectId !== undefined ? { projectId } : {}),
+      }),
+    'session:create': async ({ workspace, projectId }) => {
+      if (projectId === undefined || !s.projects) {
+        return s.chats.create(await assertWorkspace(workspace, home));
+      }
+      // Conversation de projet : toujours dans son dossier principal (ADR-003).
+      const project = s.projects.get(projectId);
+      if (project.archivedAt !== undefined) {
+        throw new AtelierError(
+          'project/invalid',
+          'Ce projet est archivé : désarchivez-le d’abord.',
+          {
+            details: { field: 'archived' },
+          },
+        );
+      }
+      return s.chats.create(s.projects.primaryOf(projectId), { projectId });
+    },
     'session:open': ({ sessionId }) => s.chats.open(sessionId),
     'session:set-model': ({ sessionId, model }) => s.chats.setModel(sessionId, model),
     'session:delete': async ({ sessionId }) => {
@@ -187,7 +194,10 @@ export function createHandlers(s: HandlerServices): IpcHandlers {
     'usage:summary': ({ period }) => s.usage?.summary(period) ?? { period, models: [], daily: [] },
 
     // --- Prompts planifiés (ADR-002)
-    ...(s.scheduler ? scheduleHandlers(s.scheduler, home) : {}),
+    ...(s.scheduler ? scheduleHandlers(s.scheduler, home, s.projects) : {}),
+
+    // --- Projets et artefacts (ADR-003)
+    ...(s.projects ? projectHandlers(s.projects) : {}),
 
     // --- Agent
     'agent:send': ({ sessionId, text, attachments }) => s.chats.send(sessionId, text, attachments),
@@ -264,12 +274,22 @@ export function createHandlers(s: HandlerServices): IpcHandlers {
 function scheduleHandlers(
   scheduler: NonNullable<HandlerServices['scheduler']>,
   home: string,
+  projects: ProjectService | undefined,
 ): IpcHandlers {
   return {
     'schedule:list': () => scheduler.listTasks(),
-    'schedule:save': async ({ id, task }) =>
+    'schedule:save': async ({ id, task }) => {
+      // Tâche de projet : son dossier est toujours le principal du projet (ADR-003 D6).
+      if (task.projectId !== undefined && projects) {
+        return scheduler.saveTask({ ...task, workspace: projects.primaryOf(task.projectId) }, id);
+      }
       // Même règle de dossier qu'une conversation : ni la racine ni le $HOME entier.
-      scheduler.saveTask({ ...task, workspace: await assertWorkspace(task.workspace, home) }, id),
+      const { projectId: _ignored, ...single } = task;
+      return scheduler.saveTask(
+        { ...single, workspace: await assertWorkspace(task.workspace, home) },
+        id,
+      );
+    },
     'schedule:delete': async ({ id }) => {
       await scheduler.deleteTask(id);
       return undefined;
@@ -282,5 +302,31 @@ function scheduleHandlers(
     },
     'schedule:dashboard': ({ period }) => scheduler.dashboard(period),
     'schedule:runs': (query) => scheduler.runs(query),
+  };
+}
+
+function projectHandlers(projects: ProjectService): IpcHandlers {
+  return {
+    'project:list': ({ includeArchived }) => projects.list(includeArchived === true),
+    'project:get': ({ id }) => projects.get(id),
+    'project:create': ({ project }) => projects.create(project),
+    'project:update': ({ id, patch }) => projects.update(id, patch),
+    'project:set-archived': ({ id, archived }) => projects.setArchived(id, archived),
+    'project:delete': async ({ id }) => {
+      await projects.delete(id);
+      return undefined;
+    },
+    'project:from-folder': ({ workspace, name }) => projects.fromFolder(workspace, name),
+    'project:memory': ({ id }) => projects.memory(id),
+    'project:memory-save': ({ id, content, baseRevision }) =>
+      projects.saveMemory(id, content, baseRevision),
+    'project:memory-history': ({ id, limit }) => projects.memoryHistory(id, limit),
+    'artifact:list': ({ projectId }) => projects.listArtifacts(projectId),
+    'artifact:get': ({ id }) => projects.getArtifact(id),
+    'artifact:versions': ({ id }) => projects.artifactVersions(id),
+    'artifact:delete': ({ id }) => {
+      projects.deleteArtifact(id);
+      return undefined;
+    },
   };
 }

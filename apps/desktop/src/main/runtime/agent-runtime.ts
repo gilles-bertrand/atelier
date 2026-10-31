@@ -25,6 +25,7 @@ import {
   type AnyToolDefinition,
   type AppSettings,
   type ModelCapability,
+  type SandboxFolderMount,
   type SearchProvider,
   type SearchProviderId,
   type SkillInfo,
@@ -144,18 +145,19 @@ export class AgentRuntimeHost implements AgentSessionFactory {
   }
 
   /**
-   * Prépare un tour : dossier monté dans la VM, réseau de la session, skills
-   * relus. `sandbox: false` (run planifié sans commandes) ne touche pas à la VM.
+   * Prépare un tour : dossier (et dossiers rattachés d'un projet) montés dans la
+   * VM, réseau de la session, skills relus. `sandbox: false` (run planifié sans
+   * commandes) ne touche pas à la VM.
    */
   async beforeTurn(
     sessionId: string,
     workspace: string,
-    options: { sandbox?: boolean } = {},
+    options: { sandbox?: boolean; folders?: readonly SandboxFolderMount[] } = {},
   ): Promise<void> {
     const [, skills] = await Promise.all([
       options.sandbox === false
         ? Promise.resolve(undefined)
-        : this.#o.sandbox.prepareForTurn(sessionId, workspace),
+        : this.#o.sandbox.prepareForTurn(sessionId, workspace, options.folders ?? []),
       loadSkills(this.#o.settings().skillsDir, {
         onWarning: (w) => this.#o.log?.('skill ignoré', { dir: w.dir, message: w.message }),
       }),
@@ -177,6 +179,9 @@ export class AgentRuntimeHost implements AgentSessionFactory {
       ...(options.instructions !== undefined ? { extraInstructions: options.instructions } : {}),
       // Run sans « commandes » : aucune VM, même si celle du runtime est prête.
       ...(options.sandbox === false ? { sandbox: false as const } : {}),
+      // Projet (ADR-003) : contexte relu à chaque tour et outils propres à la session.
+      ...(options.project ? { project: options.project } : {}),
+      ...(options.tools && options.tools.length > 0 ? { tools: options.tools } : {}),
     });
   }
 

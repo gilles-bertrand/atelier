@@ -15,7 +15,12 @@ import {
 import type { ChatManager } from '../runtime/chat-manager.js';
 import { systemClock, type Clock } from './clock.js';
 import type { RunPatch } from './schedule-store.js';
-import { LeaseBusyError, type Release, type WorkspaceLease } from './workspace-lease.js';
+import {
+  LeaseBusyError,
+  type LeaseHolder,
+  type Release,
+  type WorkspaceLease,
+} from './workspace-lease.js';
 
 /** Attente maximale de la VM tenue dans un autre dossier (D5). */
 export const LEASE_WAIT_MS = 30 * 60_000;
@@ -41,6 +46,11 @@ export interface ScheduledRunnerOptions {
   keepAwake?: () => () => void;
   /** Titre de la conversation du run (« Rapport hebdo · 31/10 08:00 »). */
   title?: (task: ScheduledTask, at: Date) => string;
+  /**
+   * Tâche d'un projet (ADR-003) : nom du projet et signature de ses montages,
+   * pour que le bail couvre les dossiers rattachés montés dans la VM.
+   */
+  leaseFor?: (task: ScheduledTask) => Pick<LeaseHolder, 'projectName' | 'mounts'> | undefined;
 }
 
 /** Ce que le scheduler confie au runner pour un run déjà en file. */
@@ -108,7 +118,12 @@ export class ScheduledRunner {
     if (task.permissions.commands) {
       try {
         release = await this.#o.lease.acquire(
-          { workspace: task.workspace, runId: request.runId, taskName: task.name },
+          {
+            workspace: task.workspace,
+            runId: request.runId,
+            taskName: task.name,
+            ...this.#o.leaseFor?.(task),
+          },
           { signal, timeoutMs: LEASE_WAIT_MS },
         );
       } catch (error) {
@@ -139,6 +154,8 @@ export class ScheduledRunner {
         scheduledTaskId: task.id,
         title: (this.#o.title ?? defaultTitle)(task, startedAt),
         ...(task.model !== undefined ? { model: task.model } : {}),
+        // Tâche de projet : la conversation du run appartient au projet (ADR-003 D6).
+        ...(task.projectId !== undefined ? { projectId: task.projectId } : {}),
       });
       request.update({
         status: 'running',

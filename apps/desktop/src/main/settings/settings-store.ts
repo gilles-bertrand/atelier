@@ -3,7 +3,7 @@
  * Les secrets n'y figurent jamais (voir `secrets-store.ts`).
  */
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { dirname, isAbsolute, join } from 'node:path';
 import {
   AtelierError,
   checkServerUrl,
@@ -32,8 +32,14 @@ const SEARCH_PROVIDERS: readonly SearchProviderId[] = ['searxng', 'ollama', 'bra
  * Lève `AtelierError` si une valeur est invalide : rien n'est enregistré.
  */
 export function applySettingsPatch(current: AppSettings, patch: AppSettingsPatch): AppSettings {
+  // `projectsDir: ''` revient au dossier par défaut (~/Atelier/Projets) : un patch
+  // ne peut pas transporter `undefined`.
+  const { projectsDir: _currentProjectsDir, ...base } = current;
+  const projectsDir =
+    patch.projectsDir === undefined ? current.projectsDir : patch.projectsDir.trim() || undefined;
   const next: AppSettings = {
-    ...current,
+    ...base,
+    ...(projectsDir !== undefined ? { projectsDir } : {}),
     ...(patch.skillsDir !== undefined ? { skillsDir: patch.skillsDir } : {}),
     ...(patch.mcpConfigPath !== undefined ? { mcpConfigPath: patch.mcpConfigPath } : {}),
     ...(patch.onboardingCompleted !== undefined
@@ -79,6 +85,9 @@ export function validateSettings(settings: AppSettings): void {
   if (settings.skillsDir.trim() === '' || settings.mcpConfigPath.trim() === '') {
     throw invalid('Les chemins des skills et de mcp.json sont obligatoires.');
   }
+  if (settings.projectsDir !== undefined && !isAbsolute(settings.projectsDir)) {
+    throw invalid('Le dossier des projets doit être un chemin absolu.');
+  }
 }
 
 /**
@@ -122,6 +131,9 @@ export function mergeWithDefaults(defaults: AppSettings, raw: unknown): AppSetti
       ? { privacyAcceptedAt: raw['privacyAcceptedAt'] }
       : {}),
     ...(raw['openAtLogin'] === true ? { openAtLogin: true } : {}),
+    ...(typeof raw['projectsDir'] === 'string' && raw['projectsDir'] !== ''
+      ? { projectsDir: raw['projectsDir'] }
+      : {}),
   };
   try {
     validateSettings(merged);
