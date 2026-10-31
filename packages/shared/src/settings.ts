@@ -32,6 +32,11 @@ export interface AppSettings {
   onboardingCompleted: boolean;
   /** Avertissement de confidentialité accepté (horodatage ISO 8601). */
   privacyAcceptedAt?: string;
+  /**
+   * Ouvrir Atelier à la connexion, fenêtre masquée, pour que les tâches
+   * planifiées tournent (ADR-002). Absent = `false`.
+   */
+  openAtLogin?: boolean;
 }
 
 /** Modification partielle (profonde au premier niveau) des réglages. */

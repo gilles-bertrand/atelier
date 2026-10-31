@@ -17,6 +17,12 @@ import type { ConnectionTestResult, LlmModelInfo, ServerStatus } from './llm.js'
 import type { McpStatus } from './mcp.js';
 import type { PermissionDecision } from './permissions.js';
 import type { SandboxDiagnostics, SandboxProgress, SandboxStatus } from './sandbox.js';
+import type {
+  ScheduleDashboard,
+  ScheduledRun,
+  ScheduledTask,
+  ScheduledTaskInput,
+} from './schedule.js';
 import type { AppSettings, AppSettingsPatch, SecretId, SecretsPresence } from './settings.js';
 import type { SkillInfo } from './skills.js';
 import type { UsagePeriod, UsageSummary } from './usage.js';
@@ -61,7 +67,11 @@ export interface IpcInvokeContract {
     request: { title?: string; defaultPath?: string };
     response: string | null;
   };
-  'session:list': { request: { limit?: number }; response: SessionSummary[] };
+  /** Conversations, les plus récentes d'abord ; sans les runs planifiés sauf `includeScheduled`. */
+  'session:list': {
+    request: { limit?: number; includeScheduled?: boolean };
+    response: SessionSummary[];
+  };
   'session:create': { request: { workspace: string }; response: SessionSummary };
   'session:open': {
     request: { sessionId: string };
@@ -122,6 +132,24 @@ export interface IpcInvokeContract {
 
   // --- Utilisation (tokens par modèle, KPI)
   'usage:summary': { request: { period: UsagePeriod }; response: UsageSummary };
+
+  // --- Tâches planifiées (ADR-002)
+  'schedule:list': { request: undefined; response: ScheduledTask[] };
+  /** Crée (`id` absent) ou remplace une tâche ; la prochaine exécution est recalculée. */
+  'schedule:save': { request: { id?: string; task: ScheduledTaskInput }; response: ScheduledTask };
+  /** Supprime la tâche et l'historique de ses runs (les conversations restent). */
+  'schedule:delete': { request: { id: string }; response: undefined };
+  'schedule:set-enabled': { request: { id: string; enabled: boolean }; response: ScheduledTask };
+  /** Met un run en file (`trigger: 'manual'`), avec la politique de permissions de la tâche. */
+  'schedule:run-now': { request: { id: string }; response: ScheduledRun };
+  /** Arrête un run en cours ou le retire de la file (statut `aborted`). */
+  'schedule:stop-run': { request: { runId: string }; response: undefined };
+  'schedule:dashboard': { request: { period: UsagePeriod }; response: ScheduleDashboard };
+  /** Runs, les plus récents d'abord ; `before` (ISO 8601 de `scheduledFor`) pour paginer. */
+  'schedule:runs': {
+    request: { taskId?: string; before?: string; limit?: number };
+    response: ScheduledRun[];
+  };
 }
 
 /** Canal d'invocation. */
@@ -143,6 +171,8 @@ export interface IpcEventContract {
   'llm:status': ServerStatus;
   /** Changement d'état des connecteurs MCP. */
   'mcp:status': McpStatus;
+  /** Tâche créée, modifiée ou supprimée, ou run qui change d'état (tableau de bord en direct). */
+  'schedule:changed': { taskId: string; run?: ScheduledRun };
 }
 
 /** Canal d'événement. */
@@ -184,6 +214,14 @@ export const IPC_INVOKE_CHANNELS = [
   'mcp:write-config',
   'mcp:status',
   'usage:summary',
+  'schedule:list',
+  'schedule:save',
+  'schedule:delete',
+  'schedule:set-enabled',
+  'schedule:run-now',
+  'schedule:stop-run',
+  'schedule:dashboard',
+  'schedule:runs',
 ] as const satisfies readonly IpcInvokeChannel[];
 
 /** Liste exhaustive des canaux d'événements. */
@@ -193,6 +231,7 @@ export const IPC_EVENT_CHANNELS = [
   'sandbox:status',
   'llm:status',
   'mcp:status',
+  'schedule:changed',
 ] as const satisfies readonly IpcEventChannel[];
 
 // Vérifications à la compilation : les listes couvrent exactement les contrats.

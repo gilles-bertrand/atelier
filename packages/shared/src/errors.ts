@@ -28,6 +28,11 @@ export const ATELIER_ERROR_CODES = [
   'session/not_found',
   /** Réglage refusé (valeur hors bornes, URL invalide…). */
   'settings/invalid',
+  // Tâches planifiées
+  /** Tâche refusée (récurrence, durée, dossier…) : `details.field`, message français de `validateSchedule`. */
+  'schedule/invalid',
+  /** Tâche ou run inconnu (supprimé, identifiant invalide). */
+  'schedule/not_found',
   // Outils
   'tool/not_found',
   'tool/invalid_input',
