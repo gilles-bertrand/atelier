@@ -211,6 +211,16 @@ describe('TaskScheduler', () => {
     expect(() => scheduler.saveTask(input({ name: '' }))).toThrow(
       expect.objectContaining({ code: 'schedule/invalid', details: { field: 'name' } }),
     );
+    // Intervalle de 10 min : message de validateSchedule, champ « schedule ».
+    expect(() =>
+      scheduler.saveTask(input({ schedule: { kind: 'interval', every: 10, unit: 'minutes' } })),
+    ).toThrow(
+      expect.objectContaining({
+        code: 'schedule/invalid',
+        message: 'Au moins toutes les 15 minutes.',
+        details: { field: 'schedule' },
+      }),
+    );
     expect(() => scheduler.runNow('absente')).toThrow(
       expect.objectContaining({ code: 'schedule/not_found' }),
     );
