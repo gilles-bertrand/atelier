@@ -4,7 +4,7 @@ Paquet `@atelier/qa` : les e2e des critères d'acceptation, la campagne de robus
 
 | Dossier                    | Contenu                                                                                                 |
 | -------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `e2e/`                     | Playwright pour Electron : critères 2 à 5, modèle par conversation, fumée, lancement                    |
+| `e2e/`                     | Playwright pour Electron : critères 2 à 5, modèle par conversation, tâches planifiées, fumée, lancement |
 | `e2e/support/mock-llm.ts`  | faux serveur LLM (API OpenAI-compatible + routes Ollama, dont `/api/ps`) : scénarios, plusieurs modèles |
 | `e2e/support/scenarios.ts` | les scénarios mockés, avec les demandes du brief mot pour mot                                           |
 | `robustness/`              | campagne avec un vrai modèle : injections, chemins piégés, boucles, sorties, réseau                     |
