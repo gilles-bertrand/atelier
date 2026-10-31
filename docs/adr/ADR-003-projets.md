@@ -258,6 +258,7 @@ CREATE TABLE artifact_versions (
 
 - `executeTool` l'appelle avant la demande de permission, pour les outils `always` seulement. Un échec (`ToolPrecheckFailure`, `ok: false`) est rendu au modèle tel quel : ni modale, ni exécution, ni `denied`, puisque l'utilisateur n'a rien refusé.
 - Elle ne modifie rien. Ce n'est pas une garde de sécurité : l'état peut changer pendant que la modale est ouverte, et `execute` refait tous ses contrôles. Une exception vaut « continuer » : la question est posée, puis `execute` décide. Seule l'annulation du tour est propagée.
+- Son contexte est réduit par les types (`ToolPrecheckContext`, PR #130) : ni `requestPermission`, ni `emitDisplay`, ni `sandbox`. Une vérification préalable ne peut donc ni poser de question, ni publier d'affichage, ni lancer de commande dans la VM. agent-core lui passe le contexte complet, qui reste assignable.
 - Outils concernés :
   - `write_file` : chemin hors des dossiers, dossier en lecture seule, racine des skills ;
   - `edit_file` : les mêmes cas, plus un fichier absent et un `old_str` absent ou en plusieurs exemplaires ;
@@ -428,12 +429,13 @@ Précisions apportées par la PR de L0 (`feat/lead-shared-projects`) :
 - **Nouveaux éléments** : le canal `artifact:get` (carte du chat → visionneuse) et `deleted?` dans `artifact:changed`.
 - **Le main compte toujours sur l'IPC partiel** (`IpcHandlers`) : un canal pas encore branché répond `internal`, comme pour ADR-002.
 
-Ajout après L5 (D9), PR `feat/lead-shared-tool-precheck` :
+Ajout après L5 (D9), PR #128 (`feat/lead-shared-tool-precheck`), contexte réduit par la PR #130 :
 
 ```ts
 // tools.ts
 export interface ToolPrecheckFailure { ok: false; content: string }
-ToolDefinition.precheck?(input: I, context: ToolExecutionContext): Promise<ToolPrecheckFailure | undefined>;
+export type ToolPrecheckContext = Omit<ToolExecutionContext, 'requestPermission' | 'emitDisplay' | 'sandbox'>;
+ToolDefinition.precheck?(input: I, context: ToolPrecheckContext): Promise<ToolPrecheckFailure | undefined>;
 ```
 
 ## 5. Répartition
