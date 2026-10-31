@@ -85,6 +85,17 @@ export interface CreateSessionOptions {
    * être montée sur le dossier d'une autre conversation. Défaut : la VM du runtime.
    */
   sandbox?: false;
+  /**
+   * Projet de la conversation (ADR-003), relu au début de chaque tour : dossiers
+   * rattachés, consignes, mémoire et artefacts. Propre à la session, jamais au
+   * runtime (partagé entre les conversations du même modèle).
+   */
+  project?: AgentOptions['project'];
+  /**
+   * Outils propres à cette session (ex. `memory_add` d'un projet,
+   * `publish_artifact`), ajoutés au registre de la session.
+   */
+  tools?: readonly AnyToolDefinition[];
 }
 
 /** Provenance de la fenêtre de contexte ; `fallback` = serveur injoignable au démarrage. */
@@ -147,6 +158,7 @@ export async function createAgentRuntime(options: AgentRuntimeOptions): Promise<
       readRoots: () => skillReadRoots(currentSkills()),
     });
     for (const tool of options.sessionTools?.(registry) ?? []) registry.register(tool);
+    for (const tool of session.tools ?? []) registry.register(tool);
     const agent = new Agent({
       model: llm.model,
       fastModel: llm.fastModel,
@@ -159,6 +171,7 @@ export async function createAgentRuntime(options: AgentRuntimeOptions): Promise<
       ...(options.sandbox && session.sandbox !== false ? { sandbox: options.sandbox } : {}),
       ...(options.skills ? { skills: options.skills } : {}),
       ...sessionInstructions(options.extraInstructions, session.extraInstructions),
+      ...(session.project ? { project: session.project } : {}),
       ...(options.describePermission ? { describePermission: options.describePermission } : {}),
       ...(options.maxSteps !== undefined ? { maxSteps: options.maxSteps } : {}),
       ...(options.keepRecentOnCompaction !== undefined

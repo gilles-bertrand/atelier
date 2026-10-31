@@ -31,7 +31,7 @@ import {
   type WebSearchResult,
 } from '@atelier/shared';
 import { toLlmError } from '../llm/errors.js';
-import { buildSystemPrompt } from '../prompt/system-prompt.js';
+import { buildSystemPrompt, type PromptProject } from '../prompt/system-prompt.js';
 import type { PermissionDescriber } from '../tools/permission.js';
 import { isToolOutput, toAiSdkTools, type ToolRuntime } from '../tools/registry.js';
 import { withRetryListener, type RetryInfo } from '../llm/retry-fetch.js';
@@ -88,6 +88,12 @@ export interface AgentOptions {
   instructions?: string;
   /** Consignes additionnelles ajoutées au prompt par défaut (getter relu à chaque tour). */
   extraInstructions?: string | (() => string | undefined);
+  /**
+   * Projet de la conversation (ADR-003), relu au début de chaque tour :
+   * dossiers rattachés (outils fichiers), consignes, mémoire et artefacts (prompt).
+   * Une erreur de lecture est journalisée et le tour continue sans projet.
+   */
+  project?: () => PromptProject | undefined | Promise<PromptProject | undefined>;
   /** Libellés des demandes de permission. */
   describePermission?: PermissionDescriber;
   /** URL du serveur (messages d'erreur). */
@@ -165,8 +171,25 @@ export class Agent {
     return (typeof skills === 'function' ? skills() : skills) ?? [];
   }
 
-  /** Prompt système effectif. */
-  systemPrompt(sandbox: Sandbox | undefined = this.currentSandbox()): string {
+  /** Projet du tour (getter relu) ; `undefined` sans projet ou si sa lecture échoue. */
+  async currentProject(): Promise<PromptProject | undefined> {
+    const { project } = this.#options;
+    if (!project) return undefined;
+    try {
+      return await project();
+    } catch (error) {
+      this.#options.log?.('project:unavailable', {
+        message: error instanceof Error ? error.message : String(error),
+      });
+      return undefined;
+    }
+  }
+
+  /** Prompt système effectif (`project` : celui du tour, voir {@link currentProject}). */
+  systemPrompt(
+    sandbox: Sandbox | undefined = this.currentSandbox(),
+    project?: PromptProject,
+  ): string {
     const o = this.#options;
     if (o.instructions !== undefined) return o.instructions;
     const skills = this.currentSkills();
@@ -179,6 +202,7 @@ export class Agent {
       sandboxAvailable: sandbox !== undefined,
       ...(skills.length > 0 ? { skills } : {}),
       ...(extra !== undefined && extra !== '' ? { extra } : {}),
+      ...(project ? { project } : {}),
     });
   }
 
@@ -196,6 +220,8 @@ export class Agent {
     turn.abortSignal?.addEventListener('abort', onAbort, { once: true });
     const signal = controller.signal;
 
+    // Projet relu à chaque tour : un dossier ajouté sert dès ce tour (ADR-003 D1).
+    const project = await this.currentProject();
     // Skill chargé d'office si la demande contient l'un de ses déclencheurs (critère 2).
     const skillMessages = await skillAutoloadMessages(turn.input, this.currentSkills(), {
       onLoad: (info) => o.log?.('skill-autoload', info),
@@ -261,6 +287,7 @@ export class Agent {
         const runtime: ToolRuntime = {
           sessionId: turn.sessionId,
           workspace: o.workspace,
+          ...(project && project.folders.length > 0 ? { folders: project.folders } : {}),
           abortSignal: signal,
           requestPermission: this.#permissionRelay(emit),
           emitDisplay: (toolCallId, display) => {
@@ -305,7 +332,7 @@ export class Agent {
         for (;;) {
           const result = streamText({
             model: o.model,
-            instructions: this.systemPrompt(sandbox),
+            instructions: this.systemPrompt(sandbox, project),
             messages: base,
             tools,
             ...(lazy ? { activeTools: activeTools() } : {}),

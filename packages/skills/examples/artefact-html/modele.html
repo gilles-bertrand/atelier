@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tableau des ventes</title>
+    <style>
+      :root {
+        --fond: #ffffff;
+        --texte: #1c1c1e;
+        --doux: #6b6b70;
+        --carte: #f5f5f7;
+        --trait: #e3e3e8;
+        --accent: #0f766e;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --fond: #111113;
+          --texte: #f2f2f4;
+          --doux: #a0a0a8;
+          --carte: #1c1c20;
+          --trait: #2c2c32;
+          --accent: #2dd4bf;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 24px 16px;
+        background: var(--fond);
+        color: var(--texte);
+        font:
+          15px/1.5 -apple-system,
+          BlinkMacSystemFont,
+          'Helvetica Neue',
+          sans-serif;
+      }
+      main {
+        max-width: 960px;
+        margin: 0 auto;
+      }
+      h1 {
+        margin: 0;
+        font-size: 24px;
+      }
+      .maj {
+        margin: 4px 0 24px;
+        color: var(--doux);
+        font-size: 13px;
+      }
+      .indicateurs {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 12px;
+        margin-bottom: 24px;
+      }
+      .indicateur {
+        background: var(--carte);
+        border-radius: 12px;
+        padding: 14px 16px;
+      }
+      .indicateur span {
+        display: block;
+        color: var(--doux);
+        font-size: 13px;
+      }
+      .indicateur strong {
+        font-size: 24px;
+      }
+      section {
+        margin-bottom: 28px;
+      }
+      h2 {
+        font-size: 17px;
+        margin: 0 0 12px;
+      }
+      .graphique {
+        position: relative;
+        height: 280px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+      th,
+      td {
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--trait);
+        text-align: left;
+      }
+      th {
+        cursor: pointer;
+        user-select: none;
+        color: var(--doux);
+        font-weight: 600;
+      }
+      td.nombre,
+      th.nombre {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Tableau des ventes</h1>
+      <p class="maj">Mis à jour le <span id="date-maj">31/10/2026</span> · source : ventes.csv</p>
+
+      <div class="indicateurs" id="indicateurs"></div>
+
+      <section>
+        <h2>Évolution mensuelle</h2>
+        <div class="graphique"><canvas id="graphique" aria-label="Ventes par mois"></canvas></div>
+      </section>
+
+      <section>
+        <h2>Détail</h2>
+        <table id="tableau">
+          <thead></thead>
+          <tbody></tbody>
+        </table>
+      </section>
+    </main>
+
+    <!-- Données de la page : remplace ce bloc à chaque version (chiffres lus ou calculés). -->
+    <script type="application/json" id="donnees">
+      {
+        "indicateurs": [
+          { "libelle": "Chiffre d'affaires", "valeur": 128450, "unite": "€" },
+          { "libelle": "Commandes", "valeur": 312 },
+          { "libelle": "Panier moyen", "valeur": 411.7, "unite": "€" }
+        ],
+        "graphique": {
+          "etiquettes": ["Juillet", "Août", "Septembre", "Octobre"],
+          "series": [{ "nom": "Ventes (€)", "valeurs": [29800, 24100, 33200, 41350] }]
+        },
+        "colonnes": [
+          { "cle": "mois", "libelle": "Mois" },
+          { "cle": "ventes", "libelle": "Ventes (€)", "nombre": true },
+          { "cle": "commandes", "libelle": "Commandes", "nombre": true }
+        ],
+        "lignes": [
+          { "mois": "Juillet", "ventes": 29800, "commandes": 74 },
+          { "mois": "Août", "ventes": 24100, "commandes": 61 },
+          { "mois": "Septembre", "ventes": 33200, "commandes": 80 },
+          { "mois": "Octobre", "ventes": 41350, "commandes": 97 }
+        ]
+      }
+    </script>
+
+    <!-- Chart.js, fourni localement par Atelier (aucun CDN). -->
+    <script src="atelier-artifact://lib/chart.umd.min.js"></script>
+    <script>
+      const donnees = JSON.parse(document.getElementById('donnees').textContent);
+      const nombre = (v) => Number(v).toLocaleString('fr-FR', { maximumFractionDigits: 2 });
+
+      // Indicateurs clés
+      document.getElementById('indicateurs').innerHTML = donnees.indicateurs
+        .map(
+          (i) =>
+            `<div class="indicateur"><span>${i.libelle}</span><strong>${nombre(i.valeur)}${i.unite ? ' ' + i.unite : ''}</strong></div>`,
+        )
+        .join('');
+
+      // Graphique (ignoré si Chart.js est indisponible)
+      if (window.Chart) {
+        const accent = getComputedStyle(document.documentElement)
+          .getPropertyValue('--accent')
+          .trim();
+        new Chart(document.getElementById('graphique'), {
+          type: 'bar',
+          data: {
+            labels: donnees.graphique.etiquettes,
+            datasets: donnees.graphique.series.map((s) => ({
+              label: s.nom,
+              data: s.valeurs,
+              backgroundColor: accent,
+            })),
+          },
+          options: {
+            maintainAspectRatio: false,
+            plugins: { legend: { display: donnees.graphique.series.length > 1 } },
+          },
+        });
+      }
+
+      // Tableau triable (clic sur un en-tête)
+      const table = document.getElementById('tableau');
+      let tri = { cle: null, sens: 1 };
+      function afficher() {
+        const lignes = [...donnees.lignes];
+        if (tri.cle) lignes.sort((a, b) => (a[tri.cle] > b[tri.cle] ? 1 : -1) * tri.sens);
+        table.tHead.innerHTML =
+          '<tr>' +
+          donnees.colonnes
+            .map(
+              (c) =>
+                `<th data-cle="${c.cle}" class="${c.nombre ? 'nombre' : ''}">${c.libelle}</th>`,
+            )
+            .join('') +
+          '</tr>';
+        table.tBodies[0].innerHTML = lignes
+          .map(
+            (l) =>
+              '<tr>' +
+              donnees.colonnes
+                .map(
+                  (c) =>
+                    `<td class="${c.nombre ? 'nombre' : ''}">${c.nombre ? nombre(l[c.cle]) : l[c.cle]}</td>`,
+                )
+                .join('') +
+              '</tr>',
+          )
+          .join('');
+      }
+      table.addEventListener('click', (e) => {
+        const cle = e.target.closest('th')?.dataset.cle;
+        if (!cle) return;
+        tri = { cle, sens: tri.cle === cle ? -tri.sens : 1 };
+        afficher();
+      });
+      afficher();
+    </script>
+  </body>
+</html>

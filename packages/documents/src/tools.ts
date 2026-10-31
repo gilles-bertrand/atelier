@@ -13,9 +13,10 @@ import {
 } from '@atelier/shared';
 import {
   estimateTokens,
-  resolveReadablePath,
+  resolveFolderPath,
   truncateToTokens,
   type ReadRoot,
+  type ResolvedFolderPath,
   type ResolvedWorkspacePath,
 } from '@atelier/agent-core';
 import { findAttachment } from './attachments.js';
@@ -93,7 +94,8 @@ const SUPPORTED_FORMATS =
 // Utilitaires communs
 
 interface Target {
-  resolved: ResolvedWorkspacePath;
+  /** `folder` : fichier d'un dossier rattaché de projet (ADR-003). */
+  resolved: ResolvedWorkspacePath & Pick<ResolvedFolderPath, 'folder'>;
   type: DetectedType;
   /** Note à placer en tête de la sortie (chemin corrigé vers une pièce jointe). */
   note?: string;
@@ -163,11 +165,8 @@ async function openTarget(
   input: string,
   readRoots: readonly ReadRoot[] = [],
 ): Promise<Target | ToolOutput> {
-  let resolved: ResolvedWorkspacePath = await resolveReadablePath(
-    context.workspace,
-    input,
-    readRoots,
-  );
+  // Dossier principal, dossiers rattachés d'un projet (ADR-003) ou skills en lecture seule.
+  let resolved: Target['resolved'] = await resolveFolderPath(context, input, { readRoots });
   let note: string | undefined;
   if (!resolved.exists) {
     // Chemin déformé par le modèle (« .ratelier/uploads/x.pdf », « .x.pdf »…) :
@@ -234,7 +233,9 @@ const readFileInput = z.object({
   path: z
     .string()
     .min(1)
-    .describe('Chemin relatif au dossier de travail (ex. "rapport.pdf", "notes/2026.md").'),
+    .describe(
+      'Chemin relatif au dossier de travail (ex. "rapport.pdf", "notes/2026.md"), ou "<dossier>/…" pour un autre dossier du projet.',
+    ),
   offset: z
     .number()
     .int()
@@ -332,6 +333,7 @@ async function transcribePage(
       sandbox,
       workspace: ctx.context.workspace,
       relativePath: target.resolved.relativePath,
+      ...(target.resolved.folder ? { absolutePath: target.resolved.absolutePath } : {}),
       fileHash,
       page,
       signal: ctx.context.abortSignal,
@@ -583,7 +585,12 @@ async function readTarget(
 // look_at
 
 const lookAtInput = z.object({
-  path: z.string().min(1).describe('Image ou PDF, chemin relatif au dossier de travail.'),
+  path: z
+    .string()
+    .min(1)
+    .describe(
+      'Image ou PDF : chemin relatif au dossier de travail, ou "<dossier>/…" pour un autre dossier du projet.',
+    ),
   question: z
     .string()
     .min(1)
@@ -662,6 +669,7 @@ export function createLookAtTool(options: DocumentToolsOptions = {}) {
                 sandbox: context.sandbox,
                 workspace: context.workspace,
                 relativePath: target.resolved.relativePath,
+                ...(target.resolved.folder ? { absolutePath: target.resolved.absolutePath } : {}),
                 fileHash,
                 page,
                 signal: context.abortSignal,

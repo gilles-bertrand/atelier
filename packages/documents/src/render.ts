@@ -25,6 +25,12 @@ export interface RenderPageRequest {
   workspace: string;
   /** Chemin du PDF relatif au dossier de travail. */
   relativePath: string;
+  /**
+   * Chemin absolu d'un PDF d'un dossier rattaché de projet (ADR-003), monté
+   * sous `/dossiers` et non sous `/workspace` : prioritaire sur `relativePath`
+   * (libellé du dossier en tête). Absent pour un fichier du dossier de travail.
+   */
+  absolutePath?: string;
   /** Empreinte du fichier (nom du rendu). */
   fileHash: string;
   /** Page (1-based). */
@@ -46,6 +52,30 @@ export function guestPathOf(sandbox: Sandbox, workspace: string, relativePath: s
 }
 
 /**
+ * Chemin VM du PDF : d'après son chemin absolu s'il est connu (dossier rattaché
+ * d'un projet), sinon d'après son chemin relatif au dossier de travail.
+ * @throws AtelierError `tool/failed` si le PDF n'est pas visible dans la VM.
+ */
+function pdfGuestPath(
+  sandbox: Sandbox,
+  workspace: string,
+  relativePath: string,
+  absolutePath: string | undefined,
+): string {
+  if (absolutePath === undefined) return guestPathOf(sandbox, workspace, relativePath);
+  const mapped = sandbox.toGuestPath(absolutePath);
+  if (mapped) return mapped;
+  const rel = path.relative(workspace, absolutePath);
+  if (rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel)) {
+    return guestPathOf(sandbox, workspace, rel.split(path.sep).join('/'));
+  }
+  throw new AtelierError(
+    'tool/failed',
+    "Ce PDF n'est pas visible dans la machine isolée : impossible de rendre sa page en image.",
+  );
+}
+
+/**
  * Rend une page en PNG (grand côté 1568 px) et renvoie l'image.
  * @throws AtelierError `sandbox/*` si la VM n'est pas prête, `tool/failed` si
  *   `pdftoppm` échoue.
@@ -59,7 +89,7 @@ export async function renderPdfPage(request: RenderPageRequest): Promise<Buffer>
   const target = await resolveWorkspacePath(workspace, `${PAGES_DIR}/${name}.png`);
   await mkdir(path.dirname(target.absolutePath), { recursive: true });
 
-  const pdf = guestPathOf(sandbox, workspace, relativePath);
+  const pdf = pdfGuestPath(sandbox, workspace, relativePath, request.absolutePath);
   const prefix = guestPathOf(sandbox, workspace, `${PAGES_DIR}/${name}`);
   const command = [
     'pdftoppm',

@@ -6,7 +6,13 @@
  */
 import { realpath } from 'node:fs/promises';
 import path from 'node:path';
-import { AtelierError } from '@atelier/shared';
+import {
+  AtelierError,
+  folderGuestName,
+  folderGuestPath,
+  GUEST_WORKSPACE,
+  type WorkspaceFolder,
+} from '@atelier/shared';
 
 /** Résultat d'une résolution de chemin réussie. */
 export interface ResolvedWorkspacePath {
@@ -208,4 +214,197 @@ export async function resolveReadablePath(
   }
   if (inWorkspace !== undefined) return { ...inWorkspace, readOnly: false };
   throw refusal;
+}
+
+// ---------------------------------------------------------------------------
+// Dossiers multiples d'un projet (ADR-003 D1)
+
+/** Dossier principal et dossiers rattachés d'une conversation (voir `ToolExecutionContext`). */
+export interface FolderContext {
+  /** Dossier principal : racine des chemins relatifs. */
+  workspace: string;
+  /** Dossiers rattachés du projet ; absent ou vide : seul le principal. */
+  folders?: readonly WorkspaceFolder[];
+}
+
+/** Résolution dans l'un des dossiers d'une conversation. */
+export interface ResolvedFolderPath extends ResolvedReadablePath {
+  /**
+   * Dossier rattaché qui contient le chemin ; absent : dossier principal (ou
+   * racine des skills, `readOnly`). `relativePath` est alors préfixé par son
+   * libellé (« Compta/bilan.xlsx »).
+   */
+  folder?: WorkspaceFolder;
+}
+
+/** Options de {@link resolveFolderPath}. */
+export interface ResolveFolderOptions {
+  /** Écriture : refuse un dossier rattaché en lecture seule (`tool/read_only`) et les skills. */
+  write?: boolean;
+  /** Lecture seule : racines lisibles en plus des dossiers (skills, #60). */
+  readRoots?: readonly ReadRoot[];
+}
+
+/** Chemin POSIX relatif à `root` s'il est dessous (`''` pour `root` lui-même), sinon `undefined`. */
+function posixInside(root: string, target: string): string | undefined {
+  const rel = path.posix.relative(root, path.posix.normalize(target));
+  return rel === '' || (!rel.startsWith('..') && !path.posix.isAbsolute(rel)) ? rel : undefined;
+}
+
+/** Dossier rattaché désigné par un premier segment de chemin (libellé ou nom dans la VM). */
+function folderByLabel(
+  folders: readonly WorkspaceFolder[],
+  segment: string,
+): WorkspaceFolder | undefined {
+  const wanted = segment.toLocaleLowerCase('fr');
+  return folders.find(
+    (f) =>
+      f.label.trim().toLocaleLowerCase('fr') === wanted ||
+      folderGuestName(f.label).toLowerCase() === segment.toLowerCase(),
+  );
+}
+
+/** Résultat dans un dossier rattaché : chemin affiché préfixé par le libellé. */
+function inFolder(folder: WorkspaceFolder, resolved: ResolvedWorkspacePath): ResolvedFolderPath {
+  const label = folder.label.trim();
+  return {
+    absolutePath: resolved.absolutePath,
+    relativePath: resolved.relativePath === '.' ? label : `${label}/${resolved.relativePath}`,
+    exists: resolved.exists,
+    readOnly: folder.access === 'read',
+    folder,
+  };
+}
+
+/** Dossier d'un chemin absolu : principal, puis dossiers rattachés, puis chemins de la VM. */
+async function locateAbsolute(
+  workspace: string,
+  folders: readonly WorkspaceFolder[],
+  input: string,
+): Promise<ResolvedFolderPath | undefined> {
+  const inPrimary = await tryResolveWorkspacePath(workspace, input);
+  if (inPrimary) return { ...inPrimary, readOnly: false };
+  for (const folder of folders) {
+    const resolved = await tryResolveWorkspacePath(folder.path, input);
+    if (resolved) return inFolder(folder, resolved);
+  }
+  // Chemin vu depuis la VM (/workspace/…, /dossiers/<nom>/…) : ramené au chemin hôte.
+  const guestRel = posixInside(GUEST_WORKSPACE, input);
+  if (guestRel !== undefined) {
+    const resolved = await tryResolveWorkspacePath(workspace, guestRel === '' ? '.' : guestRel);
+    if (resolved) return { ...resolved, readOnly: false };
+  }
+  for (const folder of folders) {
+    const rel = posixInside(folder.guestPath ?? folderGuestPath(folder.label), input);
+    if (rel === undefined) continue;
+    const resolved = await tryResolveWorkspacePath(folder.path, rel === '' ? '.' : rel);
+    if (resolved) return inFolder(folder, resolved);
+  }
+  return undefined;
+}
+
+/**
+ * Dossier d'un chemin relatif : le principal ; sinon, si le premier segment
+ * n'existe pas dans le principal et désigne un dossier rattaché par son
+ * libellé (« Compta/bilan.xlsx »), ce dossier.
+ */
+async function locateRelative(
+  workspace: string,
+  folders: readonly WorkspaceFolder[],
+  input: string,
+): Promise<ResolvedFolderPath | undefined> {
+  const primary = await tryResolveWorkspacePath(workspace, input);
+  if (primary?.exists) return { ...primary, readOnly: false };
+  const segments = input.split(/[\\/]+/).filter((s) => s !== '' && s !== '.');
+  const first = segments[0];
+  if (first !== undefined && first !== '..') {
+    const folder = folderByLabel(folders, first);
+    const firstInPrimary = await tryResolveWorkspacePath(workspace, first);
+    if (folder && !firstInPrimary?.exists) {
+      const rest = segments.slice(1).join('/');
+      const resolved = await tryResolveWorkspacePath(folder.path, rest === '' ? '.' : rest);
+      return resolved ? inFolder(folder, resolved) : undefined;
+    }
+  }
+  return primary ? { ...primary, readOnly: false } : undefined;
+}
+
+function outsideFolders(
+  input: string,
+  workspace: string,
+  folders: readonly WorkspaceFolder[],
+): AtelierError {
+  const allowed = [
+    `dossier principal (${workspace})`,
+    ...folders.map(
+      (f) => `${f.label.trim()} (${f.path}${f.access === 'read' ? ', lecture seule' : ''})`,
+    ),
+  ].join(' ; ');
+  return new AtelierError(
+    'tool/path_outside_workspace',
+    `Accès refusé : « ${input} » est en dehors des dossiers du projet. Dossiers accessibles : ${allowed}.`,
+    { details: { path: input } },
+  );
+}
+
+/** Écriture refusée dans un dossier en lecture seule. */
+function readOnlyFolder(folder: WorkspaceFolder, input: string): AtelierError {
+  return new AtelierError(
+    'tool/read_only',
+    `Le dossier « ${folder.label.trim()} » est en lecture seule : tu peux y lire, pas y écrire (« ${input} »). Écris dans le dossier principal ou dans un dossier en lecture et écriture.`,
+    { details: { path: input, folder: folder.path } },
+  );
+}
+
+/**
+ * Résout un chemin donné par le modèle dans les dossiers d'une conversation
+ * (ADR-003 D1) :
+ * 1. relatif : depuis le dossier principal ; s'il n'y existe pas et que son
+ *    premier segment est le libellé d'un dossier rattaché, depuis ce dossier ;
+ * 2. absolu : dans le principal ou dans un dossier rattaché (chemin canonique,
+ *    liens symboliques compris) ;
+ * 3. chemin VM (`/workspace/…`, `/dossiers/<nom>/…`) : ramené au chemin hôte ;
+ * 4. en lecture seulement : sous une racine de lecture (skills).
+ *
+ * Sans dossiers rattachés, le comportement est exactement celui de
+ * {@link resolveWorkspacePath} (écriture) ou {@link resolveReadablePath} (lecture).
+ *
+ * @throws AtelierError `tool/path_outside_workspace` hors des dossiers,
+ *   `tool/read_only` pour une écriture dans un dossier en lecture seule,
+ *   `tool/invalid_input` pour un chemin vide.
+ */
+export async function resolveFolderPath(
+  context: FolderContext,
+  input: string,
+  options: ResolveFolderOptions = {},
+): Promise<ResolvedFolderPath> {
+  const folders = context.folders ?? [];
+  const readRoots = options.write === true ? [] : (options.readRoots ?? []);
+  if (folders.length === 0) {
+    return options.write === true
+      ? { ...(await resolveWorkspacePath(context.workspace, input)), readOnly: false }
+      : resolveReadablePath(context.workspace, input, readRoots);
+  }
+  const trimmed = input.trim();
+  if (trimmed === '' || trimmed.includes('\0')) {
+    throw new AtelierError('tool/invalid_input', `Chemin invalide : "${input}"`);
+  }
+  const found = path.isAbsolute(trimmed)
+    ? await locateAbsolute(context.workspace, folders, trimmed)
+    : await locateRelative(context.workspace, folders, trimmed);
+  if (found?.folder && found.folder.access === 'read' && options.write === true) {
+    throw readOnlyFolder(found.folder, input);
+  }
+  if (found && (found.exists || readRoots.length === 0)) return found;
+  if (readRoots.length > 0) {
+    // Skills en lecture seule : seulement si le chemin n'existe dans aucun dossier.
+    try {
+      const skill = await resolveReadablePath(context.workspace, trimmed, readRoots);
+      if (skill.readOnly) return skill;
+    } catch (error) {
+      if (!(error instanceof AtelierError)) throw error;
+    }
+  }
+  if (found) return found;
+  throw outsideFolders(input, context.workspace, folders);
 }

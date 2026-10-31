@@ -6,14 +6,20 @@
 import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
-import { AtelierError, defineTool, type AnyToolDefinition, type ToolOutput } from '@atelier/shared';
-import { resolveReadablePath, resolveWorkspacePath, type ReadRoot } from '../paths.js';
+import {
+  AtelierError,
+  defineTool,
+  type AnyToolDefinition,
+  type ToolExecutionContext,
+  type ToolOutput,
+} from '@atelier/shared';
+import { resolveFolderPath, type ReadRoot } from '../paths.js';
 import { countOccurrences, truncateOutput } from './text.js';
 import { preview } from './permission.js';
 import { fileCard, globToRegExp, looksBinary, walkFiles } from './fs-utils.js';
 
 /** Convertit les erreurs métier attendues en sortie `ok: false` lisible par le modèle. */
-async function guarded(run: () => Promise<ToolOutput>): Promise<ToolOutput> {
+export async function guarded(run: () => Promise<ToolOutput>): Promise<ToolOutput> {
   try {
     return await run();
   } catch (error) {
@@ -50,7 +56,9 @@ function fsErrorMessage(error: NodeJS.ErrnoException): string {
 const pathField = z
   .string()
   .min(1)
-  .describe('Chemin relatif au dossier de travail (ex. "rapport.md" ou "notes/2026.txt").');
+  .describe(
+    'Chemin relatif au dossier de travail (ex. "rapport.md" ou "notes/2026.txt"), ou "<dossier>/…" pour un autre dossier du projet.',
+  );
 
 /** Options des outils natifs de lecture. */
 export interface NativeToolsOptions {
@@ -65,7 +73,7 @@ const readPathField = z
   .string()
   .min(1)
   .describe(
-    'Chemin relatif au dossier de travail (ex. "rapport.md"), ou chemin d\'un SKILL.md tel qu\'indiqué dans la section Skills.',
+    'Chemin relatif au dossier de travail (ex. "rapport.md"), "<dossier>/…" pour un autre dossier du projet, ou chemin d\'un SKILL.md tel qu\'indiqué dans la section Skills.',
   );
 
 /** Lecture texte simple (M1). Remplacé par l'outil multi-format de `documents`. */
@@ -83,11 +91,9 @@ export function createReadFileTool(options: NativeToolsOptions = {}) {
     source: 'native',
     execute: (input, context) =>
       guarded(async () => {
-        const resolved = await resolveReadablePath(
-          context.workspace,
-          input.path,
-          options.readRoots?.() ?? [],
-        );
+        const resolved = await resolveFolderPath(context, input.path, {
+          readRoots: options.readRoots?.() ?? [],
+        });
         if (!resolved.exists) return { ok: false, content: `Fichier introuvable : ${input.path}` };
         if (await looksBinary(resolved.absolutePath)) {
           return {
@@ -131,10 +137,10 @@ export const writeFileTool = defineTool({
   }),
   execute: (input, context) =>
     guarded(async () => {
-      const resolved = await resolveWorkspacePath(context.workspace, input.path);
+      const resolved = await resolveFolderPath(context, input.path, { write: true });
       await mkdir(path.dirname(resolved.absolutePath), { recursive: true });
       // Re-vérifie après création des dossiers (course avec un symlink posé entre-temps).
-      const final = await resolveWorkspacePath(context.workspace, input.path);
+      const final = await resolveFolderPath(context, input.path, { write: true });
       await writeFile(final.absolutePath, input.content, 'utf8');
       const size = Buffer.byteLength(input.content, 'utf8');
       const action = resolved.exists ? 'modified' : 'created';
@@ -168,7 +174,7 @@ export const editFileTool = defineTool({
   }),
   execute: (input, context) =>
     guarded(async () => {
-      const resolved = await resolveWorkspacePath(context.workspace, input.path);
+      const resolved = await resolveFolderPath(context, input.path, { write: true });
       if (!resolved.exists) return { ok: false, content: `Fichier introuvable : ${input.path}` };
       const before = await readFile(resolved.absolutePath, 'utf8');
       const count = countOccurrences(before, input.old_str);
@@ -200,7 +206,7 @@ export function createListDirTool(options: NativeToolsOptions = {}) {
   return defineTool({
     name: 'list_dir',
     description:
-      "Liste le contenu d'un dossier (fichiers et sous-dossiers, avec leur taille). Par défaut, la racine du dossier de travail.",
+      'Liste le contenu d\'un dossier (fichiers et sous-dossiers, avec leur taille). Par défaut, la racine du dossier de travail ; "<dossier>" pour un autre dossier du projet.',
     inputSchema: z.object({
       path: z.string().optional().describe('Dossier à lister (défaut : ".").'),
       show_hidden: z.boolean().optional().describe('Inclure les fichiers cachés (défaut : non).'),
@@ -209,17 +215,21 @@ export function createListDirTool(options: NativeToolsOptions = {}) {
     source: 'native',
     execute: (input, context) =>
       guarded(async () => {
-        const resolved = await resolveReadablePath(
-          context.workspace,
-          input.path ?? '.',
-          options.readRoots?.() ?? [],
-        );
+        const resolved = await resolveFolderPath(context, input.path ?? '.', {
+          readRoots: options.readRoots?.() ?? [],
+        });
         const entries = await readdir(resolved.absolutePath, { withFileTypes: true });
-        const isRoot = !resolved.readOnly && resolved.relativePath === '.';
-        const isAppDir = !resolved.readOnly && resolved.relativePath === APP_DIR;
+        const inPrimary = !resolved.readOnly && resolved.folder === undefined;
+        const isRoot = inPrimary && resolved.relativePath === '.';
+        const isAppDir = inPrimary && resolved.relativePath === APP_DIR;
         // Pièces jointes : seul contenu de `.atelier/` signalé (cache et rendus restent masqués).
-        const attachments =
+        const attachmentLine =
           isRoot || isAppDir ? await attachmentsLine(context.workspace) : undefined;
+        // À la racine du principal, rappel des autres dossiers du projet (ADR-003).
+        const attachments =
+          [attachmentLine, isRoot ? projectFoldersLines(context) : undefined]
+            .filter((line): line is string => line !== undefined)
+            .join('\n\n') || undefined;
         const visible = entries
           .filter((e) => input.show_hidden === true || !e.name.startsWith('.'))
           .filter((e) => !isAppDir || e.name === 'uploads')
@@ -285,6 +295,17 @@ async function attachmentsLine(workspace: string): Promise<string | undefined> {
   return `Pièces jointes : ${shown.join(', ')}${more}`;
 }
 
+/** Rappel des dossiers rattachés d'un projet (liste du principal). */
+function projectFoldersLines(context: ToolExecutionContext): string | undefined {
+  const folders = context.folders ?? [];
+  if (folders.length === 0) return undefined;
+  const lines = folders.map(
+    (f) =>
+      `- ${f.label.trim()}/ (${f.access === 'read' ? 'lecture seule' : 'lecture et écriture'}) : ${f.path}`,
+  );
+  return `Autres dossiers du projet (chemins « <dossier>/… ») :\n${lines.join('\n')}`;
+}
+
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} o`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} Ko`;
@@ -296,7 +317,7 @@ const MAX_GLOB_RESULTS = 500;
 export const globTool = defineTool({
   name: 'glob',
   description:
-    'Trouve des fichiers par motif de nom, récursivement (ex. "*.pdf", "rapports/**/*.md", "*.{csv,xlsx}").',
+    'Trouve des fichiers par motif de nom, récursivement (ex. "*.pdf", "rapports/**/*.md", "*.{csv,xlsx}"). Cherche dans le dossier de travail ; path="<dossier>" pour un autre dossier du projet.',
   inputSchema: z.object({
     pattern: z.string().min(1).describe('Motif glob.'),
     path: z.string().optional().describe('Dossier de départ (défaut : ".").'),
@@ -305,7 +326,7 @@ export const globTool = defineTool({
   source: 'native',
   execute: (input, context) =>
     guarded(async () => {
-      const base = await resolveWorkspacePath(context.workspace, input.path ?? '.');
+      const base = await resolveFolderPath(context, input.path ?? '.');
       const re = globToRegExp(input.pattern);
       const matches: string[] = [];
       for await (const entry of walkFiles(base.absolutePath, { signal: context.abortSignal })) {
@@ -330,7 +351,7 @@ const MAX_GREP_FILE_BYTES = 2 * 1024 * 1024;
 export const grepTool = defineTool({
   name: 'grep',
   description:
-    'Cherche un texte ou une expression régulière dans les fichiers texte du dossier de travail. Renvoie fichier:ligne: contenu.',
+    'Cherche un texte ou une expression régulière dans les fichiers texte du dossier de travail (path="<dossier>" pour un autre dossier du projet). Renvoie fichier:ligne: contenu.',
   inputSchema: z.object({
     pattern: z.string().min(1).describe('Expression régulière (syntaxe JavaScript).'),
     path: z.string().optional().describe('Dossier ou fichier où chercher (défaut : ".").'),
@@ -350,7 +371,7 @@ export const grepTool = defineTool({
           content: `Expression régulière invalide : ${error instanceof Error ? error.message : String(error)}`,
         };
       }
-      const base = await resolveWorkspacePath(context.workspace, input.path ?? '.');
+      const base = await resolveFolderPath(context, input.path ?? '.');
       const include = input.include !== undefined ? globToRegExp(input.include) : undefined;
       const baseInfo = await stat(base.absolutePath);
       const singleFile = baseInfo.isFile();
@@ -421,7 +442,7 @@ export const presentFileTool = defineTool({
   source: 'native',
   execute: (input, context) =>
     guarded(async () => {
-      const resolved = await resolveWorkspacePath(context.workspace, input.path);
+      const resolved = await resolveFolderPath(context, input.path);
       if (!resolved.exists) return { ok: false, content: `Fichier introuvable : ${input.path}` };
       const info = await stat(resolved.absolutePath);
       if (!info.isFile()) return { ok: false, content: `${input.path} n'est pas un fichier.` };
