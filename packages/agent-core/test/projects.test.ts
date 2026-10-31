@@ -269,9 +269,20 @@ describe('outils natifs dans un projet', () => {
   it('list_dir signale un sous-dossier du principal qui masque un dossier rattaché', async () => {
     await withProject(async (p) => {
       await mkdir(path.join(p.primary, 'Compta'));
-      const root = await listDirTool.execute({}, ctx(p));
-      expect(root.content).toContain('le sous-dossier « Compta » du dossier principal masque');
-      expect(root.content).not.toContain('« Archives » du dossier principal masque');
+      await mkdir(path.join(p.primary, 'Ete-2026'));
+      const context = ctx(p, {
+        folders: [
+          ...p.folders,
+          { path: path.join(p.root, 'Ete'), label: 'Été 2026', access: 'read' },
+        ],
+      });
+      const root = await listDirTool.execute({}, context);
+      const line = (label: string): string =>
+        root.content.split('\n').find((l) => l.startsWith(`- ${label}/`)) ?? '';
+      expect(line('Compta')).toContain('masque « Compta/… »');
+      // Forme dans la VM (« Ete-2026 ») : même collision que le libellé.
+      expect(line('Été 2026')).toContain('masque « Été 2026/… »');
+      expect(line('Archives')).not.toContain('masque');
     });
   });
 

@@ -9,6 +9,7 @@ import { z } from 'zod';
 import {
   AtelierError,
   defineTool,
+  folderGuestName,
   type AnyToolDefinition,
   type ToolExecutionContext,
   type ToolOutput,
@@ -310,8 +311,12 @@ function projectFoldersLines(
   const lines = folders.map((f) => {
     const label = f.label.trim();
     const line = `- ${label}/ (${f.access === 'read' ? 'lecture seule' : 'lecture et écriture'}) : ${f.path}`;
-    return primaryNames.has(label.toLocaleLowerCase('fr'))
-      ? `${line} [attention : le sous-dossier « ${label} » du dossier principal masque « ${label}/… » ; utilise le chemin complet]`
+    // Mêmes noms que la résolution « <dossier>/… » : le libellé et sa forme dans la VM.
+    const shadowed = [label, folderGuestName(label)].some((name) =>
+      primaryNames.has(name.toLocaleLowerCase('fr')),
+    );
+    return shadowed
+      ? `${line} [attention : un sous-dossier du dossier principal porte ce nom et masque « ${label}/… » ; utilise le chemin complet]`
       : line;
   });
   return `Autres dossiers du projet (chemins « <dossier>/… ») :\n${lines.join('\n')}`;
