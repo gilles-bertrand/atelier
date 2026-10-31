@@ -257,9 +257,11 @@ Pas encore joué : l'Ollama local est partagé avec les autres campagnes. Procé
 5. Tâche du projet « Tableau hebdo », « Exécuter maintenant » deux fois : même fichier republié en v2 et v3, sans nouveau fichier `tableau-v2.html`.
 6. Dans la vraie VM (suggestion du Lead), avec « Exécuter des commandes » autorisé : `touch /dossiers/Archives/essai` doit échouer (« Read-only file system »), alors que `touch /workspace/essai` réussit.
 
-### Suite à traiter (relevée par l'e2e)
+### Suite relevée par l'e2e : traitée (ADR-003 D9, lot L6)
 
-Une écriture dans un dossier en lecture seule passe d'abord par la modale de permission, puis échoue. La garde des chemins ne s'applique qu'après l'accord, car `describePermission` est pure et sans I/O. Proposition : une vérification préalable des outils d'écriture avant la modale, à arbitrer avec le Lead (contrat `ToolDefinition`).
+Une écriture dans un dossier en lecture seule passait d'abord par la modale de permission, puis échouait. La garde des chemins ne s'appliquait qu'après l'accord, car `describePermission` est pure et sans I/O.
+
+Arbitrage de l'architecte (31/10) : vérification préalable `ToolDefinition.precheck`, appelée par `executeTool` avant la question (ADR-003 D9). L'e2e vérifie désormais qu'aucune modale n'est ouverte pour `Archives/brouillon.md`, alors que celle de `Compta/synthese.md` l'est.
 
 ## Bugs relevés
 

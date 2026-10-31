@@ -2,9 +2,10 @@
  * Conversion d'un {@link ToolRegistry} (shared) en objet `tools` de l'AI SDK.
  *
  * L'adaptateur injecte le {@link ToolExecutionContext}, applique la politique de
- * permission `always` (un refus devient un résultat `ok: false`, jamais une
- * exception) et ne renvoie au modèle que le texte (`content`) : l'affichage riche
- * (`display`) reste côté UI.
+ * permission `always` (vérification préalable de l'outil, puis question ; un
+ * échec ou un refus devient un résultat `ok: false`, jamais une exception) et ne
+ * renvoie au modèle que le texte (`content`) : l'affichage riche (`display`)
+ * reste côté UI.
  */
 import { tool, type ToolSet } from 'ai';
 import {
@@ -22,6 +23,7 @@ import {
   askPermission,
   deniedOutput,
   describePermissionFor,
+  precheckTool,
   type PermissionDescriber,
 } from './permission.js';
 
@@ -78,13 +80,18 @@ export async function executeTool(
         }
       : {}),
   };
+  const limit = (output: ToolOutput): ToolOutput =>
+    runtime.limitOutput ? runtime.limitOutput(definition.name, output) : output;
   if (definition.permission === 'always') {
+    // Échec certain (dossier en lecture seule, passage introuvable…) : rendu au
+    // modèle sans poser de question à l'utilisateur (ADR-003, D9).
+    const failure = await precheckTool(definition, input, context);
+    if (failure) return limit(failure);
     const description = describePermissionFor(definition, input, runtime.describePermission);
     const decision = await askPermission(context, definition.name, input, description);
     if (!isAllowed(decision)) return deniedOutput(description.title);
   }
-  const output = await definition.execute(input, context);
-  return runtime.limitOutput ? runtime.limitOutput(definition.name, output) : output;
+  return limit(await definition.execute(input, context));
 }
 
 /**

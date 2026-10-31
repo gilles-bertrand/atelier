@@ -18,6 +18,7 @@ import {
   type ArtifactCard,
   type ArtifactFormat,
   type ToolOutput,
+  type ToolPrecheckFailure,
 } from '@atelier/shared';
 import { resolveFolderPath } from '../paths.js';
 import { guarded } from './native.js';
@@ -133,8 +134,22 @@ const memoryRewriteInput = z.object({
 
 /** Ramène une note à une ligne pour un titre de modale. */
 function shorten(text: string, max: number): string {
-  const line = text.replace(/\s+/g, ' ').trim();
+  const line = oneLine(text);
   return line.length > max ? `${line.slice(0, max - 1)}…` : line;
+}
+
+/** Texte sur une ligne, espaces resserrés. */
+function oneLine(text: string): string {
+  return text.replace(/\s+/g, ' ').trim();
+}
+
+const EMPTY_NOTE = 'Note vide : rien à retenir.';
+const EMPTY_MEMORY =
+  "Mémoire vide refusée : pour tout effacer, l'utilisateur le fait lui-même depuis la page du projet.";
+
+/** Échec de vérification préalable si `refused` (ADR-003, D9), sinon rien. */
+function refuseIf(refused: boolean, content: string): Promise<ToolPrecheckFailure | undefined> {
+  return Promise.resolve(refused ? { ok: false, content } : undefined);
 }
 
 /**
@@ -169,10 +184,11 @@ export function createMemoryTools(memory: ProjectMemoryWriter): AnyToolDefinitio
       detail: input.note.trim(),
       scopeKey: 'memory_add',
     }),
+    precheck: (input) => refuseIf(oneLine(input.note) === '', EMPTY_NOTE),
     execute: (input, context) =>
       guardedProject(async () => {
-        const note = input.note.replace(/\s+/g, ' ').trim();
-        if (note === '') return { ok: false, content: 'Note vide : rien à retenir.' };
+        const note = oneLine(input.note);
+        if (note === '') return { ok: false, content: EMPTY_NOTE };
         await memory.append(context.sessionId, note);
         return { ok: true, content: `Retenu dans la mémoire du projet : « ${note} ».` };
       }),
@@ -190,15 +206,10 @@ export function createMemoryTools(memory: ProjectMemoryWriter): AnyToolDefinitio
       detail: preview(input.content),
       scopeKey: 'memory_rewrite',
     }),
+    precheck: (input) => refuseIf(input.content.trim() === '', EMPTY_MEMORY),
     execute: (input, context) =>
       guardedProject(async () => {
-        if (input.content.trim() === '') {
-          return {
-            ok: false,
-            content:
-              "Mémoire vide refusée : pour tout effacer, l'utilisateur le fait lui-même depuis la page du projet.",
-          };
-        }
+        if (input.content.trim() === '') return { ok: false, content: EMPTY_MEMORY };
         const updated = await memory.rewrite(context.sessionId, input.content.trim());
         return {
           ok: true,

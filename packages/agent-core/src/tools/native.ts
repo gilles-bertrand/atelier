@@ -13,8 +13,9 @@ import {
   type AnyToolDefinition,
   type ToolExecutionContext,
   type ToolOutput,
+  type ToolPrecheckFailure,
 } from '@atelier/shared';
-import { resolveFolderPath, type ReadRoot } from '../paths.js';
+import { resolveFolderPath, type ReadRoot, type ResolvedFolderPath } from '../paths.js';
 import { countOccurrences, truncateOutput } from './text.js';
 import { preview } from './permission.js';
 import { fileCard, globToRegExp, looksBinary, walkFiles } from './fs-utils.js';
@@ -28,6 +29,45 @@ export async function guarded(run: () => Promise<ToolOutput>): Promise<ToolOutpu
       return { ok: false, content: error.message };
     }
     if (isFsError(error)) {
+      return { ok: false, content: fsErrorMessage(error) };
+    }
+    throw error;
+  }
+}
+
+/**
+ * Erreurs du système de fichiers qui condamnent l'appel : chemin absent, pas un
+ * dossier, droits, boucle de liens… Les autres (`EMFILE`, `EBUSY`…) peuvent être
+ * passagères : la vérification préalable les laisse à `execute`.
+ */
+const CERTAIN_FS_ERRORS: ReadonlySet<string> = new Set([
+  'ENOENT',
+  'ENOTDIR',
+  'EISDIR',
+  'EACCES',
+  'EPERM',
+  'ELOOP',
+  'ENAMETOOLONG',
+]);
+
+/**
+ * Vérification préalable (ADR-003, D9) faite des contrôles d'`execute`, avec les
+ * mêmes messages que {@link guarded}. `check` renvoie un échec, ou `undefined`
+ * si l'appel peut se faire. Seuls les refus certains deviennent un échec : une
+ * erreur passagère ou inattendue est relancée, et `executeTool` pose alors la
+ * question (la vérification ne conclut pas).
+ */
+export async function guardedPrecheck(
+  check: () => Promise<ToolPrecheckFailure | undefined>,
+): Promise<ToolPrecheckFailure | undefined> {
+  try {
+    const failure = await check();
+    return failure ? { ok: false, content: failure.content } : undefined;
+  } catch (error) {
+    if (error instanceof AtelierError && error.code.startsWith('tool/')) {
+      return { ok: false, content: error.message };
+    }
+    if (isFsError(error) && error.code !== undefined && CERTAIN_FS_ERRORS.has(error.code)) {
       return { ok: false, content: fsErrorMessage(error) };
     }
     throw error;
@@ -136,6 +176,12 @@ export const writeFileTool = defineTool({
     detail: preview(input.content),
     scopeKey: 'write_file',
   }),
+  // Dossier en lecture seule ou chemin hors des dossiers : refus sans modale (D9).
+  precheck: (input, context) =>
+    guardedPrecheck(async () => {
+      await resolveFolderPath(context, input.path, { write: true });
+      return undefined;
+    }),
   execute: (input, context) =>
     guarded(async () => {
       const resolved = await resolveFolderPath(context, input.path, { write: true });
@@ -156,6 +202,39 @@ export const writeFileTool = defineTool({
     }),
 });
 
+/** Remplacement prêt à écrire, ou la raison pour laquelle il ne peut pas l'être. */
+type EditPlan =
+  { ok: true; resolved: ResolvedFolderPath; before: string; index: number } | ToolPrecheckFailure;
+
+/**
+ * Contrôles d'`edit_file`, partagés par `precheck` et `execute` (ADR-003, D9) :
+ * chemin dans un dossier en écriture, fichier présent, `old_str` présent une
+ * seule fois. Les erreurs de chemin et du système de fichiers sont levées, pour
+ * {@link guarded}.
+ */
+async function planEdit(
+  context: ToolExecutionContext,
+  input: { path: string; old_str: string },
+): Promise<EditPlan> {
+  const resolved = await resolveFolderPath(context, input.path, { write: true });
+  if (!resolved.exists) return { ok: false, content: `Fichier introuvable : ${input.path}` };
+  const before = await readFile(resolved.absolutePath, 'utf8');
+  const count = countOccurrences(before, input.old_str);
+  if (count === 0) {
+    return {
+      ok: false,
+      content: `Texte introuvable dans ${resolved.relativePath} : old_str doit correspondre exactement (espaces et retours à la ligne compris). Relis le fichier avec read_file.`,
+    };
+  }
+  if (count > 1) {
+    return {
+      ok: false,
+      content: `old_str apparaît ${count} fois dans ${resolved.relativePath} : ajoute des lignes de contexte pour qu'il soit unique.`,
+    };
+  }
+  return { ok: true, resolved, before, index: before.indexOf(input.old_str) };
+}
+
 export const editFileTool = defineTool({
   name: 'edit_file',
   description:
@@ -173,25 +252,18 @@ export const editFileTool = defineTool({
     detail: preview(`- ${input.old_str}\n+ ${input.new_str}`),
     scopeKey: 'edit_file',
   }),
+  // Fichier absent, passage absent ou ambigu, lecture seule : refus sans modale (D9).
+  precheck: (input, context) =>
+    guardedPrecheck(async () => {
+      const plan = await planEdit(context, input);
+      return plan.ok ? undefined : plan;
+    }),
   execute: (input, context) =>
     guarded(async () => {
-      const resolved = await resolveFolderPath(context, input.path, { write: true });
-      if (!resolved.exists) return { ok: false, content: `Fichier introuvable : ${input.path}` };
-      const before = await readFile(resolved.absolutePath, 'utf8');
-      const count = countOccurrences(before, input.old_str);
-      if (count === 0) {
-        return {
-          ok: false,
-          content: `Texte introuvable dans ${resolved.relativePath} : old_str doit correspondre exactement (espaces et retours à la ligne compris). Relis le fichier avec read_file.`,
-        };
-      }
-      if (count > 1) {
-        return {
-          ok: false,
-          content: `old_str apparaît ${count} fois dans ${resolved.relativePath} : ajoute des lignes de contexte pour qu'il soit unique.`,
-        };
-      }
-      const index = before.indexOf(input.old_str);
+      // Contrôles refaits : le fichier a pu changer pendant que la modale était ouverte.
+      const plan = await planEdit(context, input);
+      if (!plan.ok) return plan;
+      const { resolved, before, index } = plan;
       const after =
         before.slice(0, index) + input.new_str + before.slice(index + input.old_str.length);
       await writeFile(resolved.absolutePath, after, 'utf8');
