@@ -40,5 +40,6 @@ describe('canaux IPC', () => {
       expect(IPC_RENDERER_INVOKE_CHANNELS).toContain(channel);
     }
     expect(IPC_EVENT_CHANNELS).toContain('schedule:changed');
+    expect(IPC_EVENT_CHANNELS).toContain('app:open-session');
   });
 });

@@ -173,6 +173,11 @@ export interface IpcEventContract {
   'mcp:status': McpStatus;
   /** Tâche créée, modifiée ou supprimée, ou run qui change d'état (tableau de bord en direct). */
   'schedule:changed': { taskId: string; run?: ScheduledRun };
+  /**
+   * Ouvrir une conversation précise, y compris celle d'un run planifié absente des
+   * « Récentes » (clic sur une notification). Émis après l'affichage de la fenêtre.
+   */
+  'app:open-session': { sessionId: string };
 }
 
 /** Canal d'événement. */
@@ -232,6 +237,7 @@ export const IPC_EVENT_CHANNELS = [
   'llm:status',
   'mcp:status',
   'schedule:changed',
+  'app:open-session',
 ] as const satisfies readonly IpcEventChannel[];
 
 // Vérifications à la compilation : les listes couvrent exactement les contrats.
