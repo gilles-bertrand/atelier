@@ -89,11 +89,33 @@ function log(message: string, data?: unknown): void {
   else console.log(`[atelier] ${message}`, data);
 }
 
-/** Montre la fenêtre sans la recréer (clic sur une notification). */
-function revealWindow(): void {
+/** Montre la fenêtre, créée au besoin (app ouverte à la connexion, fenêtre fermée). */
+function revealWindow(): BrowserWindow {
   const window = BrowserWindow.getAllWindows()[0] ?? createMainWindow();
   if (window.isMinimized()) window.restore();
   window.show();
+  return window;
+}
+
+/** Délai laissé au renderer d'une fenêtre neuve pour s'abonner aux événements. */
+const RENDERER_READY_DELAY_MS = 1_500;
+
+/** Ouvre la conversation d'un run dans la fenêtre (clic sur la notification, D7). */
+function openRunSession(sessionId: string): void {
+  const window = revealWindow();
+  const send = (): void => {
+    broadcast('app:open-session', { sessionId });
+  };
+  if (!window.webContents.isLoading()) {
+    send();
+    return;
+  }
+  // Fenêtre neuve : le renderer s'abonne après son chargement et celui des réglages.
+  // Ouvrir deux fois la même conversation est sans effet.
+  window.webContents.once('did-finish-load', () => {
+    send();
+    setTimeout(send, RENDERER_READY_DELAY_MS);
+  });
 }
 
 function notifyRun(task: ScheduledTask, run: ScheduledRun): void {
@@ -104,7 +126,10 @@ function notifyRun(task: ScheduledTask, run: ScheduledRun): void {
     body: runNotificationBody(run),
     silent: run.status === 'success',
   });
-  notification.on('click', revealWindow);
+  notification.on('click', () => {
+    if (run.sessionId) openRunSession(run.sessionId);
+    else revealWindow();
+  });
   notification.show();
 }
 
