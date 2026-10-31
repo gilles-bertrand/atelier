@@ -657,8 +657,10 @@ describe('ChatManager : tours sans témoin (prompts planifiés, ADR-002)', () =>
     expect(result.message.parts).toEqual([{ type: 'text', text: 'Bonjour !' }]);
     expect(created[0]?.requestPermission).toBe(deny);
     expect(created[0]?.instructions).toBe('Tu travailles seul.');
-    // Run sans commandes : la VM n'est pas remontée.
+    // Run sans commandes : la VM n'est pas remontée, et la session n'en a pas
+    // (bash, même `ls` de la liste blanche, ne s'exécute jamais).
     expect(sandboxUse).toEqual([false]);
+    expect(created[0]?.sandbox).toBe(false);
     // Le titre reste celui de la tâche.
     expect(store.get(session.id)?.title).toBe('Rapport');
   });
@@ -699,6 +701,13 @@ describe('ChatManager : tours sans témoin (prompts planifiés, ADR-002)', () =>
     expect(events.map((e) => e.type)).toContain('permission_request');
     await chats.stop(session.id);
     await wait(session.id);
+  });
+
+  it('run avec commandes : la session garde la VM du runtime', async () => {
+    const { chats, created } = setup(() => 'ok');
+    const session = chats.create('/w', { scheduledTaskId: 't1' });
+    await chats.runUnattended(session.id, 'Run', { requestPermission: deny, useSandbox: true });
+    expect(created[0]?.sandbox).toBeUndefined();
   });
 
   it('le signal du run arrête le tour', async () => {

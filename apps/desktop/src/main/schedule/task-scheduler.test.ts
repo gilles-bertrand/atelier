@@ -209,6 +209,19 @@ describe('TaskScheduler', () => {
     expect(scheduler.saveTask(input()).maxDurationMinutes).toBe(20);
   });
 
+  it('renommer une tâche garde sa prochaine exécution ; changer la récurrence la recalcule', async () => {
+    const { clock, scheduler } = setup('2026-10-31T07:00:00');
+    scheduler.start();
+    const every = { kind: 'interval' as const, every: 60, unit: 'minutes' as const };
+    const task = scheduler.saveTask(input({ schedule: every }));
+    await clock.advance(20 * MIN);
+    expect(scheduler.saveTask(input({ schedule: every, name: 'Autre' }), task.id).nextRunAt).toBe(
+      task.nextRunAt,
+    );
+    const changed = scheduler.saveTask(input({ schedule: { ...every, every: 30 } }), task.id);
+    expect(changed.nextRunAt).toBe(new Date('2026-10-31T07:50:00').toISOString());
+  });
+
   it('désactivée : plus de prochaine exécution ; réactivée : repart de maintenant', () => {
     const { scheduler } = setup('2026-10-31T09:00:00');
     scheduler.start();

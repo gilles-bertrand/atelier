@@ -139,7 +139,16 @@ export class TaskScheduler {
       updatedAt: now.toISOString(),
     };
     // Récurrence ou activation changée : la prochaine exécution repart de maintenant.
-    const next = stored.enabled ? this.#nextRunAt(stored.schedule, now).toISOString() : undefined;
+    // Sinon (renommage…), elle est gardée : la cadence d'un intervalle ne glisse pas.
+    const unchanged =
+      existing !== undefined &&
+      existing.enabled === stored.enabled &&
+      JSON.stringify(existing.schedule) === JSON.stringify(stored.schedule);
+    const next = !stored.enabled
+      ? undefined
+      : unchanged && existing.nextRunAt !== undefined
+        ? existing.nextRunAt
+        : this.#nextRunAt(stored.schedule, now).toISOString();
     if (next !== undefined) stored.nextRunAt = next;
     else delete stored.nextRunAt;
     this.#o.store.saveTask(stored);

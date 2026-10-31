@@ -72,6 +72,11 @@ export interface NewAgentSession {
   lastInputTokens?: number;
   /** Consignes propres à cette session (mode autonome des runs planifiés). */
   instructions?: string;
+  /**
+   * `false` : session sans machine isolée (run sans « commandes ») ; `bash`,
+   * même une commande de la liste blanche, ne s'exécute jamais (ADR-002 D4).
+   */
+  sandbox?: false;
 }
 
 /** Ce que le gestionnaire utilise du catalogue des modèles (`ModelCatalog`). */
@@ -573,6 +578,7 @@ export class ChatManager {
       ...(mode.kind === 'unattended' && mode.instructions !== undefined
         ? { instructions: mode.instructions }
         : {}),
+      ...(mode.kind === 'unattended' && !mode.useSandbox ? { sandbox: false as const } : {}),
     });
     runtime.agent = { session: created, generation, model, mode: mode.kind };
     return created;

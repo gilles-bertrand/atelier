@@ -175,6 +175,8 @@ export class AgentRuntimeHost implements AgentSessionFactory {
         : {}),
       // Consignes du mode autonome (ADR-002 D3), propres à cette session.
       ...(options.instructions !== undefined ? { extraInstructions: options.instructions } : {}),
+      // Run sans « commandes » : aucune VM, même si celle du runtime est prête.
+      ...(options.sandbox === false ? { sandbox: false as const } : {}),
     });
   }
 
