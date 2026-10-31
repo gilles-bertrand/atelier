@@ -5,6 +5,7 @@
  * l'historique affiché en messages modèle (et le raisonnement « thinking » n'est
  * jamais réinjecté). Toutes les structures sont sérialisables en JSON.
  */
+import type { ArtifactCard } from './projects.js';
 import type { TodoItem } from './todo.js';
 
 /** Auteur d'un message affiché. */
@@ -56,7 +57,9 @@ export type ToolDisplay =
   | { type: 'web_page'; url: string; title?: string }
   | { type: 'command'; command: string; exitCode: number; output: string }
   | { type: 'diff'; path: string; before: string; after: string }
-  | { type: 'todos'; todos: TodoItem[] };
+  | { type: 'todos'; todos: TodoItem[] }
+  /** Artefact publié (`publish_artifact`, ADR-003 D5) : carte qui ouvre la visionneuse. */
+  | { type: 'artifact'; artifact: ArtifactCard };
 
 /** Statut d'un appel d'outil affiché. */
 export type ToolCallStatus = 'running' | 'success' | 'error' | 'denied';
@@ -151,6 +154,11 @@ export interface SessionSummary {
    * sont exclues de `session:list`, sauf `includeScheduled: true`.
    */
   scheduledTaskId?: string;
+  /**
+   * Projet de la conversation (ADR-003) : `workspace` est alors son dossier
+   * principal, et ses dossiers rattachés, consignes et mémoire servent à chaque tour.
+   */
+  projectId?: string;
 }
 
 /**

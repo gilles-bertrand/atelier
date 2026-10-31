@@ -130,6 +130,14 @@ _Dernière mise à jour : 2026-10-29, Lead._
 
 _Format : date, agent, type proposé, raison, packages impactés._
 
+- 🟡 **PR `feat/lead-shared-projects` ouverte par fullstack, à relire et merger par le Lead (règle n° 1, livraison validée par Gilles le 2026-10-31).** **2026-10-31, fullstack (projets, [ADR-003](adr/ADR-003-projets.md) §4, ticket #22)** (impact : `shared`, `agent-core`, `documents`, `sandbox`, main, renderer, `qa/`). Raison : un projet regroupe plusieurs dossiers (lecture seule ou lecture et écriture), des consignes, une mémoire versionnée, des tâches planifiées et des artefacts publiés et versionnés. Aucun nouvel `AgentEvent`. Demandes :
+  - Nouveau module `projects.ts` : `Project(Input|Summary)`, `ProjectFolder`, `ProjectMemory`, `MemoryRevision`, `Artifact`, `ArtifactVersion`, `ArtifactCard`, des constantes, et les fonctions pures `validateProjectInput`, `folderGuestName`, `folderGuestPath`, `artifactUrl`, `artifactFormatOf`, `defaultFolderLabel`, `projectDirName` et `isSameOrInside`, avec leurs tests.
+  - `ToolExecutionContext.folders?` (`WorkspaceFolder`) ; `SessionSummary.projectId?` ; `ScheduledTaskInput.projectId?` ; `ScheduledPermissions.memory?` ; `AppSettings.projectsDir?`.
+  - `sandbox.ts` : `GUEST_FOLDERS`, `SandboxFolderMount`, `Sandbox.setWorkspace(hostDir, folders?)`, `SandboxStatus.folders?`, `SandboxHolder.projectName?`.
+  - Unions élargies : `ToolDisplay` gagne `artifact` et `PermissionKind` gagne `memory_write`. Le renderer est complété dans la même PR (modale, carte minimale, messages d'erreur).
+  - Canaux `project:*` (10) et `artifact:*` (4) ; `session:create` et `session:list` gagnent `projectId?` ; événements `project:changed` et `artifact:changed`.
+  - Codes `project/invalid`, `project/not_found`, `project/conflict`, `artifact/not_found` et `tool/read_only`.
+
 - ✅ **Livrée (PR #106), conforme au §3. Ajouts : constantes de durée, `SandboxHolder` et `SandboxStatus.heldBy`. `nextRunAt` lève une `RangeError` si la récurrence n'a pas été validée par `validateSchedule`. À brancher par UI (L2/L3) ; Core bascule ses types locaux de #105.** **2026-10-31, architect (prompts planifiés, [ADR-002](adr/ADR-002-prompts-planifies.md) §3)** (impact : `shared`, `agent-core`, main, renderer, `qa/`). Raison : exécuter un prompt à intervalle régulier, avec des droits déclarés par la tâche et un tableau de bord des exécutions. Aucun nouvel `AgentEvent`. Demandes :
   - Nouveau module `schedule.ts` : `Schedule` (5 formes), `ScheduledPermissions`, `ScheduledTask(Input)`, `ScheduledRun`, `DeniedAction`, `ScheduleDashboard`, et les fonctions pures `nextRunAt`, `validateSchedule` et `describeSchedule`, avec leurs tests.
   - `SessionSummary.scheduledTaskId?` ; `AppSettings.openAtLogin?`.

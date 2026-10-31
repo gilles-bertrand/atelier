@@ -1,15 +1,28 @@
 /**
  * Interface de la VM d'exécution (implémentée par `packages/sandbox` avec Lima).
  *
- * La VM ne voit que le dossier de travail (`/workspace`, écriture) et les skills
- * (`/skills`, lecture seule). Les commandes tournent sous l'utilisateur `agent`,
- * dont le réseau sortant est coupé par défaut.
+ * La VM ne voit que le dossier de travail (`/workspace`, écriture), les dossiers
+ * rattachés d'un projet (`/dossiers/<nom>`, ADR-003) et les skills (`/skills`,
+ * lecture seule). Les commandes tournent sous l'utilisateur `agent`, dont le
+ * réseau sortant est coupé par défaut.
  */
 
 /** Chemin du dossier de travail dans la VM. */
 export const GUEST_WORKSPACE = '/workspace';
 /** Chemin du dossier des skills dans la VM (lecture seule). */
 export const GUEST_SKILLS = '/skills';
+/** Racine des dossiers rattachés d'un projet dans la VM (`/dossiers/<nom>`, ADR-003 D1). */
+export const GUEST_FOLDERS = '/dossiers';
+
+/** Dossier rattaché monté dans la VM en plus de `/workspace` (projet, ADR-003 D1). */
+export interface SandboxFolderMount {
+  /** Chemin absolu côté hôte. */
+  host: string;
+  /** Point de montage dans la VM, sous {@link GUEST_FOLDERS}. */
+  guest: string;
+  /** `false` : monté en lecture seule (dossier « lecture seule » du projet). */
+  writable: boolean;
+}
 
 /** Étape de préparation de la VM, pour la barre de progression. */
 export type SandboxPhase =
@@ -41,6 +54,8 @@ export interface SandboxStatus {
   state: SandboxState;
   /** Dossier de travail monté côté hôte, s'il y en a un. */
   workspace?: string;
+  /** Dossiers rattachés montés sous `/dossiers` (projet), s'il y en a. */
+  folders?: SandboxFolderMount[];
   /** Réseau sortant autorisé pour l'utilisateur `agent`. */
   networkEnabled: boolean;
   /** Message d'erreur lisible si `state === 'error'`. */
@@ -57,6 +72,8 @@ export interface SandboxStatus {
 export interface SandboxHolder {
   /** Dossier monté pour ce détenteur. */
   workspace: string;
+  /** Projet de ce détenteur : ses dossiers rattachés sont montés avec le principal. */
+  projectName?: string;
   /** Présent : un run planifié tient la VM. */
   runId?: string;
   /** Nom de la tâche, présent avec `runId`. */
@@ -133,10 +150,12 @@ export interface Sandbox {
   ensureReady(onProgress?: (progress: SandboxProgress) => void): Promise<void>;
 
   /**
-   * Change le dossier monté sur `/workspace` (redémarre la VM ; objectif < 15 s).
+   * Change le dossier monté sur `/workspace` et les dossiers rattachés montés
+   * sous `/dossiers` (redémarre la VM si les montages changent ; objectif < 15 s).
    * @param hostDir - Chemin absolu côté hôte.
+   * @param folders - Dossiers rattachés d'un projet ; absent ou vide : aucun.
    */
-  setWorkspace(hostDir: string): Promise<void>;
+  setWorkspace(hostDir: string, folders?: readonly SandboxFolderMount[]): Promise<void>;
 
   /**
    * Exécute une commande shell (`bash -lc`) en tant qu'utilisateur `agent`.
@@ -161,11 +180,11 @@ export interface Sandbox {
   diagnostics(): Promise<SandboxDiagnostics>;
 
   /**
-   * Convertit un chemin hôte (dans le dossier de travail ou les skills) en chemin
-   * VM. Renvoie `null` si le chemin n'est pas visible dans la VM.
+   * Convertit un chemin hôte (dans le dossier de travail, un dossier rattaché ou
+   * les skills) en chemin VM. Renvoie `null` si le chemin n'est pas visible dans la VM.
    */
   toGuestPath(hostPath: string): string | null;
 
-  /** Convertit un chemin VM (`/workspace/...`) en chemin hôte, ou `null`. */
+  /** Convertit un chemin VM (`/workspace/...`, `/dossiers/<nom>/...`) en chemin hôte, ou `null`. */
   toHostPath(guestPath: string): string | null;
 }

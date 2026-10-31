@@ -4,6 +4,7 @@
  */
 import { useEffect, useId, useRef, type KeyboardEvent } from 'react';
 import {
+  Brain,
   FilePen,
   Globe,
   Plug,
@@ -37,6 +38,7 @@ export const PERMISSION_KINDS: Record<
   command: { icon: SquareTerminal, heading: 'Exécuter une commande', risk: 'medium' },
   network: { icon: Globe, heading: 'Accéder à internet', risk: 'medium' },
   mcp_write: { icon: Plug, heading: 'Utiliser un connecteur', risk: 'medium' },
+  memory_write: { icon: Brain, heading: 'Retenir dans la mémoire du projet', risk: 'low' },
   other: { icon: ShieldAlert, heading: 'Autoriser une action', risk: 'medium' },
 };
 

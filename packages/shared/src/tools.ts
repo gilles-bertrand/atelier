@@ -8,6 +8,7 @@
  */
 import type { z } from 'zod';
 import type { PermissionDescription, PermissionHandler } from './permissions.js';
+import type { ProjectFolder } from './projects.js';
 import type { Sandbox } from './sandbox.js';
 import type { ToolDisplay } from './messages.js';
 import { AtelierError } from './errors.js';
@@ -25,6 +26,16 @@ export type ToolSource = 'native' | 'documents' | 'web' | 'mcp' | 'skills';
 export type ToolPermission = 'never' | 'always' | 'conditional';
 
 /**
+ * Dossier rattaché d'une conversation de projet (ADR-003 D1), en plus du
+ * dossier de travail : les outils fichiers y lisent, et y écrivent si
+ * `access` vaut `write`.
+ */
+export interface WorkspaceFolder extends ProjectFolder {
+  /** Chemin dans la VM (`/dossiers/<nom>`), présent si le dossier y est monté. */
+  guestPath?: string;
+}
+
+/**
  * Contexte injecté à chaque exécution d'outil par `agent-core`.
  * Les outils ne lisent jamais d'état global : tout passe par ici (testabilité).
  */
@@ -33,8 +44,16 @@ export interface ToolExecutionContext {
   sessionId: string;
   /** Identifiant de l'appel d'outil (fourni par l'AI SDK). */
   toolCallId: string;
-  /** Dossier de travail autorisé, chemin absolu et résolu côté hôte. */
+  /**
+   * Dossier de travail autorisé, chemin absolu et résolu côté hôte. Pour une
+   * conversation de projet : le dossier principal (racine des chemins relatifs).
+   */
   workspace: string;
+  /**
+   * Dossiers rattachés du projet (ADR-003 D1), relus à chaque tour. Absent ou
+   * vide : seul `workspace` est accessible.
+   */
+  folders?: readonly WorkspaceFolder[];
   /** Signal d'annulation du tour (bouton stop). */
   abortSignal: AbortSignal;
   /** Demande une permission à l'utilisateur. */

@@ -14,6 +14,7 @@ export * from './llm.js';
 export * from './mcp.js';
 export * from './messages.js';
 export * from './permissions.js';
+export * from './projects.js';
 export * from './sandbox.js';
 export * from './schedule.js';
 export * from './search.js';
