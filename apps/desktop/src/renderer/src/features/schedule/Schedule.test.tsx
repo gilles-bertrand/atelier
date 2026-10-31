@@ -41,7 +41,8 @@ const run: ScheduledRun = {
   scheduledFor: new Date(2026, 9, 31, 8, 0).toISOString(),
   durationMs: 125_000,
   totalTokens: 12_400,
-  summary: 'Rapport prêt : rapport.xlsx',
+  // Markdown du modèle : le tableau de bord n'en affiche que le texte (#116).
+  summary: '**Rapport prêt** : `rapport.xlsx`',
   files: ['rapport.xlsx'],
   denied: [
     { toolName: 'write_file', kind: 'file_write', scopeKey: 'write_file', title: 'Écrire a.md' },
@@ -118,7 +119,8 @@ describe('tableau de bord des tâches planifiées', () => {
     expect(row).toHaveTextContent('75 % (4)');
 
     const runs = screen.getByRole('region', { name: 'Dernières exécutions' });
-    expect(within(runs).getByText('Rapport prêt : rapport.xlsx')).toBeInTheDocument();
+    const summary = within(runs).getByText('Rapport prêt : rapport.xlsx');
+    expect(summary).toHaveAttribute('title', 'Rapport prêt : rapport.xlsx');
     expect(within(runs).getByText('12,4 k')).toBeInTheDocument();
     expect(api.callsTo('schedule:dashboard')).toEqual([{ period: '7d' }]);
   });

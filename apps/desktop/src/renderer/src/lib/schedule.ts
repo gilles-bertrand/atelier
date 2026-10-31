@@ -243,3 +243,33 @@ export function mcpToolChoices(
     });
   return { groups, unavailable };
 }
+
+/**
+ * Compte rendu d'un run en texte simple, pour une cellule du tableau de bord
+ * (#116) : emphase, titres, puces, citations, code et liens réduits à leur
+ * texte, lignes jointes par « · ». Jamais de rendu HTML : le texte vient du modèle.
+ */
+export function plainSummary(markdown: string): string {
+  return markdown
+    .split('\n')
+    .map((line) =>
+      line
+        .replace(/^\s*```.*$/, '')
+        .replace(/^\s{0,3}(?:[-*_]\s*){3,}$/, '')
+        .replace(/^\s{0,3}#{1,6}\s+/, '')
+        .replace(/^\s*>\s?/, '')
+        .replace(/^\s*(?:[-*+]|\d+[.)])\s+/, '')
+        .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+        .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+        .replace(/<(https?:\/\/[^>\s]+)>/g, '$1')
+        .replace(/<\/?[a-z][^>]*>/gi, '')
+        .replace(/`([^`]*)`/g, '$1')
+        .replace(/(\*\*|__)(.+?)\1/g, '$2')
+        .replace(/~~(.+?)~~/g, '$1')
+        .replace(/(^|[\s(])[*_](\S(?:.*?\S)?)[*_](?=[\s).,;:!?]|$)/g, '$1$2')
+        .replace(/\s+/g, ' ')
+        .trim(),
+    )
+    .filter((line) => line !== '')
+    .join(' · ');
+}

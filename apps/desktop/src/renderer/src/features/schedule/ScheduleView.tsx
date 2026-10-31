@@ -23,6 +23,7 @@ import { formatPercent, formatTokens } from '@renderer/lib/format';
 import {
   formatDuration,
   formatRunDate,
+  plainSummary,
   relativeNext,
   RUN_STATUS_LABELS,
   RUN_STATUS_TONES,
@@ -252,9 +253,16 @@ function RunsTable({
               {run.denied.length}
             </td>
             <td className="max-w-64 py-2 text-muted-foreground">
-              <span className="line-clamp-2" title={run.summary}>
-                {run.summary ?? (run.skipReason ? SKIP_REASON_LABELS[run.skipReason] : '—')}
-              </span>
+              {run.summary !== undefined ? (
+                // Une ligne tronquée ; le compte rendu complet (texte simple) en infobulle.
+                <span className="block truncate" title={plainSummary(run.summary)}>
+                  {plainSummary(run.summary)}
+                </span>
+              ) : (
+                <span className="block truncate">
+                  {run.skipReason ? SKIP_REASON_LABELS[run.skipReason] : '—'}
+                </span>
+              )}
             </td>
           </tr>
         ))}
