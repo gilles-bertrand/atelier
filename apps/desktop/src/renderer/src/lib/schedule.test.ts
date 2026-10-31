@@ -4,6 +4,7 @@ import {
   formatDuration,
   mcpToolChoices,
   parseList,
+  plainSummary,
   permissionsAfterDenied,
   relativeNext,
   runDayBars,
@@ -119,5 +120,34 @@ describe('connecteurs en écriture : cases par serveur', () => {
       { name: 'mcp__jira__add', reason: 'disconnected' },
       { name: 'mcp__slack__post', reason: 'missing_server' },
     ]);
+  });
+});
+
+describe('compte rendu en texte simple (#116)', () => {
+  it('réduit le markdown à son texte, sur une ligne', () => {
+    expect(
+      plainSummary(
+        [
+          '## Bilan',
+          '**Résultats :**',
+          '- **Bruxelles** : 12 ventes',
+          '* _Liège_ : `8` ventes',
+          '1. Voir [le rapport](rapport.md) et ![graphique](g.png)',
+          '> Note : ~~ancien~~ mis à jour',
+          '---',
+          '```',
+          'code',
+          '```',
+        ].join('\n'),
+      ),
+    ).toBe(
+      'Bilan · Résultats : · Bruxelles : 12 ventes · Liège : 8 ventes · Voir le rapport et graphique · Note : ancien mis à jour · code',
+    );
+  });
+
+  it('garde les noms de fichiers, les astérisques isolés et les balises inoffensives en texte', () => {
+    expect(plainSummary('Fichier rapport_mensuel_v2.xlsx, total 3 * 4 <b>gras</b>')).toBe(
+      'Fichier rapport_mensuel_v2.xlsx, total 3 * 4 gras',
+    );
   });
 });
