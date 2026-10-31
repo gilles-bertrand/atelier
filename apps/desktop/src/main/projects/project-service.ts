@@ -359,13 +359,16 @@ export class ProjectService implements ProjectMemoryWriter, ArtifactPublisher {
     };
   }
 
-  /** Outils de la conversation : publication toujours, mémoire pour un projet. */
-  sessionTools(session: SessionSummary): AnyToolDefinition[] {
+  /**
+   * Outils de la conversation : publication toujours, mémoire pour un projet
+   * (sauf `memory: false`, run dont la tâche ne coche pas la mémoire).
+   */
+  sessionTools(session: SessionSummary, options: { memory?: boolean } = {}): AnyToolDefinition[] {
     this.#tools ??= {
       memory: createMemoryTools(this),
       publish: createPublishArtifactTool(this),
     };
-    return session.projectId !== undefined
+    return session.projectId !== undefined && options.memory !== false
       ? [...this.#tools.memory, this.#tools.publish]
       : [this.#tools.publish];
   }

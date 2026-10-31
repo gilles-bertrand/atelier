@@ -99,8 +99,14 @@ export interface SessionProjects {
   ): { name: string; folders: readonly WorkspaceFolder[]; mounts: string } | undefined;
   /** Contexte du prompt (dossiers, consignes, mémoire, artefacts), relu à chaque tour. */
   promptProject(sessionId: string): () => Promise<PromptProject | undefined>;
-  /** Outils propres à la conversation. */
-  sessionTools(session: SessionSummary): readonly AnyToolDefinition[];
+  /**
+   * Outils propres à la conversation. `memory: false` : sans les outils de
+   * mémoire (run planifié dont la tâche ne coche pas la mémoire).
+   */
+  sessionTools(
+    session: SessionSummary,
+    options?: { memory?: boolean },
+  ): readonly AnyToolDefinition[];
 }
 
 /** Ce que le gestionnaire utilise du catalogue des modèles (`ModelCatalog`). */
@@ -178,6 +184,11 @@ export interface UnattendedTurn {
   instructions?: string;
   /** La VM sert-elle au tour ? Non : elle n'est ni remontée ni réservée. */
   useSandbox: boolean;
+  /**
+   * La tâche peut-elle écrire dans la mémoire du projet ? Non : les outils de
+   * mémoire ne sont pas proposés au modèle (ADR-003 D4).
+   */
+  memory?: boolean;
   /** Arrêt du run (bouton, durée maximale dépassée). */
   signal?: AbortSignal;
 }
@@ -637,7 +648,13 @@ export class ChatManager {
       ...(this.#o.projects && session.projectId !== undefined
         ? { project: this.#o.projects.promptProject(session.id) }
         : {}),
-      ...(this.#o.projects ? { tools: this.#o.projects.sessionTools(session) } : {}),
+      ...(this.#o.projects
+        ? {
+            tools: this.#o.projects.sessionTools(session, {
+              memory: mode.kind === 'interactive' || mode.memory === true,
+            }),
+          }
+        : {}),
     });
     runtime.agent = {
       session: created,

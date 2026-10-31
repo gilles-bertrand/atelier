@@ -169,6 +169,8 @@ export class ScheduledRunner {
         }),
         ...(this.#o.instructions !== undefined ? { instructions: this.#o.instructions } : {}),
         useSandbox: task.permissions.commands,
+        // Sans la case « mémoire », les outils de mémoire ne sont pas proposés (ADR-003 D4).
+        memory: task.permissions.memory === true,
         signal: controller.signal,
       });
       const summary = runSummary(result.message);

@@ -650,6 +650,12 @@ describe('ProjectService', () => {
       'publish_artifact',
     ]);
     expect(names(conversation('hors'))).toEqual(['publish_artifact']);
+    // Run planifié sans la case mémoire : aucun outil de mémoire proposé.
+    expect(
+      projects
+        .sessionTools(conversation('c', { projectId: created.id }), { memory: false })
+        .map((t) => t.name),
+    ).toEqual(['publish_artifact']);
   });
 });
 
@@ -728,6 +734,7 @@ describe('ChatManager et projets', () => {
       },
     ];
     const tool = { name: 'memory_add' } as ReturnType<ProjectService['sessionTools']>[number];
+    const toolOptions: unknown[] = [];
     const chats = new ChatManager({
       store,
       permissions: new PermissionBroker(),
@@ -742,7 +749,10 @@ describe('ChatManager et projets', () => {
         turnFor: (session) =>
           session.projectId !== undefined ? { name: 'Ventes', folders, mounts: 'SIG' } : undefined,
         promptProject: () => () => Promise.resolve(undefined),
-        sessionTools: (session) => (session.projectId !== undefined ? [tool] : []),
+        sessionTools: (session, options) => {
+          toolOptions.push(options);
+          return session.projectId !== undefined ? [tool] : [];
+        },
       },
     });
     const wait = async (id: string): Promise<void> => {
@@ -778,6 +788,16 @@ describe('ChatManager et projets', () => {
     await wait(single.id);
     expect(created).toHaveLength(3);
     expect(created[2]?.tools).toEqual([tool]);
+
+    // Run planifié sans la case mémoire : le gestionnaire le dit au projet.
+    const run = chats.create('/u/main', { projectId: 'p1', scheduledTaskId: 't1' });
+    await chats.runUnattended(run.id, 'Fais le point', {
+      requestPermission: () => Promise.resolve('deny'),
+      useSandbox: false,
+      memory: false,
+    });
+    expect(toolOptions.at(-1)).toEqual({ memory: false });
+    expect(toolOptions[0]).toEqual({ memory: true });
   });
 });
 
