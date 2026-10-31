@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { AtelierError, InMemoryToolRegistry, defineTool, mcpToolName } from '../src/index.js';
+import {
+  AtelierError,
+  InMemoryToolRegistry,
+  defineTool,
+  mcpToolName,
+  type ToolExecutionContext,
+} from '../src/index.js';
 
 const echo = defineTool({
   name: 'echo',
@@ -65,5 +71,49 @@ describe('ToolDefinition.describePermission', () => {
     expect(tool?.describePermission?.({ title: 'Bug login' }).title).toBe(
       "Créer l'issue « Bug login » sur GitHub",
     );
+  });
+});
+
+describe('ToolDefinition.precheck', () => {
+  const context: ToolExecutionContext = {
+    sessionId: 's1',
+    toolCallId: 'c1',
+    workspace: '/tmp/projet',
+    folders: [{ path: '/tmp/archives', label: 'Archives', access: 'read' }],
+    abortSignal: new AbortController().signal,
+    requestPermission: () => Promise.resolve('deny'),
+  };
+  const writeNote = defineTool({
+    name: 'write_note',
+    description: 'Écrit une note dans un dossier du projet.',
+    inputSchema: z.object({ folder: z.string(), text: z.string() }),
+    permission: 'always',
+    source: 'native',
+    precheck: ({ folder }, { folders }) =>
+      Promise.resolve(
+        folders?.some((f) => f.label === folder && f.access === 'read')
+          ? { ok: false, content: `Le dossier « ${folder} » est en lecture seule.` }
+          : undefined,
+      ),
+    execute: () => Promise.resolve({ ok: true, content: 'Écrit.' }),
+  });
+
+  it("reçoit l'entrée typée et le contexte, et rend l'échec à renvoyer au modèle", async () => {
+    await expect(writeNote.precheck?.({ folder: 'Archives', text: 'x' }, context)).resolves.toEqual(
+      { ok: false, content: 'Le dossier « Archives » est en lecture seule.' },
+    );
+  });
+
+  it('renvoie undefined pour laisser poser la question', async () => {
+    await expect(
+      writeNote.precheck?.({ folder: 'Compta', text: 'x' }, context),
+    ).resolves.toBeUndefined();
+  });
+
+  it('reste facultative : un outil sans vérification préalable est valide', () => {
+    const registry = new InMemoryToolRegistry([echo, writeNote]);
+    expect(registry.list((t) => t.precheck !== undefined).map((t) => t.name)).toEqual([
+      'write_note',
+    ]);
   });
 });

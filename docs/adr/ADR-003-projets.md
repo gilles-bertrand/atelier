@@ -1,6 +1,6 @@
 # ADR-003 : projets (dossiers multiples, consignes, mémoire, tâches planifiées et artefacts)
 
-- **Statut** : accepté. Gilles a validé le 2026-10-31 les options recommandées : D2 `~/Atelier/Projets`, D4 « l'agent propose, l'utilisateur valide », D5 artefacts interactifs isolés, et la livraison par un seul responsable (§5).
+- **Statut** : accepté. Gilles a validé le 2026-10-31 les options recommandées : D2 `~/Atelier/Projets`, D4 « l'agent propose, l'utilisateur valide », D5 artefacts interactifs isolés, et la livraison par un seul responsable (§5). Additif D9 (vérification préalable avant la modale de permission) décidé par l'architecte le 2026-10-31, après l'e2e de L5.
 - **Ticket** : #22 « Project Management Feature ». Liés : #24 (dossiers créés par l'app), #21 (dossier d'une conversation : « les dossiers servent-ils de mémoire ? »).
 - **Auteur** : fullstack
 - **Impact** : `packages/shared` (Lead), `packages/agent-core` et `packages/documents`, `packages/sandbox`, `apps/desktop` main et renderer, `qa/`
@@ -51,7 +51,7 @@ Les conversations **hors projet** ne changent pas : un dossier, la section « Do
   1. Un chemin relatif part du principal. S'il n'existe pas dans le principal et que son premier segment est le libellé d'un dossier rattaché, il part de ce dossier (« Compta/bilan.xlsx »). C'est la même tolérance que `skills/<nom>/…` (#60), utile à Qwen.
   2. Un chemin absolu côté hôte doit se trouver, une fois canonique (liens symboliques résolus), dans l'un des dossiers du projet.
   3. Un chemin VM (`/workspace/…`, `/dossiers/<x>/…`) est ramené au chemin hôte.
-  4. Les outils d'écriture (`write_file`, `edit_file`) refusent un dossier en lecture seule : « Le dossier « Archives » est en lecture seule. »
+  4. Les outils d'écriture (`write_file`, `edit_file`) refusent un dossier en lecture seule : « Le dossier « Archives » est en lecture seule. » Ce refus arrive avant la modale de permission (D9).
 - **Ce que voit le modèle.** Le prompt système liste les dossiers : libellé, chemin hôte, chemin VM et accès. `list_dir` à la racine du principal les rappelle.
 - **Fichiers produits.** Une carte hors du principal s'affiche `<libellé>/<chemin relatif>`. La photo des fichiers produits (#44) couvre tous les dossiers en écriture, sous le plafond commun de 5 000 entrées.
 - **Ouverture et aperçu.** Les dossiers des projets connus s'ajoutent aux lieux autorisés de `file:open`, `file:reveal` et `atelier-file:`.
@@ -248,6 +248,36 @@ CREATE TABLE artifact_versions (
 - **Concurrence.** L'enregistrement depuis la page du projet passe la révision lue (`baseRevision`). Si l'agent a écrit entre-temps, l'app répond `project/conflict` et la page propose de fusionner.
 - **Purge des runs** (ADR-002, 90 jours). Elle ne touche pas aux versions d'artefacts : celles-ci ont leur propre plafond de 30.
 
+### D9. Vérification préalable avant la modale (ajout du 2026-10-31, après L5)
+
+**Constat.** L'e2e de L5 le montre : une écriture dans un dossier en lecture seule ouvre d'abord la modale « Écrire le fichier Archives/… ». L'utilisateur accepte, puis l'outil refuse. En effet, `executeTool` pose la question avant d'appeler `execute`, et les contrôles de chemin vivent dans `execute`. Le défaut est antérieur aux projets : `edit_file` demande aussi l'accord pour un fichier absent ou pour un `old_str` introuvable, ce qui arrive souvent avec Qwen. Les dossiers en lecture seule le rendent visible dans le parcours normal.
+
+**Pourquoi le corriger.** Une question dont la réponse ne change rien use l'attention de l'utilisateur. À force d'accepter des modales inutiles, il accepte sans lire, et la modale perd sa valeur de garde (brief §8).
+
+**Décision.** Le contrat gagne une méthode facultative, `ToolDefinition.precheck?(input, context)`.
+
+- `executeTool` l'appelle avant la demande de permission, pour les outils `always` seulement. Un échec (`ToolPrecheckFailure`, `ok: false`) est rendu au modèle tel quel : ni modale, ni exécution, ni `denied`, puisque l'utilisateur n'a rien refusé.
+- Elle ne modifie rien. Ce n'est pas une garde de sécurité : l'état peut changer pendant que la modale est ouverte, et `execute` refait tous ses contrôles. Une exception vaut « continuer » : la question est posée, puis `execute` décide. Seule l'annulation du tour est propagée.
+- Outils concernés :
+  - `write_file` : chemin hors des dossiers, dossier en lecture seule, racine des skills ;
+  - `edit_file` : les mêmes cas, plus un fichier absent et un `old_str` absent ou en plusieurs exemplaires ;
+  - `memory_add` et `memory_rewrite` : note ou contenu vides.
+
+  Une même fonction sert à `precheck` et à `execute`, pour que les messages soient identiques.
+
+- Runs planifiés : l'échec arrive avant le gestionnaire sans surveillance. Il n'apparaît donc pas parmi les actions refusées du tableau de bord. C'est voulu : le refus ne vient pas des droits de la tâche.
+
+**Options écartées.**
+
+- **Passer `write_file` et `edit_file` en `conditional`**, en posant la question dans `execute` après les contrôles. Aucun changement de contrat, mais la question sort du code central : un outil qui oublierait de la poser écrirait sans accord. Avec `precheck`, une seule porte pose la question.
+- **Rendre `describePermission` asynchrone pour qu'il lise le disque.** Libellé et validation sont deux rôles distincts, et un libellé en échec ne dit pas s'il faut refuser l'appel.
+- **Ne rien changer**, puisque le prompt signale déjà les dossiers en lecture seule. Le modèle s'y trompe quand même, l'e2e le reproduit, et la modale inutile demeure.
+
+**Hors champ.**
+
+- `bash` ne peut pas savoir à l'avance qu'une commande écrira dans `/dossiers/Archives`. La VM la refuse (« Read-only file system »).
+- Les outils MCP n'ont pas de vérification préalable : le serveur distant décide.
+
 ## 4. Contrat `packages/shared` (demande au Lead)
 
 Tout est **nouveau ou optionnel**, sauf deux unions qui gagnent un membre : `ToolDisplay` (`artifact`) et `PermissionKind` (`memory_write`). Les `switch` exhaustifs sur ces deux unions sont à compléter : renderer (`ToolDisplays`, modale de permission), `chat-reducer`, CLI d'agent-core et `unattendedPermissionHandler`.
@@ -398,6 +428,14 @@ Précisions apportées par la PR de L0 (`feat/lead-shared-projects`) :
 - **Nouveaux éléments** : le canal `artifact:get` (carte du chat → visionneuse) et `deleted?` dans `artifact:changed`.
 - **Le main compte toujours sur l'IPC partiel** (`IpcHandlers`) : un canal pas encore branché répond `internal`, comme pour ADR-002.
 
+Ajout après L5 (D9), PR `feat/lead-shared-tool-precheck` :
+
+```ts
+// tools.ts
+export interface ToolPrecheckFailure { ok: false; content: string }
+ToolDefinition.precheck?(input: I, context: ToolExecutionContext): Promise<ToolPrecheckFailure | undefined>;
+```
+
 ## 5. Répartition
 
 | Lot | Contenu                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | Dépend de  |
@@ -408,6 +446,7 @@ Précisions apportées par la PR de L0 (`feat/lead-shared-projects`) :
 | L3  | **main** : migration n° 5 ; `ProjectStore`, `MemoryStore`, `ArtifactStore` (SQLite et mémoire) ; création du dossier du projet ; protocole `atelier-artifact:` et garde `will-frame-navigate` ; Chart.js servi localement ; handlers IPC ; `ChatManager` et `AgentRuntimeHost` passent le contexte de projet par session ; bail sur la signature des montages ; photo multi-dossiers ; lieux autorisés de l'ouverture et de l'aperçu ; tâches de projet ; « Créer un projet à partir de ce dossier ». | L0, L1, L2 |
 | L4  | **renderer** : section Projets, page du projet et ses onglets, modale de création, visionneuse d'artefacts et sélecteur de version, carte d'artefact dans le chat, pastille de projet, champ Projet et case mémoire dans le formulaire de tâche, modale `memory_write`, Réglages (`projectsDir`).                                                                                                                                                                                                     | L0, L3     |
 | L5  | **QA** : e2e en mode mock (§7) ; scénario réel « tableau de bord hebdo » dans `docs/QA.md`.                                                                                                                                                                                                                                                                                                                                                                                                           | L4         |
+| L6  | **Vérification préalable** (D9) : contrat shared (Lead) ; `executeTool`, `write_file`, `edit_file`, `memory_add` et `memory_rewrite` (agent-core) ; e2e « écriture dans Archives refusée sans modale ».                                                                                                                                                                                                                                                                                               | L5         |
 
 **Livraison (validée le 2026-10-31) : un seul responsable.**
 
@@ -416,6 +455,7 @@ Précisions apportées par la PR de L0 (`feat/lead-shared-projects`) :
 - Core et UI relisent les PR de leur périmètre.
 - Raison : les lots touchent les mêmes contrats (chemins, montages, contexte de session), et un seul auteur les garde cohérents.
 - Option écartée, la répartition par rôle comme ADR-002 : chaque agent aurait dû être relancé par Gilles, et la coordination aurait coûté des allers-retours.
+- L6, ajouté après L5, est livré par l'architecte : une PR shared, puis une PR agent-core relue par Core. fullstack reste sur la fusion de L5 et le scénario réel.
 
 ## 6. Sécurité (brief §8)
 
@@ -433,6 +473,11 @@ Précisions apportées par la PR de L0 (`feat/lead-shared-projects`) :
   - Prompt : sections dossiers, consignes, mémoire (troncature à 8 000 caractères avec la note) et artefacts.
   - Outils : `memory_add` (ligne datée, permission `memory_write`, refus) ; `publish_artifact` (fichier absent, hors des dossiers, extension refusée, trop gros, même chemin = nouvelle version).
   - `unattendedPermissionHandler` : `memory_write` accordé seulement avec `memory: true`.
+  - Vérification préalable (D9) :
+    - aucune demande de permission pour une écriture en lecture seule, un chemin hors des dossiers, ni un `edit_file` sur un fichier absent ou un passage absent ;
+    - un échec de `precheck` est rendu sans `denied` ;
+    - une exception dans `precheck` laisse poser la question ;
+    - si l'état change pendant la modale, `execute` refuse quand même.
 - **documents** : `read_file` et `look_at` dans un dossier rattaché ; pièce jointe dans le principal.
 - **sandbox** : expression des montages ; `mountsMatch` avec dossiers rattachés ; lecture seule ; `toGuestPath` et `toHostPath` pour `/dossiers/x` ; refus des dossiers interdits.
 - **main**
@@ -446,7 +491,7 @@ Précisions apportées par la PR de L0 (`feat/lead-shared-projects`) :
   - Session de run avec `projectId` ; suppression d'un projet sans toucher au disque ; « Créer un projet à partir de ce dossier ».
 - **renderer** (fausse `window.atelier`) : section Projets ; création ; onglets ; mémoire (édition, conflit, historique) ; visionneuse (iframe `sandbox="allow-scripts"` sans `allow-same-origin`, sélecteur de version) ; carte d'artefact dans le chat ; formulaire de tâche avec le projet.
 - **e2e mock**
-  - Créer un projet avec un dossier rattaché en écriture et un en lecture seule. L'agent écrit dans le premier, et l'écriture dans le second est refusée.
+  - Créer un projet avec un dossier rattaché en écriture et un en lecture seule. L'agent écrit dans le premier, et l'écriture dans le second est refusée, sans modale (D9).
   - La mémoire écrite dans une conversation apparaît dans le prompt de la suivante.
   - Une tâche du projet, exécutée deux fois, publie la même page en v1 puis en v2, visible dans l'onglet Artefacts.
 - `pnpm test && pnpm lint && pnpm typecheck` verts.
