@@ -13,6 +13,7 @@ import {
   type AnyToolDefinition,
   type ToolExecutionContext,
   type ToolOutput,
+  type ToolPrecheckContext,
   type ToolPrecheckFailure,
 } from '@atelier/shared';
 import { resolveFolderPath, type ReadRoot, type ResolvedFolderPath } from '../paths.js';
@@ -213,7 +214,7 @@ type EditPlan =
  * {@link guarded}.
  */
 async function planEdit(
-  context: ToolExecutionContext,
+  context: ToolPrecheckContext,
   input: { path: string; old_str: string },
 ): Promise<EditPlan> {
   const resolved = await resolveFolderPath(context, input.path, { write: true });

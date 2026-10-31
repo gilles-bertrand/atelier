@@ -90,6 +90,16 @@ export interface ToolOutput {
 }
 
 /**
+ * Contexte d'une vérification préalable ({@link ToolDefinition.precheck}) : celui
+ * de l'exécution, sans ce qui permet d'agir ou de demander (permission, affichage,
+ * VM). « Ne demande rien, ne modifie rien » est ainsi vérifié par les types.
+ */
+export type ToolPrecheckContext = Omit<
+  ToolExecutionContext,
+  'requestPermission' | 'emitDisplay' | 'sandbox'
+>;
+
+/**
  * Échec d'une vérification préalable ({@link ToolDefinition.precheck}) : l'appel
  * échouerait de toute façon. Il est rendu au modèle comme un résultat d'outil en
  * échec. Ce n'est pas un refus de l'utilisateur, d'où l'absence de `denied`.
@@ -148,7 +158,7 @@ export interface ToolDefinition<I = unknown> {
    * Ignorée pour `never` et `conditional` : ces outils ordonnent leurs contrôles
    * eux-mêmes dans `execute`.
    */
-  precheck?(input: I, context: ToolExecutionContext): Promise<ToolPrecheckFailure | undefined>;
+  precheck?(input: I, context: ToolPrecheckContext): Promise<ToolPrecheckFailure | undefined>;
   /**
    * Exécute l'outil. Ne doit lever que pour des erreurs inattendues : les cas
    * métier (refus, fichier introuvable…) renvoient `{ ok: false, content }`.
