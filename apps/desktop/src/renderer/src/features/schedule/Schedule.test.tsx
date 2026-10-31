@@ -178,6 +178,19 @@ describe('tableau de bord des tâches planifiées', () => {
   });
 });
 
+describe('notification de fin de run', () => {
+  it('`app:open-session` ouvre la conversation du run, même hors des « Récentes »', async () => {
+    const api = setup();
+    render(<App />);
+    await screen.findByRole('button', { name: 'Tâches planifiées' });
+    act(() => {
+      api.emit('app:open-session', { sessionId: 'run-s1' });
+    });
+    expect(await screen.findByRole('note', { name: 'Exécution planifiée' })).toBeInTheDocument();
+    expect(api.callsTo('session:open')).toContainEqual({ sessionId: 'run-s1' });
+  });
+});
+
 describe('formulaire de tâche', () => {
   it('aperçu des prochaines exécutions, validation, cases, enregistrement', async () => {
     const api = setup();

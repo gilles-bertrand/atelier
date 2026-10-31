@@ -113,6 +113,15 @@ function WorkspaceViews() {
     [open],
   );
 
+  // Clic sur la notification de fin d'un run (ADR-002 D7) : sa conversation s'ouvre.
+  useEffect(
+    () =>
+      atelier().on('app:open-session', ({ sessionId }) => {
+        openSessionById(sessionId);
+      }),
+    [openSessionById],
+  );
+
   /** « Autoriser pour cette tâche » : formulaire de la tâche, cases des refus pré-cochées. */
   const authorizeTask = useCallback((taskId: string, denied: DeniedAction[]): void => {
     call('schedule:list').then(
