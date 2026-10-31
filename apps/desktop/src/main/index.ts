@@ -491,13 +491,28 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
 let shutdown: (() => Promise<void>) | undefined;
 let quitting = false;
 
+// Une seule instance par dossier de données : une deuxième partagerait la VM
+// et l'arrêterait en quittant (`limactl stop`), en pleine session de la
+// première. Elle s'efface au profit de la fenêtre existante.
+const primaryInstance = app.requestSingleInstanceLock();
+if (!primaryInstance) app.exit(0);
+
+let revealRequested = false;
+app.on('second-instance', () => {
+  if (quitting) return;
+  // Démarrage en cours : la fenêtre s'ouvrira à la fin de `bootstrap`.
+  if (shutdown) revealWindow();
+  else revealRequested = true;
+});
+
 void app.whenReady().then(async () => {
+  if (!primaryInstance) return;
   app.setName('Atelier');
   installContentSecurityPolicy();
   ({ shutdown } = await bootstrap());
   // Ouverte à la connexion (tâches planifiées) : l'app tourne sans fenêtre ;
   // l'icône du Dock (`activate`) ou une notification l'affichent.
-  if (!app.getLoginItemSettings().wasOpenedAtLogin) createMainWindow();
+  if (!app.getLoginItemSettings().wasOpenedAtLogin || revealRequested) createMainWindow();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
