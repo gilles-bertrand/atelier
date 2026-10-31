@@ -20,6 +20,21 @@ export interface McpServerStatus {
   error?: string;
   /** Tentatives de reconnexion consécutives. */
   reconnectAttempts: number;
+  /** Outils publiés par le serveur (absent tant que le serveur n'est pas connecté). */
+  tools?: McpToolInfo[];
+}
+
+/** Outil publié par un serveur MCP (choix outil par outil des tâches planifiées, ADR-002 D4). */
+export interface McpToolInfo {
+  /** Nom complet `mcp__<serveur>__<outil>` : la `scopeKey` des demandes de permission. */
+  name: string;
+  /** Titre lisible annoncé par le serveur. */
+  title?: string;
+  /**
+   * `readOnlyHint` du serveur : déclaratif, non vérifiable. Un outil en lecture
+   * ne demande pas de permission ; seuls les autres se cochent dans le formulaire.
+   */
+  readOnly: boolean;
 }
 
 /** Problème de configuration d'un serveur dans `mcp.json` (serveur ignoré). */
