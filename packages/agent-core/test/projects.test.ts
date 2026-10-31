@@ -3,7 +3,7 @@
  * (dossiers, consignes, mémoire, artefacts), outils de mémoire et de
  * publication, politique des runs planifiés.
  */
-import { mkdir, readFile, realpath, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, realpath, symlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import {
@@ -853,6 +853,59 @@ describe('vérification préalable avant la modale (ADR-003, D9)', () => {
       expect(requests).toHaveLength(1);
       expect(out.ok).toBe(false);
       await expect(readFile(path.join(p.archives, 'piege.md'))).rejects.toThrow();
+    });
+  });
+
+  it('precheck ne modifie rien : ni dossier créé, ni fichier changé', async () => {
+    await withProject(async (p) => {
+      const context = ctx(p);
+      // write_file : dossiers parents absents, que seule l'exécution crée.
+      await expect(
+        writeFileTool.precheck?.({ path: 'Compta/nouveau/sous/a.md', content: 'x' }, context),
+      ).resolves.toBeUndefined();
+      expect(await readdir(p.compta)).toEqual([]);
+      // edit_file : remplacement possible, fichier inchangé.
+      await writeFile(path.join(p.primary, 'f.txt'), 'alpha\n');
+      await expect(
+        editFileTool.precheck?.({ path: 'f.txt', old_str: 'alpha', new_str: 'beta' }, context),
+      ).resolves.toBeUndefined();
+      expect(await readFile(path.join(p.primary, 'f.txt'), 'utf8')).toBe('alpha\n');
+    });
+  });
+
+  it('run planifié : la vérification s’applique aussi, sans « action refusée » pour un échec certain', async () => {
+    await withProject(async (p) => {
+      const denied: DeniedAction[] = [];
+      const runtime: ToolRuntime = {
+        sessionId: 's',
+        workspace: p.primary,
+        folders: p.folders,
+        abortSignal: new AbortController().signal,
+        requestPermission: unattendedPermissionHandler(
+          { fileWrite: false, commands: false, webDomains: [], mcpTools: [] },
+          (d) => denied.push(d),
+        ),
+      };
+      // Lecture seule : aucun droit de la tâche n'y changerait rien, rien n'est compté.
+      const readOnly = await executeTool(
+        writeFileTool,
+        { path: 'Archives/x.md', content: 'x' },
+        'c1',
+        runtime,
+      );
+      expect(readOnly.content).toContain('« Archives » est en lecture seule');
+      expect(denied).toEqual([]);
+      // Écriture possible mais non accordée par la tâche : action refusée, comme avant.
+      const notGranted = await executeTool(
+        writeFileTool,
+        { path: 'Compta/x.md', content: 'x' },
+        'c2',
+        runtime,
+      );
+      expect(notGranted).toMatchObject({ ok: false, denied: true });
+      expect(denied).toMatchObject([
+        { toolName: 'write_file', title: 'Écrire le fichier Compta/x.md' },
+      ]);
     });
   });
 
