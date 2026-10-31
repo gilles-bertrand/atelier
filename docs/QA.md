@@ -240,6 +240,8 @@ Branche `feat/qa-projects` (pile L0 à L4 : PR #121 à #125). Spec : `qa/e2e/pro
 
 Suite e2e mock complète : 18 réussis, 3 ignorés (mode réel).
 
+Compromis accepté par le Lead (31/10) : un artefact qui tente de rediriger son cadre vers le web perd son affichage, car Chromium y montre sa page d'erreur. Aucune requête ne sort, et la page reste lisible depuis le fichier source.
+
 ### Réel : « tableau de bord hebdo » (à jouer)
 
 Pas encore joué : l'Ollama local est partagé avec les autres campagnes. Procédure à suivre :
