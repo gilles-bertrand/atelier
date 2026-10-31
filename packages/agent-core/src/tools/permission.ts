@@ -11,9 +11,10 @@ import {
   type AnyToolDefinition,
   type PermissionDecision,
   type PermissionDescription,
+  type DeniedAction,
   type PermissionHandler,
-  type PermissionKind,
   type PermissionRequest,
+  type ScheduledPermissions,
   type ToolExecutionContext,
   type ToolOutput,
 } from '@atelier/shared';
@@ -146,27 +147,6 @@ export function withSessionMemory(handler: PermissionHandler): PermissionHandler
     if (decision === 'allow_session') granted.add(key);
     return decision;
   };
-}
-
-/**
- * Politique d'une tâche planifiée : ce qu'elle a le droit de faire sans
- * l'utilisateur (ADR-002 §3). Type local en attendant `@atelier/shared` (lot L0).
- */
-export interface ScheduledPermissions {
-  fileWrite: boolean;
-  commands: boolean;
-  /** `'*'` = tous les domaines ; liste vide = pas d'accès aux pages web. */
-  webDomains: '*' | string[];
-  /** Noms complets `mcp__<serveur>__<outil>` autorisés en écriture. */
-  mcpTools: string[];
-}
-
-/** Action refusée pendant un run planifié (ADR-002 §3). Type local en attendant L0. */
-export interface DeniedAction {
-  toolName: string;
-  kind: PermissionKind;
-  scopeKey: string;
-  title: string;
 }
 
 /**

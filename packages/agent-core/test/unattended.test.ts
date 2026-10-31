@@ -2,15 +2,18 @@
 import { access } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import type { PermissionKind, PermissionRequest } from '@atelier/shared';
+import type {
+  DeniedAction,
+  PermissionKind,
+  PermissionRequest,
+  ScheduledPermissions,
+} from '@atelier/shared';
 import {
   Agent,
   createAgentRuntime,
   createDefaultRegistry,
   UNATTENDED_INSTRUCTIONS,
   unattendedPermissionHandler,
-  type DeniedAction,
-  type ScheduledPermissions,
 } from '../src/index.js';
 import { collect, permissions, promptText, scriptedModel, withTempDir } from './helpers.js';
 

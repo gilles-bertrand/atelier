@@ -177,11 +177,7 @@ export {
   unattendedPermissionHandler,
   withSessionMemory,
 } from './tools/permission.js';
-export type {
-  DeniedAction,
-  PermissionDescriber,
-  ScheduledPermissions,
-} from './tools/permission.js';
+export type { PermissionDescriber } from './tools/permission.js';
 export { globToRegExp } from './tools/fs-utils.js';
 export { DEFAULT_MAX_OUTPUT_BYTES, truncateOutput } from './tools/text.js';
 export { LocalSandbox } from './local-sandbox.js';
