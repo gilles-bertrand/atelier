@@ -5,7 +5,7 @@
  * conversation en arrière-plan).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { DeniedAction, SessionSummary } from '@atelier/shared';
+import type { DeniedAction, Project, ProjectSummary, SessionSummary } from '@atelier/shared';
 import { HistoryBanner } from '@renderer/components/status/HistoryBanner';
 import { Alert } from '@renderer/components/ui/primitives';
 import { atelier, call, toSerializedError } from '@renderer/lib/api';
@@ -14,6 +14,8 @@ import { ChatProvider, useChat } from '@renderer/state/chat-store';
 import { ChatView } from './chat/ChatView';
 import { PermissionDialog } from './chat/PermissionDialog';
 import { Home } from './home/Home';
+import { NewProjectDialog } from './projects/NewProjectDialog';
+import { ProjectView } from './projects/ProjectView';
 import { ScheduleView, type FormRequest } from './schedule/ScheduleView';
 import { Settings } from './settings/Settings';
 import { sessionActivity } from './sidebar/activity';
@@ -61,6 +63,10 @@ function WorkspaceViews() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   // Tâches planifiées (ADR-002 D7) : tableau de bord, ou formulaire demandé par un run.
   const [schedule, setSchedule] = useState<{ request?: FormRequest } | undefined>();
+  // Projets (ADR-003) : liste de la colonne, page affichée, modale de création.
+  const [projects, setProjects] = useState<ProjectSummary[] | undefined>();
+  const [projectPage, setProjectPage] = useState<string | undefined>();
+  const [creatingProject, setCreatingProject] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   // ⌘K avec la colonne masquée : le champ n'existe qu'après son affichage.
   const pendingSearchFocus = useRef(false);
@@ -83,6 +89,27 @@ function WorkspaceViews() {
     void refresh();
   }, [refresh]);
 
+  const refreshProjects = useCallback(
+    (): Promise<void> =>
+      call('project:list', {}).then(
+        (list) => {
+          setProjects(list);
+        },
+        () => {
+          setProjects((list) => list ?? []);
+        },
+      ),
+    [],
+  );
+
+  useEffect(() => {
+    void refreshProjects();
+    return atelier().on('project:changed', () => {
+      void refreshProjects();
+      void refresh();
+    });
+  }, [refreshProjects, refresh]);
+
   // Fin d'un tour : titre et date d'activité ont pu changer côté main.
   useEffect(
     () =>
@@ -95,7 +122,14 @@ function WorkspaceViews() {
   const open = useCallback((session: SessionSummary): void => {
     setSettingsOpen(false);
     setSchedule(undefined);
+    setProjectPage(undefined);
     setCurrent(session);
+  }, []);
+
+  const openProject = useCallback((projectId: string): void => {
+    setSettingsOpen(false);
+    setSchedule(undefined);
+    setProjectPage(projectId);
   }, []);
 
   /** Conversation d'un run (absente des « Récentes ») ouverte depuis le tableau de bord. */
@@ -132,6 +166,7 @@ function WorkspaceViews() {
           return;
         }
         setSettingsOpen(false);
+        setProjectPage(undefined);
         setSchedule({ request: { task, denied } });
       },
       (e: unknown) => {
@@ -142,12 +177,15 @@ function WorkspaceViews() {
 
   const { showFolder } = sidebar;
   const newConversation = useCallback(
-    async (workspace: string): Promise<void> => {
+    async (workspace: string, projectId?: string): Promise<void> => {
       setError(undefined);
       try {
-        const session = await call('session:create', { workspace });
+        const session = await call('session:create', {
+          workspace,
+          ...(projectId !== undefined ? { projectId } : {}),
+        });
         setSessions((list) => upsert(list ?? [], session));
-        showFolder(workspace);
+        if (projectId === undefined) showFolder(workspace);
         open(session);
       } catch (e) {
         setError(errorMessage(toSerializedError(e)));
@@ -166,11 +204,51 @@ function WorkspaceViews() {
     }
   }, [newConversation]);
 
-  // ⌘N : dans le dossier de la conversation ouverte, sinon choix d'un dossier.
+  /** Nouvelle conversation dans un projet, dans son dossier principal. */
+  const newInProject = useCallback(
+    (project: Pick<Project, 'id' | 'folders'>): void => {
+      const primary = project.folders[0]?.path;
+      if (primary !== undefined) void newConversation(primary, project.id);
+    },
+    [newConversation],
+  );
+
+  // ⌘N : dans le projet affiché ou celui de la conversation ouverte, sinon dans
+  // son dossier, sinon choix d'un dossier.
   const newFromShortcut = useCallback((): void => {
-    if (current) void newConversation(current.workspace);
+    const pageProject = projects?.find((p) => p.id === projectPage);
+    if (pageProject) newInProject(pageProject);
+    else if (current?.projectId !== undefined) {
+      void newConversation(current.workspace, current.projectId);
+    } else if (current) void newConversation(current.workspace);
     else void chooseFolder();
-  }, [current, newConversation, chooseFolder]);
+  }, [current, newConversation, newInProject, chooseFolder, projects, projectPage]);
+
+  /** « Créer un projet à partir de ce dossier » : ses conversations rejoignent le projet. */
+  const projectFromFolder = useCallback(
+    async (workspace: string): Promise<void> => {
+      setError(undefined);
+      try {
+        const project = await call('project:from-folder', { workspace });
+        await Promise.all([refresh(), refreshProjects()]);
+        openProject(project.id);
+      } catch (e) {
+        setError(errorMessage(toSerializedError(e)));
+      }
+    },
+    [refresh, refreshProjects, openProject],
+  );
+
+  const projectAction = (task: () => Promise<unknown>): void => {
+    setError(undefined);
+    task().catch((e: unknown) => {
+      setError(errorMessage(toSerializedError(e)));
+    });
+  };
+  const currentProject =
+    current?.projectId !== undefined
+      ? projects?.find((p) => p.id === current.projectId)
+      : undefined;
 
   const remove = async (session: SessionSummary): Promise<void> => {
     setError(undefined);
@@ -237,6 +315,28 @@ function WorkspaceViews() {
               current={current}
               settingsActive={settingsOpen}
               scheduleActive={schedule !== undefined && !settingsOpen}
+              projects={projects}
+              projectActiveId={settingsOpen || schedule !== undefined ? undefined : projectPage}
+              onOpenProject={(project) => {
+                openProject(project.id);
+              }}
+              onNewProject={() => {
+                setCreatingProject(true);
+              }}
+              onNewInProject={newInProject}
+              onArchiveProject={(project) => {
+                projectAction(async () => {
+                  await call('project:set-archived', { id: project.id, archived: true });
+                  await refreshProjects();
+                });
+              }}
+              onRevealProject={(project) => {
+                const primary = project.folders[0]?.path;
+                if (primary !== undefined) {
+                  projectAction(() => call('file:reveal', { absolutePath: primary }));
+                }
+              }}
+              onProjectFromFolder={(workspace) => void projectFromFolder(workspace)}
               hiddenFolders={sidebar.hiddenFolders}
               searchRef={searchRef}
               onNewConversation={newFromShortcut}
@@ -250,6 +350,7 @@ function WorkspaceViews() {
               }}
               onOpenSchedule={() => {
                 setSettingsOpen(false);
+                setProjectPage(undefined);
                 setSchedule({});
               }}
               onCollapse={toggleSidebar}
@@ -265,9 +366,34 @@ function WorkspaceViews() {
             ) : schedule ? (
               <ScheduleView
                 // Nouvelle demande (« Autoriser… ») : le formulaire repart de zéro.
-                key={schedule.request ? `form-${schedule.request.task?.id ?? 'new'}` : 'dashboard'}
+                key={
+                  schedule.request
+                    ? `form-${schedule.request.task?.id ?? `new-${schedule.request.projectId ?? ''}`}`
+                    : 'dashboard'
+                }
                 onOpenSession={openSessionById}
                 {...(schedule.request ? { request: schedule.request } : {})}
+              />
+            ) : projectPage !== undefined ? (
+              <ProjectView
+                key={projectPage}
+                projectId={projectPage}
+                onOpenSession={open}
+                onNewConversation={newInProject}
+                onNewTask={(project) => {
+                  setProjectPage(undefined);
+                  setSchedule({ request: { projectId: project.id } });
+                }}
+                onOpenTask={(task) => {
+                  setProjectPage(undefined);
+                  setSchedule({ request: { task } });
+                }}
+                onDeleted={() => {
+                  setProjectPage(undefined);
+                  if (current?.projectId === projectPage) setCurrent(undefined);
+                  void refresh();
+                  void refreshProjects();
+                }}
               />
             ) : current ? (
               <ChatView
@@ -283,6 +409,14 @@ function WorkspaceViews() {
                   setSessions((list) => list?.map((s) => (s.id === updated.id ? updated : s)));
                 }}
                 onAuthorizeTask={authorizeTask}
+                {...(currentProject
+                  ? {
+                      project: currentProject,
+                      onOpenProject: () => {
+                        openProject(currentProject.id);
+                      },
+                    }
+                  : {})}
               />
             ) : (
               <Home onChooseFolder={chooseFolder} />
@@ -295,6 +429,18 @@ function WorkspaceViews() {
           </div>
         ) : null}
         <PendingPermission current={current} />
+        {creatingProject ? (
+          <NewProjectDialog
+            onCancel={() => {
+              setCreatingProject(false);
+            }}
+            onCreated={(project) => {
+              setCreatingProject(false);
+              void refreshProjects();
+              openProject(project.id);
+            }}
+          />
+        ) : null}
       </div>
     </ShellChromeProvider>
   );

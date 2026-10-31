@@ -47,7 +47,8 @@ const PERIODS: { id: UsagePeriod; label: string }[] = [
 ];
 
 /** Formulaire ouvert : nouvelle tâche, modification, ou « Autoriser pour cette tâche ». */
-export type FormRequest = { task?: ScheduledTask; denied?: DeniedAction[] };
+/** Formulaire demandé : une tâche à modifier, des refus à autoriser, ou un projet présélectionné. */
+export type FormRequest = { task?: ScheduledTask; denied?: DeniedAction[]; projectId?: string };
 
 export function RunStatus({ run }: { run: Pick<ScheduledRun, 'status' | 'skipReason'> }) {
   return (
@@ -586,6 +587,7 @@ export function ScheduleView({
             <TaskForm
               {...(form.task ? { task: form.task } : {})}
               {...(form.denied ? { denied: form.denied } : {})}
+              {...(form.projectId !== undefined ? { projectId: form.projectId } : {})}
               onDone={(_task, created) => {
                 setForm(undefined);
                 if (created) setProposeLogin(true);

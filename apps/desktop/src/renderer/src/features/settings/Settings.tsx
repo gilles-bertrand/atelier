@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   Box,
   CalendarClock,
+  FolderKanban,
   ChartColumn,
   Globe,
   Plug,
@@ -17,6 +18,7 @@ import { headerInset, SidebarOpenButton, useShellChrome } from '../sidebar/shell
 import { useApp } from '@renderer/state/app-state';
 import { McpSettings, SkillsSettings } from './ExtensionsSettings';
 import { SandboxSettings } from './SandboxSettings';
+import { ProjectsSettings } from './ProjectsSettings';
 import { ScheduleSettings } from './ScheduleSettings';
 import { SearchSettings } from './SearchSettings';
 import { ServerSettings } from './ServerSettings';
@@ -27,6 +29,7 @@ const SECTIONS = [
   { id: 'usage', label: 'Utilisation', icon: ChartColumn },
   { id: 'sandbox', label: 'Machine isolée', icon: Box },
   { id: 'schedule', label: 'Tâches planifiées', icon: CalendarClock },
+  { id: 'projects', label: 'Projets', icon: FolderKanban },
   { id: 'search', label: 'Recherche web', icon: Globe },
   { id: 'skills', label: 'Skills', icon: Sparkles },
   { id: 'mcp', label: 'Connecteurs', icon: Plug },
@@ -106,6 +109,7 @@ export function Settings({ onClose }: { onClose: () => void }) {
             {section === 'usage' ? <UsageSettings /> : null}
             {section === 'sandbox' ? <SandboxSettings /> : null}
             {section === 'schedule' ? <ScheduleSettings /> : null}
+            {section === 'projects' ? <ProjectsSettings /> : null}
             {section === 'search' ? <SearchSettings /> : null}
             {section === 'skills' ? <SkillsSettings /> : null}
             {section === 'mcp' ? <McpSettings /> : null}

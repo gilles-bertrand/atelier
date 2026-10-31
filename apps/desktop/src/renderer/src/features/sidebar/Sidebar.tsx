@@ -1,12 +1,16 @@
 /**
  * Colonne de gauche : nouvelle conversation, recherche par titre, conversations
- * récentes, dossiers dépliables, puis en pied l'environnement et les réglages.
+ * récentes, projets (ADR-003) et dossiers dépliables, puis en pied les tâches
+ * planifiées, l'environnement et les réglages.
  */
 import { useId, useMemo, useState, type RefObject } from 'react';
 import {
+  Archive,
   ChevronRight,
   EyeOff,
   Folder,
+  FolderKanban,
+  FolderOpen,
   FolderPlus,
   Loader2,
   MessageSquarePlus,
@@ -16,7 +20,7 @@ import {
   Search,
   Settings,
 } from 'lucide-react';
-import type { SessionSummary } from '@atelier/shared';
+import type { ProjectSummary, SessionSummary } from '@atelier/shared';
 import { Button } from '@renderer/components/ui/button';
 import { fileName } from '@renderer/lib/tool-labels';
 import { cn } from '@renderer/lib/utils';
@@ -42,7 +46,10 @@ export interface FolderGroup {
   sessions: SessionSummary[];
 }
 
-/** Regroupe par dossier, le dossier le plus récemment actif en premier. */
+/**
+ * Regroupe par dossier les conversations hors projet (celles d'un projet sont
+ * dans la section Projets), le dossier le plus récemment actif en premier.
+ */
 export function groupByFolder(
   sessions: readonly SessionSummary[],
   hidden: readonly string[] = [],
@@ -50,7 +57,7 @@ export function groupByFolder(
   const groups = new Map<string, SessionSummary[]>();
   const sorted = [...sessions].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   for (const session of sorted) {
-    if (hidden.includes(session.workspace)) continue;
+    if (session.projectId !== undefined || hidden.includes(session.workspace)) continue;
     const list = groups.get(session.workspace);
     if (list) list.push(session);
     else groups.set(session.workspace, [session]);
@@ -83,6 +90,14 @@ export function Sidebar({
   onOpenSchedule,
   onCollapse,
   activity,
+  projects,
+  projectActiveId,
+  onOpenProject,
+  onNewProject,
+  onNewInProject,
+  onArchiveProject,
+  onRevealProject,
+  onProjectFromFolder,
 }: {
   /** `undefined` pendant le chargement. */
   sessions: readonly SessionSummary[] | undefined;
@@ -104,15 +119,28 @@ export function Sidebar({
   /** Absent : pas d'entrée « Tâches planifiées ». */
   onOpenSchedule?: () => void;
   onCollapse: () => void;
+  /** Projets non archivés (ADR-003) ; absent : pas de section Projets. */
+  projects?: readonly ProjectSummary[] | undefined;
+  /** Projet dont la page est affichée. */
+  projectActiveId?: string | undefined;
+  onOpenProject?: (project: ProjectSummary) => void;
+  onNewProject?: () => void;
+  onNewInProject?: (project: ProjectSummary) => void;
+  onArchiveProject?: (project: ProjectSummary) => void;
+  onRevealProject?: (project: ProjectSummary) => void;
+  /** « Créer un projet à partir de ce dossier ». */
+  onProjectFromFolder?: (workspace: string) => void;
 }) {
   const { state } = useApp();
   const [query, setQuery] = useState('');
   // Dépliage choisi par l'utilisateur ; par défaut, seul le dossier courant est déplié.
   const [unfolded, setUnfolded] = useState<ReadonlyMap<string, boolean>>(new Map());
   const recentId = useId();
+  const projectsId = useId();
   const foldersId = useId();
   const resultsId = useId();
-  const currentId = settingsActive || scheduleActive ? undefined : current?.id;
+  const currentId =
+    settingsActive || scheduleActive || projectActiveId !== undefined ? undefined : current?.id;
 
   const folders = useMemo(
     () => groupByFolder(sessions ?? [], hiddenFolders),
@@ -126,6 +154,10 @@ export function Sidebar({
 
   const isUnfolded = (workspace: string): boolean =>
     unfolded.get(workspace) ?? workspace === current?.workspace;
+  // Projets : dépliés par défaut quand la conversation ouverte en fait partie.
+  const projectKey = (id: string): string => `project:${id}`;
+  const isProjectUnfolded = (id: string): boolean =>
+    unfolded.get(projectKey(id)) ?? current?.projectId === id;
 
   const toggleFolder = (workspace: string): void => {
     setUnfolded((map) => new Map(map).set(workspace, !isUnfolded(workspace)));
@@ -232,6 +264,150 @@ export function Sidebar({
               )}
             </section>
 
+            {projects && onOpenProject ? (
+              <section aria-labelledby={projectsId} className="space-y-1.5">
+                <div className="flex items-center justify-between pr-1">
+                  <SectionTitle id={projectsId}>Projets</SectionTitle>
+                  {onNewProject ? (
+                    <button
+                      type="button"
+                      aria-label="Nouveau projet"
+                      title="Nouveau projet"
+                      onClick={onNewProject}
+                      className="flex size-6 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <Plus className="size-4" aria-hidden />
+                    </button>
+                  ) : null}
+                </div>
+                {projects.length === 0 ? (
+                  <p className="px-2 text-sm text-muted-foreground">
+                    Regroupez dossiers, conversations, tâches et mémoire dans un projet.
+                  </p>
+                ) : (
+                  <ul aria-label="Projets" className="space-y-0.5">
+                    {projects.map((project) => {
+                      const open = isProjectUnfolded(project.id);
+                      const active = projectActiveId === project.id;
+                      const conversations = sessions.filter((s) => s.projectId === project.id);
+                      return (
+                        <li key={project.id}>
+                          <div
+                            className={cn(
+                              'group flex items-center gap-1 rounded-md pr-1',
+                              active ? 'bg-brand-soft' : 'hover:bg-accent/60',
+                            )}
+                          >
+                            <button
+                              type="button"
+                              aria-label={
+                                open
+                                  ? `Replier le projet ${project.name}`
+                                  : `Déplier le projet ${project.name}`
+                              }
+                              aria-expanded={open}
+                              onClick={() => {
+                                setUnfolded((map) =>
+                                  new Map(map).set(projectKey(project.id), !open),
+                                );
+                              }}
+                              className="flex size-6 shrink-0 items-center justify-center rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            >
+                              <ChevronRight
+                                className={cn(
+                                  'size-3.5 text-muted-foreground transition-transform',
+                                  open ? 'rotate-90' : undefined,
+                                )}
+                                aria-hidden
+                              />
+                            </button>
+                            <button
+                              type="button"
+                              aria-current={active ? 'page' : undefined}
+                              title={project.description || project.name}
+                              onClick={() => {
+                                onOpenProject(project);
+                              }}
+                              className={cn(
+                                'flex min-w-0 flex-1 items-center gap-1.5 rounded-md py-1.5 pr-2 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                                active ? 'font-medium' : undefined,
+                              )}
+                            >
+                              <FolderKanban
+                                className={cn(
+                                  'size-4 shrink-0',
+                                  active ? 'text-brand-text' : 'text-muted-foreground',
+                                )}
+                                aria-hidden
+                              />
+                              <span className="truncate">{project.name}</span>
+                            </button>
+                            <ActionMenu
+                              label={`Actions pour le projet « ${project.name} »`}
+                              className="opacity-0 focus-within:opacity-100 group-hover:opacity-100 has-[[aria-expanded=true]]:opacity-100"
+                              items={[
+                                ...(onNewInProject
+                                  ? [
+                                      {
+                                        label: 'Nouvelle conversation',
+                                        icon: MessageSquarePlus,
+                                        onSelect: () => {
+                                          onNewInProject(project);
+                                        },
+                                      },
+                                    ]
+                                  : []),
+                                ...(onRevealProject
+                                  ? [
+                                      {
+                                        label: 'Afficher le dossier dans le Finder',
+                                        icon: FolderOpen,
+                                        onSelect: () => {
+                                          onRevealProject(project);
+                                        },
+                                      },
+                                    ]
+                                  : []),
+                                ...(onArchiveProject
+                                  ? [
+                                      {
+                                        label: 'Archiver',
+                                        icon: Archive,
+                                        onSelect: () => {
+                                          onArchiveProject(project);
+                                        },
+                                      },
+                                    ]
+                                  : []),
+                              ]}
+                            />
+                          </div>
+                          {open ? (
+                            <div className="ml-4 border-l pl-1.5">
+                              {conversations.length > 0 ? (
+                                <ConversationList
+                                  label={`Conversations du projet ${project.name}`}
+                                  sessions={conversations}
+                                  currentId={currentId}
+                                  onOpen={onOpen}
+                                  onDelete={onDelete}
+                                  activity={activity}
+                                />
+                              ) : (
+                                <p className="px-2 py-1 text-xs text-muted-foreground">
+                                  Aucune conversation.
+                                </p>
+                              )}
+                            </div>
+                          ) : null}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </section>
+            ) : null}
+
             <section aria-labelledby={foldersId} className="space-y-1.5">
               <div className="flex items-center justify-between pr-1">
                 <SectionTitle id={foldersId}>Dossiers</SectionTitle>
@@ -287,6 +463,17 @@ export function Sidebar({
                                   onNewIn(folder.workspace);
                                 },
                               },
+                              ...(onProjectFromFolder
+                                ? [
+                                    {
+                                      label: 'Créer un projet à partir de ce dossier',
+                                      icon: FolderKanban,
+                                      onSelect: () => {
+                                        onProjectFromFolder(folder.workspace);
+                                      },
+                                    },
+                                  ]
+                                : []),
                               {
                                 label: 'Retirer de la liste',
                                 icon: EyeOff,

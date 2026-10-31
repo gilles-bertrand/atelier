@@ -7,13 +7,20 @@ import {
   FileSpreadsheet,
   FileText,
   Folder,
+  FolderKanban,
   Globe,
   PanelRight,
   ScanEye,
   Upload,
   type LucideIcon,
 } from 'lucide-react';
-import type { DeniedAction, FileCard, LlmModelInfo, SessionSummary } from '@atelier/shared';
+import type {
+  DeniedAction,
+  FileCard,
+  LlmModelInfo,
+  ProjectSummary,
+  SessionSummary,
+} from '@atelier/shared';
 import { AtelierMark } from '@renderer/components/AtelierMark';
 import { ServerStatusBadge } from '@renderer/components/status/ServerStatusBadge';
 import { Button } from '@renderer/components/ui/button';
@@ -28,6 +35,11 @@ import { isRunning } from '@renderer/state/chat-reducer';
 import { useChat, useSessionView } from '@renderer/state/chat-store';
 import { deriveSessionTitle } from '../../../../common/chat-reducer';
 import { sameModel } from '../../../../common/model-name';
+import {
+  ArtifactPreviewContext,
+  type ArtifactPreviewControls,
+} from '../projects/artifact-preview-context';
+import { ArtifactViewer } from '../projects/ArtifactViewer';
 import { RunBanner } from '../schedule/RunBanner';
 import { headerInset, SidebarOpenButton, useShellChrome } from '../sidebar/shell-chrome';
 import { Composer, type PendingAttachment } from './Composer';
@@ -83,8 +95,13 @@ export function ChatView({
   onTitleChange,
   onSessionChange,
   onAuthorizeTask,
+  project,
+  onOpenProject,
 }: {
   session: SessionSummary;
+  /** Projet de la conversation (ADR-003) : pastille dans l'en-tête. */
+  project?: ProjectSummary;
+  onOpenProject?: () => void;
   /** Titre dérivé du premier message (la colonne de gauche le reprend aussitôt). */
   onTitleChange?: (title: string) => void;
   /** Conversation mise à jour par le main (modèle choisi). */
@@ -254,10 +271,13 @@ export function ChatView({
     previewPath === undefined
       ? undefined
       : (files.find((f) => f.absolutePath === previewPath) ?? previewFallback);
+  // Artefact publié (ADR-003 D5) ouvert depuis sa carte : à la place de l'aperçu.
+  const [artifactId, setArtifactId] = useState<string | undefined>();
   const previewControls = useMemo<FilePreviewControls>(
     () => ({
       selectedPath: previewPath,
       toggle: (file) => {
+        setArtifactId(undefined);
         setPreviewFallback(file);
         setPreviewPath((current) =>
           current === file.absolutePath ? undefined : file.absolutePath,
@@ -265,6 +285,16 @@ export function ChatView({
       },
     }),
     [previewPath],
+  );
+  const artifactControls = useMemo<ArtifactPreviewControls>(
+    () => ({
+      selectedId: artifactId,
+      toggle: (id) => {
+        setPreviewPath(undefined);
+        setArtifactId((current) => (current === id ? undefined : id));
+      },
+    }),
+    [artifactId],
   );
 
   const guard = (task: Promise<void>): void => {
@@ -306,13 +336,25 @@ export function ChatView({
           <SidebarOpenButton />
           <div className="min-w-0">
             <h1 className="truncate text-sm font-medium">{title}</h1>
-            <p
-              className="flex items-center gap-1 truncate text-xs text-muted-foreground"
-              title={session.workspace}
-            >
-              <Folder className="size-3" aria-hidden />
-              {fileName(session.workspace)}
-            </p>
+            {project ? (
+              <button
+                type="button"
+                onClick={onOpenProject}
+                title={`Ouvrir le projet « ${project.name} »`}
+                className="flex items-center gap-1 truncate rounded text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <FolderKanban className="size-3" aria-hidden />
+                {project.name}
+              </button>
+            ) : (
+              <p
+                className="flex items-center gap-1 truncate text-xs text-muted-foreground"
+                title={session.workspace}
+              >
+                <Folder className="size-3" aria-hidden />
+                {fileName(session.workspace)}
+              </p>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2 [-webkit-app-region:no-drag]">
@@ -321,13 +363,14 @@ export function ChatView({
             variant="ghost"
             size="icon"
             aria-label="Panneau de suivi"
-            aria-expanded={previewed ? false : panelOpen}
+            aria-expanded={previewed || artifactId ? false : panelOpen}
             aria-controls={panelId}
             title={panelOpen && !previewed ? 'Masquer le suivi' : 'Afficher le suivi'}
             onClick={() => {
-              // Depuis l'aperçu, le bouton revient au suivi.
-              if (previewed) {
+              // Depuis l'aperçu ou un artefact, le bouton revient au suivi.
+              if (previewed || artifactId) {
                 setPreviewPath(undefined);
+                setArtifactId(undefined);
                 setPanelOpen(true);
               } else setPanelOpen((open) => !open);
             }}
@@ -345,159 +388,170 @@ export function ChatView({
         />
       ) : null}
 
-      <FilePreviewContext.Provider value={previewControls}>
-        <div className="flex min-h-0 flex-1">
-          <div className="flex min-w-0 flex-1 flex-col">
-            {view.messages.length === 0 && !view.live && view.loaded ? (
-              <div className="flex flex-1 flex-col items-center justify-center gap-2 overflow-y-auto px-6 py-6 text-center">
-                <AtelierMark className="mb-2 size-11" />
-                <h2 className="text-lg font-semibold">Que puis-je faire pour vous ?</h2>
-                <p className="max-w-md text-sm text-muted-foreground">
-                  Je travaille dans le dossier « {fileName(session.workspace)} » : je peux lire vos
-                  documents, en créer de nouveaux, chercher sur internet et faire des calculs.
-                </p>
-                <ul
-                  aria-label="Suggestions"
-                  className="mt-4 grid w-full max-w-lg gap-2 sm:grid-cols-2"
-                >
-                  {SUGGESTIONS.map((suggestion) => {
-                    const Icon = suggestion.icon;
-                    return (
-                      <li key={suggestion.label}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setDraft(suggestion.prompt);
-                            setFocusDraft((n) => n + 1);
-                          }}
-                          className="flex w-full items-center gap-2.5 rounded-xl border bg-card px-3 py-2.5 text-left text-sm hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        >
-                          <span
-                            className={cn(
-                              'flex size-7 shrink-0 items-center justify-center rounded-md',
-                              suggestion.tile,
-                            )}
-                            aria-hidden
+      <ArtifactPreviewContext.Provider value={artifactControls}>
+        <FilePreviewContext.Provider value={previewControls}>
+          <div className="flex min-h-0 flex-1">
+            <div className="flex min-w-0 flex-1 flex-col">
+              {view.messages.length === 0 && !view.live && view.loaded ? (
+                <div className="flex flex-1 flex-col items-center justify-center gap-2 overflow-y-auto px-6 py-6 text-center">
+                  <AtelierMark className="mb-2 size-11" />
+                  <h2 className="text-lg font-semibold">Que puis-je faire pour vous ?</h2>
+                  <p className="max-w-md text-sm text-muted-foreground">
+                    Je travaille dans le dossier « {fileName(session.workspace)} » : je peux lire
+                    vos documents, en créer de nouveaux, chercher sur internet et faire des calculs.
+                  </p>
+                  <ul
+                    aria-label="Suggestions"
+                    className="mt-4 grid w-full max-w-lg gap-2 sm:grid-cols-2"
+                  >
+                    {SUGGESTIONS.map((suggestion) => {
+                      const Icon = suggestion.icon;
+                      return (
+                        <li key={suggestion.label}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDraft(suggestion.prompt);
+                              setFocusDraft((n) => n + 1);
+                            }}
+                            className="flex w-full items-center gap-2.5 rounded-xl border bg-card px-3 py-2.5 text-left text-sm hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                           >
-                            <Icon className="size-4" />
-                          </span>
-                          {suggestion.label}
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            ) : (
-              <MessageList
-                view={view}
-                modelLoading={modelLoading}
-                onRetry={() => {
-                  setModelLoading(false);
-                  guard(actions.retry(session.id, model));
+                            <span
+                              className={cn(
+                                'flex size-7 shrink-0 items-center justify-center rounded-md',
+                                suggestion.tile,
+                              )}
+                              aria-hidden
+                            >
+                              <Icon className="size-4" />
+                            </span>
+                            {suggestion.label}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              ) : (
+                <MessageList
+                  view={view}
+                  modelLoading={modelLoading}
+                  onRetry={() => {
+                    setModelLoading(false);
+                    guard(actions.retry(session.id, model));
+                  }}
+                  onChooseModel={() => {
+                    setPickerOpen(true);
+                  }}
+                />
+              )}
+
+              {error ? (
+                <div className="mx-auto w-full max-w-3xl px-6 pb-2">
+                  <Alert tone="error">{error}</Alert>
+                </div>
+              ) : null}
+
+              <Composer
+                value={draft}
+                onChange={setDraft}
+                attachments={pending}
+                onRemoveAttachment={(index) => {
+                  setPending((current) => {
+                    const removed = current[index];
+                    revoke(removed?.previewUrl);
+                    return current.filter((_, i) => i !== index);
+                  });
                 }}
-                onChooseModel={() => {
-                  setPickerOpen(true);
+                onSend={() => void send()}
+                onStop={() => {
+                  guard(actions.stop(session.id));
+                }}
+                running={running}
+                disabled={!view.loaded}
+                importing={importing}
+                status={
+                  <>
+                    <ModelPicker
+                      model={model}
+                      disabled={running || !view.loaded}
+                      open={pickerOpen}
+                      onOpenChange={setPickerOpen}
+                      onSelect={(next) => void chooseModel(next)}
+                      onModels={setModels}
+                    />
+                    <ContextGauge sessionId={session.id} />
+                  </>
+                }
+                notice={
+                  waitingForVm ? (
+                    <Alert tone="info">
+                      <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                        {heldBy.runId !== undefined
+                          ? 'Une tâche planifiée utilise la machine isolée. Votre demande partira ensuite.'
+                          : 'Une autre conversation utilise la machine isolée. Votre demande partira ensuite.'}
+                        {heldBy.runId !== undefined ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              const runId = heldBy.runId;
+                              if (runId === undefined) return;
+                              call('schedule:stop-run', { runId }).catch((e: unknown) => {
+                                setError(errorMessage(toSerializedError(e)));
+                              });
+                            }}
+                          >
+                            Arrêter la tâche
+                          </Button>
+                        ) : null}
+                      </span>
+                    </Alert>
+                  ) : imageUnreadable ? (
+                    <Alert tone="warning">
+                      Le modèle {model} ne lit pas les images et aucun modèle pour les images n’est
+                      réglé : l’image jointe ne pourra pas être analysée. Choisissez un autre
+                      modèle, ou réglez-en un dans Réglages › Serveur et modèle.
+                    </Alert>
+                  ) : undefined
+                }
+                footer={
+                  coldChoice === model ? (
+                    <Alert tone="warning">
+                      Premier message plus lent : le serveur doit charger {model} (10 à 60 s). Les
+                      autres utilisateurs du serveur peuvent être ralentis.
+                    </Alert>
+                  ) : undefined
+                }
+                onAddFiles={(files) => void importFiles(files)}
+                textareaRef={textarea}
+              />
+            </div>
+            {artifactId !== undefined ? (
+              <ArtifactViewer
+                key={artifactId}
+                id={artifactId}
+                className="w-[min(36rem,calc(100%-360px))] shrink-0 border-l"
+                onClose={() => {
+                  setArtifactId(undefined);
                 }}
               />
-            )}
-
-            {error ? (
-              <div className="mx-auto w-full max-w-3xl px-6 pb-2">
-                <Alert tone="error">{error}</Alert>
-              </div>
+            ) : previewed ? (
+              <FilePreview
+                key={previewed.absolutePath}
+                id={previewId}
+                file={previewed}
+                revision={revisions.get(previewed.absolutePath) ?? 0}
+                onClose={() => {
+                  setPreviewPath(undefined);
+                }}
+              />
+            ) : panelOpen ? (
+              <SidePanel id={panelId} view={view} />
             ) : null}
-
-            <Composer
-              value={draft}
-              onChange={setDraft}
-              attachments={pending}
-              onRemoveAttachment={(index) => {
-                setPending((current) => {
-                  const removed = current[index];
-                  revoke(removed?.previewUrl);
-                  return current.filter((_, i) => i !== index);
-                });
-              }}
-              onSend={() => void send()}
-              onStop={() => {
-                guard(actions.stop(session.id));
-              }}
-              running={running}
-              disabled={!view.loaded}
-              importing={importing}
-              status={
-                <>
-                  <ModelPicker
-                    model={model}
-                    disabled={running || !view.loaded}
-                    open={pickerOpen}
-                    onOpenChange={setPickerOpen}
-                    onSelect={(next) => void chooseModel(next)}
-                    onModels={setModels}
-                  />
-                  <ContextGauge sessionId={session.id} />
-                </>
-              }
-              notice={
-                waitingForVm ? (
-                  <Alert tone="info">
-                    <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                      {heldBy.runId !== undefined
-                        ? 'Une tâche planifiée utilise la machine isolée. Votre demande partira ensuite.'
-                        : 'Une autre conversation utilise la machine isolée. Votre demande partira ensuite.'}
-                      {heldBy.runId !== undefined ? (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            const runId = heldBy.runId;
-                            if (runId === undefined) return;
-                            call('schedule:stop-run', { runId }).catch((e: unknown) => {
-                              setError(errorMessage(toSerializedError(e)));
-                            });
-                          }}
-                        >
-                          Arrêter la tâche
-                        </Button>
-                      ) : null}
-                    </span>
-                  </Alert>
-                ) : imageUnreadable ? (
-                  <Alert tone="warning">
-                    Le modèle {model} ne lit pas les images et aucun modèle pour les images n’est
-                    réglé : l’image jointe ne pourra pas être analysée. Choisissez un autre modèle,
-                    ou réglez-en un dans Réglages › Serveur et modèle.
-                  </Alert>
-                ) : undefined
-              }
-              footer={
-                coldChoice === model ? (
-                  <Alert tone="warning">
-                    Premier message plus lent : le serveur doit charger {model} (10 à 60 s). Les
-                    autres utilisateurs du serveur peuvent être ralentis.
-                  </Alert>
-                ) : undefined
-              }
-              onAddFiles={(files) => void importFiles(files)}
-              textareaRef={textarea}
-            />
           </div>
-          {previewed ? (
-            <FilePreview
-              key={previewed.absolutePath}
-              id={previewId}
-              file={previewed}
-              revision={revisions.get(previewed.absolutePath) ?? 0}
-              onClose={() => {
-                setPreviewPath(undefined);
-              }}
-            />
-          ) : panelOpen ? (
-            <SidePanel id={panelId} view={view} />
-          ) : null}
-        </div>
-      </FilePreviewContext.Provider>
+        </FilePreviewContext.Provider>
+      </ArtifactPreviewContext.Provider>
 
       {dragging ? (
         <div
