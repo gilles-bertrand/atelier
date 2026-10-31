@@ -217,6 +217,50 @@ Ollama **local**, modèle `atelier` (Qwen 3.5 35B MoE, MLX), VM Lima partagée. 
 - « Ouvrir Atelier à la connexion », fermer puis rouvrir la session macOS : l'app doit démarrer sans fenêtre (`wasOpenedAtLogin` peut ne pas fonctionner avec SMAppService sur macOS 13 et plus).
 - Mettre le Mac en veille au moment d'une exécution prévue, puis le réveiller : un seul run « Rattrapage ».
 
+## Projets (ADR-003 L5, ticket #22, 31/10/2026)
+
+Branche `feat/qa-projects` (pile L0 à L4 : PR #121 à #125). Spec : `qa/e2e/projects.spec.ts` (mock, CI). Le faux modèle joue `memory_add`, une écriture dans « Compta », une écriture dans « Archives » (lecture seule), l'écriture puis la publication de `Artefacts/tableau.html`. Le lanceur e2e fixe désormais `projectsDir` dans le dossier temporaire du test : aucun projet n'est créé dans le vrai `~/Atelier/Projets`.
+
+### Mock (CI) : 2/2
+
+| Cas                                                                                                                         | Résultat |
+| --------------------------------------------------------------------------------------------------------------------------- | -------- |
+| « Nouveau projet » : dossier existant comme principal, « Compta » en écriture, « Archives » en lecture seule                | ✅       |
+| Conversation du projet : pastille du projet dans l'en-tête                                                                  | ✅       |
+| `memory_add` demandé dans une modale « Retenir dans la mémoire du projet : « … » »                                          | ✅       |
+| `Compta/synthese.md` écrit dans le dossier rattaché                                                                         | ✅       |
+| Écriture dans « Archives » refusée (« Le dossier « Archives » est en lecture seule »), aucun fichier créé                   | ✅       |
+| Carte « Artefact publié » : page dans une iframe `sandbox="allow-scripts"`, script de la page exécuté                       | ✅       |
+| Dans l'artefact : `window.atelier` absent, `fetch('https://…')` bloqué                                                      | ✅       |
+| `<meta http-equiv="refresh">` vers un serveur local : aucune requête reçue, le cadre passe sur la page d'erreur de Chromium | ✅       |
+| La note apparaît dans l'onglet « Mémoire et consignes »                                                                     | ✅       |
+| Conversation suivante : prompt système avec le projet, la note et « Archives » en lecture seule                             | ✅       |
+| Tâche du projet (projet présélectionné, case « dossiers du projet » cochée) exécutée deux fois : même page, v1 puis v2      | ✅       |
+| Onglet Artefacts : vignette « v2 · … · Tableau hebdo », 2 versions dans le sélecteur, iframe sur `/v2/`                     | ✅       |
+
+Suite e2e mock complète : 18 réussis, 3 ignorés (mode réel).
+
+Compromis accepté par le Lead (31/10) : un artefact qui tente de rediriger son cadre vers le web perd son affichage, car Chromium y montre sa page d'erreur. Aucune requête ne sort, et la page reste lisible depuis le fichier source.
+
+### Réel : « tableau de bord hebdo » (à jouer)
+
+Pas encore joué : l'Ollama local est partagé avec les autres campagnes. Procédure à suivre :
+
+1. Ollama local, modèle `atelier` (Qwen 3.5 35B), VM Lima prête.
+2. Créer un projet « Ventes » sur `fixtures/demo-ventes`, avec un dossier « Archives » en lecture seule. Vérifier qu'ajouter le dossier parent `fixtures/` est refusé, parce qu'il contient le dossier principal.
+3. Demander : « Fais-moi un tableau de bord des ventes par magasin, publie-le, et retiens que le client veut une synthèse mensuelle. »
+4. Vérifier :
+   - le skill `artefact-html` est chargé (déclencheur « tableau de bord ») ;
+   - `Artefacts/*.html` est autonome (aucune URL `https://` dans `src`), et le graphique Chart.js s'affiche via `atelier-artifact://lib/` ;
+   - la modale `memory_write` s'ouvre ;
+   - les totaux sont justes au centime : Bruxelles 40 337,50 €, Liège 28 277,10 €, Namur 20 622,50 €.
+5. Tâche du projet « Tableau hebdo », « Exécuter maintenant » deux fois : même fichier republié en v2 et v3, sans nouveau fichier `tableau-v2.html`.
+6. Dans la vraie VM (suggestion du Lead), avec « Exécuter des commandes » autorisé : `touch /dossiers/Archives/essai` doit échouer (« Read-only file system »), alors que `touch /workspace/essai` réussit.
+
+### Suite à traiter (relevée par l'e2e)
+
+Une écriture dans un dossier en lecture seule passe d'abord par la modale de permission, puis échoue. La garde des chemins ne s'applique qu'après l'accord, car `describePermission` est pure et sans I/O. Proposition : une vérification préalable des outils d'écriture avant la modale, à arbitrer avec le Lead (contrat `ToolDefinition`).
+
 ## Bugs relevés
 
 | Issue | Sujet                                                                                            | Agent(s)            | État                                          |

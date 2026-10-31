@@ -249,6 +249,74 @@ export const scheduleScenario: MockScenario = {
   ],
 };
 
+/** Projets (ADR-003, L5) : mémoire, dossiers rattachés (écriture et lecture seule), artefact. */
+export const PROJECT_PROMPT = 'Prépare la synthèse du projet et publie le tableau de bord';
+export const PROJECT_NOTE = 'Le client veut une synthèse chaque mois.';
+export const PROJECT_FOLLOWUP = 'Que sais-tu déjà de ce projet ?';
+export const PROJECT_TASK_PROMPT = 'Mets à jour le tableau de bord du projet';
+export const ARTIFACT_FILE = 'Artefacts/tableau.html';
+export const ARTIFACT_TITLE = 'Tableau des ventes';
+
+/**
+ * Redirection automatique piégée de l'artefact (`<meta http-equiv="refresh">`,
+ * 1 s après l'affichage) : elle ne doit jamais atteindre sa cible. Le test pointe
+ * `url` vers un serveur local qui compte les requêtes reçues.
+ */
+export const artifactTrap = { url: 'https://example.com/?fuite=1' };
+
+const tableau = (label: string): string =>
+  `<!doctype html><html lang="fr"><head><meta http-equiv="refresh" content="1;url=${artifactTrap.url}"></head><body><h1>${ARTIFACT_TITLE}</h1><p>${label}</p><script>document.body.dataset.ok = '1';</script></body></html>`;
+
+export const projectScenario: MockScenario = {
+  name: 'projet',
+  match: (t) => t === PROJECT_PROMPT,
+  steps: [
+    { toolCalls: [{ name: 'memory_add', args: { note: PROJECT_NOTE } }] },
+    {
+      toolCalls: [
+        {
+          name: 'write_file',
+          args: { path: 'Compta/synthese.md', content: '# Synthèse\n\nVentes stables.\n' },
+        },
+      ],
+    },
+    { toolCalls: [{ name: 'write_file', args: { path: 'Archives/brouillon.md', content: 'x' } }] },
+    () => ({
+      toolCalls: [{ name: 'write_file', args: { path: ARTIFACT_FILE, content: tableau('v1') } }],
+    }),
+    {
+      toolCalls: [
+        { name: 'publish_artifact', args: { path: ARTIFACT_FILE, title: ARTIFACT_TITLE } },
+      ],
+    },
+    {
+      text: 'Synthèse écrite dans Compta ; Archives est en lecture seule ; tableau de bord publié.',
+    },
+  ],
+};
+
+export const projectFollowupScenario: MockScenario = {
+  name: 'projet : suite',
+  match: (t) => t === PROJECT_FOLLOWUP,
+  steps: [{ text: 'Le client veut une synthèse chaque mois.' }],
+};
+
+export const projectTaskScenario: MockScenario = {
+  name: 'projet : tâche',
+  match: (t) => t === PROJECT_TASK_PROMPT,
+  steps: [
+    () => ({
+      toolCalls: [{ name: 'write_file', args: { path: ARTIFACT_FILE, content: tableau('run') } }],
+    }),
+    {
+      toolCalls: [
+        { name: 'publish_artifact', args: { path: ARTIFACT_FILE, title: ARTIFACT_TITLE } },
+      ],
+    },
+    { text: `Tableau de bord mis à jour.\nFichier produit : ${ARTIFACT_FILE}.` },
+  ],
+};
+
 export const ALL_SCENARIOS: MockScenario[] = [
   excelScenario,
   nodeScenario,
@@ -257,4 +325,7 @@ export const ALL_SCENARIOS: MockScenario[] = [
   modelScenario,
   slowScenario,
   scheduleScenario,
+  projectScenario,
+  projectFollowupScenario,
+  projectTaskScenario,
 ];
