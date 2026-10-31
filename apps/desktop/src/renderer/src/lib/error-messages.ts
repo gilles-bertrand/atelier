@@ -21,6 +21,8 @@ const MESSAGES: Record<AtelierErrorCode, string> = {
   'agent/busy': 'L’assistant travaille déjà sur une demande. Attendez la fin ou arrêtez-la.',
   'session/not_found': 'Cette conversation n’existe plus.',
   'settings/invalid': 'Ce réglage n’est pas valide.',
+  'schedule/invalid': 'Cette tâche planifiée n’est pas valide.',
+  'schedule/not_found': 'Cette tâche planifiée n’existe plus.',
   'tool/not_found': 'Action inconnue.',
   'tool/invalid_input': 'Paramètres d’action invalides.',
   'tool/path_outside_workspace': 'Ce fichier est en dehors du dossier de travail.',
@@ -79,9 +81,10 @@ function detail(error: Pick<SerializedAtelierError, 'details'>, key: string): st
 }
 
 /**
- * Message lisible pour une erreur sérialisée. Le message technique n'est repris
- * que pour un `llm/bad_response` à cause connue sans message dédié ici : agent-core
- * le rédige alors en français pour l'utilisateur.
+ * Message lisible pour une erreur sérialisée. Le message de l'erreur n'est repris
+ * que lorsqu'il est rédigé en français pour l'utilisateur :
+ * - `llm/bad_response` à cause connue sans message dédié ici (agent-core) ;
+ * - `schedule/invalid` : message de `validateSchedule` (« au moins 15 minutes »…).
  */
 export function errorMessage(
   error: Pick<SerializedAtelierError, 'code' | 'details'> & { message?: string },
@@ -93,6 +96,10 @@ export function errorMessage(
   if (reason !== undefined && error.code === 'llm/bad_response') {
     const message = error.message?.trim();
     return message ? message : BAD_RESPONSE_WITH_REASON;
+  }
+  if (error.code === 'schedule/invalid') {
+    const message = error.message?.trim();
+    if (message) return message;
   }
   return MESSAGES[error.code];
 }

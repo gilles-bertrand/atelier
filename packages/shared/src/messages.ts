@@ -146,6 +146,11 @@ export interface SessionSummary {
    * (`LlmServerConfig.model`), notamment pour les conversations créées avant #13.
    */
   model?: string;
+  /**
+   * Tâche planifiée dont cette conversation est un run (ADR-002). Ces sessions
+   * sont exclues de `session:list`, sauf `includeScheduled: true`.
+   */
+  scheduledTaskId?: string;
 }
 
 /**

@@ -25,4 +25,20 @@ describe('canaux IPC', () => {
     expect(IPC_RENDERER_INVOKE_CHANNELS).toContain('app:health');
     expect(IPC_RENDERER_INVOKE_CHANNELS).toContain('session:set-model');
   });
+
+  it('expose les tâches planifiées au renderer (ADR-002)', () => {
+    for (const channel of [
+      'schedule:list',
+      'schedule:save',
+      'schedule:delete',
+      'schedule:set-enabled',
+      'schedule:run-now',
+      'schedule:stop-run',
+      'schedule:dashboard',
+      'schedule:runs',
+    ] as const) {
+      expect(IPC_RENDERER_INVOKE_CHANNELS).toContain(channel);
+    }
+    expect(IPC_EVENT_CHANNELS).toContain('schedule:changed');
+  });
 });
