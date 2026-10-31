@@ -173,3 +173,61 @@ describe('usage:summary', () => {
     });
   });
 });
+
+describe('prompts planifiés (ADR-002)', () => {
+  it('session:list exclut les runs sauf includeScheduled ; schedule:* délègue au scheduler', async () => {
+    const listed: unknown[] = [];
+    const saved: unknown[] = [];
+    const scheduler = {
+      listTasks: () => [],
+      saveTask: (input: unknown, id?: string) => {
+        saved.push({ input, id });
+        return { id: 't1' };
+      },
+      deleteTask: () => Promise.resolve(),
+      setEnabled: () => ({ id: 't1' }),
+      runNow: () => ({ id: 'r1' }),
+      stopRun: () => Promise.resolve(),
+      dashboard: (period: string) => ({ period }),
+      runs: (query: unknown) => [query],
+    };
+    const home = await mkdtemp(join(tmpdir(), 'atelier-home-'));
+    const s = {
+      chats: {
+        list: (limit?: number, options?: unknown) => {
+          listed.push({ limit, options });
+          return [];
+        },
+      },
+      scheduler,
+      home,
+    } as unknown as HandlerServices;
+    const handlers = createHandlers(s);
+    await handlers['session:list']?.({ limit: 10 });
+    await handlers['session:list']?.({ limit: 10, includeScheduled: true });
+    expect(listed).toEqual([
+      { limit: 10, options: {} },
+      { limit: 10, options: { includeScheduled: true } },
+    ]);
+
+    const task = {
+      name: 'Rapport',
+      prompt: 'Fais-le',
+      workspace: tmpdir(),
+      schedule: { kind: 'daily' as const, time: '08:00' },
+      permissions: { fileWrite: true, commands: false, webDomains: [], mcpTools: [] },
+    };
+    await handlers['schedule:save']?.({ id: 't1', task });
+    expect(saved).toHaveLength(1);
+    // Même règle de dossier qu'une conversation.
+    await expect(
+      handlers['schedule:save']?.({ task: { ...task, workspace: home } }),
+    ).rejects.toMatchObject({ code: 'sandbox/invalid_workspace' });
+    expect(await handlers['schedule:dashboard']?.({ period: '7d' })).toEqual({ period: '7d' });
+    expect(await handlers['schedule:runs']?.({ taskId: 't1', limit: 5 })).toEqual([
+      { taskId: 't1', limit: 5 },
+    ]);
+    expect(await handlers['schedule:run-now']?.({ id: 't1' })).toEqual({ id: 'r1' });
+    await expect(handlers['schedule:stop-run']?.({ runId: 'r1' })).resolves.toBeUndefined();
+  });
+});

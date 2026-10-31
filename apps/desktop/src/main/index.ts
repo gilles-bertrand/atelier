@@ -6,13 +6,20 @@ import {
   BrowserWindow,
   dialog,
   nativeTheme,
+  Notification,
+  powerMonitor,
+  powerSaveBlocker,
   protocol,
   safeStorage,
   session,
   shell,
 } from 'electron';
-import { checkServerHealth } from '@atelier/agent-core';
-import type { AppHealth } from '@atelier/shared';
+import {
+  checkServerHealth,
+  UNATTENDED_INSTRUCTIONS,
+  unattendedPermissionHandler,
+} from '@atelier/agent-core';
+import type { AppHealth, ScheduledRun, ScheduledTask } from '@atelier/shared';
 import { loadMcpConfig, McpManager } from '@atelier/mcp-bridge';
 import { LimaSandbox } from '@atelier/sandbox';
 import { installExampleSkills } from '@atelier/skills';
@@ -30,6 +37,15 @@ import { SandboxManager } from './runtime/sandbox-manager.js';
 import { InMemorySessionStore, type SessionStore } from './runtime/session-store.js';
 import { openDatabase, SqliteSessionStore } from './runtime/sqlite-store.js';
 import { InMemoryUsageStore, SqliteUsageStore, type UsageStore } from './runtime/usage-store.js';
+import {
+  InMemoryScheduleStore,
+  SqliteScheduleStore,
+  type ScheduleStore,
+} from './schedule/schedule-store.js';
+import { runNotificationBody } from './schedule/notifications.js';
+import { ScheduledRunner } from './schedule/scheduled-runner.js';
+import { TaskScheduler } from './schedule/task-scheduler.js';
+import { WorkspaceLease } from './schedule/workspace-lease.js';
 import { SecretsStore } from './settings/secrets-store.js';
 import { SettingsStore } from './settings/settings-store.js';
 
@@ -71,6 +87,50 @@ const isDev = !app.isPackaged && Boolean(process.env['ELECTRON_RENDERER_URL']);
 function log(message: string, data?: unknown): void {
   if (data === undefined) console.log(`[atelier] ${message}`);
   else console.log(`[atelier] ${message}`, data);
+}
+
+/** Montre la fenêtre, créée au besoin (app ouverte à la connexion, fenêtre fermée). */
+function revealWindow(): BrowserWindow {
+  const window = BrowserWindow.getAllWindows()[0] ?? createMainWindow();
+  if (window.isMinimized()) window.restore();
+  window.show();
+  return window;
+}
+
+/** Délai laissé au renderer d'une fenêtre neuve pour s'abonner aux événements. */
+const RENDERER_READY_DELAY_MS = 1_500;
+
+/** Ouvre la conversation d'un run dans la fenêtre (clic sur la notification, D7). */
+function openRunSession(sessionId: string): void {
+  const window = revealWindow();
+  const send = (): void => {
+    broadcast('app:open-session', { sessionId });
+  };
+  if (!window.webContents.isLoading()) {
+    send();
+    return;
+  }
+  // Fenêtre neuve : le renderer s'abonne après son chargement et celui des réglages.
+  // Ouvrir deux fois la même conversation est sans effet.
+  window.webContents.once('did-finish-load', () => {
+    send();
+    setTimeout(send, RENDERER_READY_DELAY_MS);
+  });
+}
+
+function notifyRun(task: ScheduledTask, run: ScheduledRun): void {
+  if (!Notification.isSupported()) return;
+  // Silencieuse et sans `focus` : une erreur de run ne vole jamais le focus.
+  const notification = new Notification({
+    title: task.name,
+    body: runNotificationBody(run),
+    silent: run.status === 'success',
+  });
+  notification.on('click', () => {
+    if (run.sessionId) openRunSession(run.sessionId);
+    else revealWindow();
+  });
+  notification.show();
 }
 
 function createMainWindow(): BrowserWindow {
@@ -208,7 +268,15 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
     },
   });
 
+  // Bail de la VM partagé par les tours interactifs et les runs planifiés (ADR-002 D5).
+  const lease = new WorkspaceLease({
+    onChange: () => {
+      sandbox.holderChanged();
+    },
+  });
+
   const sandbox = new SandboxManager({
+    holder: () => lease.holder(),
     create: () => {
       const s = settings.get();
       return new LimaSandbox({
@@ -261,15 +329,18 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
   // Même base pour le registre de consommation (ADR-001) : statistiques locales uniquement.
   let store: SessionStore;
   let usage: UsageStore;
+  let schedules: ScheduleStore;
   let health: AppHealth = { historyPersistent: true };
   try {
     const db = await openDatabase(join(paths.userData, 'atelier.db'));
     store = new SqliteSessionStore(db);
     usage = new SqliteUsageStore(db);
+    schedules = new SqliteScheduleStore(db);
   } catch (error) {
     log('historique SQLite indisponible, conversations gardées en mémoire', error);
     store = new InMemorySessionStore();
     usage = new InMemoryUsageStore();
+    schedules = new InMemoryScheduleStore();
     health = {
       historyPersistent: false,
       historyError: error instanceof Error ? error.message : String(error),
@@ -290,8 +361,47 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
     usage,
     defaultModel: () => settings.get().llm.model,
     models,
+    lease,
     log,
   });
+
+  // Prompts planifiés (ADR-002) : un run à la fois, permissions non interactives.
+  const runner = new ScheduledRunner({
+    chats,
+    lease,
+    permissionHandler: unattendedPermissionHandler,
+    instructions: UNATTENDED_INSTRUCTIONS,
+    // Pas d'App Nap pendant un run ; la mise en veille du Mac reste possible (rattrapage).
+    keepAwake: () => {
+      const id = powerSaveBlocker.start('prevent-app-suspension');
+      return () => {
+        powerSaveBlocker.stop(id);
+      };
+    },
+  });
+  const scheduler = new TaskScheduler({
+    store: schedules,
+    execute: (request) => runner.execute(request),
+    onChange: (change) => {
+      broadcast('schedule:changed', change);
+    },
+    onFinished: notifyRun,
+    log,
+  });
+  // Réveil ou déverrouillage du Mac : une exécution par tâche en retard.
+  powerMonitor.on('resume', () => {
+    scheduler.catchUp();
+  });
+  powerMonitor.on('unlock-screen', () => {
+    scheduler.catchUp();
+  });
+  const applyOpenAtLogin = (enabled: boolean): void => {
+    // En développement, l'exécutable est celui d'Electron : on ne touche à rien.
+    if (!app.isPackaged) return;
+    // Fenêtre masquée : au lancement, `wasOpenedAtLogin` évite de l'ouvrir (voir plus bas).
+    app.setLoginItemSettings({ openAtLogin: enabled });
+  };
+  applyOpenAtLogin(settings.get().openAtLogin === true);
 
   settings.onChange((next, previous) => {
     // Le modèle par défaut n'invalide aucun runtime (un par modèle) : seules les
@@ -308,11 +418,14 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
     if (next.llm.baseUrl !== previous.llm.baseUrl) models.clear();
     if (next.mcpConfigPath !== previous.mcpConfigPath) void reloadMcp();
     if (next.onboardingCompleted && !previous.onboardingCompleted) monitor.start();
+    if (next.openAtLogin !== previous.openAtLogin) applyOpenAtLogin(next.openAtLogin === true);
   });
 
   // Aperçu : seulement les fichiers des dossiers de travail des conversations connues.
   protocol.handle(PREVIEW_SCHEME, (request) =>
-    handlePreviewRequest(request.url, [...new Set(chats.list(1000).map((c) => c.workspace))]),
+    handlePreviewRequest(request.url, [
+      ...new Set(chats.list(1000, { includeScheduled: true }).map((c) => c.workspace)),
+    ]),
   );
 
   registerIpcHandlers(
@@ -323,6 +436,7 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
       models,
       chats,
       usage,
+      scheduler,
       permissions,
       sandbox,
       mcp,
@@ -360,10 +474,13 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
     monitor.start();
     sandbox.startInBackground();
   }
+  // Runs interrompus (app tuée), purge à 90 jours, rattrapage, puis minuteur.
+  scheduler.start();
 
   return {
     shutdown: async () => {
       monitor.stop();
+      scheduler.stop();
       await chats.stopAll();
       await Promise.allSettled([mcp.stop(), sandbox.stop()]);
       store.close?.();
@@ -378,7 +495,9 @@ void app.whenReady().then(async () => {
   app.setName('Atelier');
   installContentSecurityPolicy();
   ({ shutdown } = await bootstrap());
-  createMainWindow();
+  // Ouverte à la connexion (tâches planifiées) : l'app tourne sans fenêtre ;
+  // l'icône du Dock (`activate`) ou une notification l'affichent.
+  if (!app.getLoginItemSettings().wasOpenedAtLogin) createMainWindow();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow();

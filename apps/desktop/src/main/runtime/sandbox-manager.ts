@@ -6,6 +6,7 @@
 import {
   serializeError,
   type Sandbox,
+  type SandboxHolder,
   type SandboxDiagnostics,
   type SandboxProgress,
   type SandboxStatus,
@@ -20,6 +21,8 @@ export interface SandboxManagerOptions {
   onProgress: (progress: SandboxProgress) => void;
   /** Réseau par défaut d'une session (Réglages). */
   defaultNetwork: () => boolean;
+  /** Qui tient la VM (`WorkspaceLease`, ADR-002 D5) : publié dans `heldBy`. */
+  holder?: () => SandboxHolder | undefined;
   log?: (message: string, error?: unknown) => void;
 }
 
@@ -39,10 +42,18 @@ export class SandboxManager {
   }
 
   status(): SandboxStatus {
+    const holder = this.#o.holder?.();
+    const heldBy = holder ? { heldBy: holder } : {};
     if (this.#preflightError) {
-      return { state: 'error', networkEnabled: false, error: this.#preflightError };
+      return { state: 'error', networkEnabled: false, error: this.#preflightError, ...heldBy };
     }
-    return this.#sandbox?.status() ?? this.#last;
+    const { heldBy: _previous, ...base } = this.#sandbox?.status() ?? this.#last;
+    return { ...base, ...heldBy };
+  }
+
+  /** Le détenteur de la VM a changé : l'état est republié (Composer). */
+  holderChanged(): void {
+    this.#publish();
   }
 
   /** Démarre (ou crée et provisionne) la VM ; idempotent, ne rejette que via l'état. */
@@ -170,9 +181,19 @@ export class SandboxManager {
       next.state !== prev.state ||
       next.workspace !== prev.workspace ||
       next.networkEnabled !== prev.networkEnabled ||
-      next.error !== prev.error
+      next.error !== prev.error ||
+      !sameHolder(next.heldBy, prev.heldBy)
     ) {
       this.#o.onStatus(next);
     }
   }
+}
+
+function sameHolder(a: SandboxHolder | undefined, b: SandboxHolder | undefined): boolean {
+  return (
+    a?.workspace === b?.workspace &&
+    a?.runId === b?.runId &&
+    a?.sessionId === b?.sessionId &&
+    a?.taskName === b?.taskName
+  );
 }

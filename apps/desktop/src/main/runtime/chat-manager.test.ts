@@ -13,12 +13,13 @@ import {
   type ModelValidator,
   type NewAgentSession,
 } from './chat-manager.js';
+import { WorkspaceLease } from '../schedule/workspace-lease.js';
 import { PermissionBroker } from './permission-broker.js';
 import { InMemorySessionStore, type SessionStore } from './session-store.js';
 import { SqliteSessionStore } from './sqlite-store.js';
 import { InMemoryUsageStore, type UsageStore } from './usage-store.js';
 
-type Mode = 'ok' | 'error' | 'hang' | 'tool' | 'compact' | 'usage';
+type Mode = 'ok' | 'error' | 'hang' | 'tool' | 'compact' | 'usage' | 'permission';
 
 interface SentTurn {
   input: string;
@@ -83,6 +84,30 @@ class FakeAgentSession implements AgentSessionLike {
       emit({ ...ev, type: 'compaction', replacedMessages: 4 });
       emit({ ...ev, type: 'compaction', replacedMessages: 2 });
     }
+    if (mode === 'permission') {
+      // Comme agent-core : l'event est relayé avant l'appel au gestionnaire.
+      const request = {
+        id: 'p1',
+        sessionId: this.options.sessionId,
+        toolCallId: 'c1',
+        toolName: 'bash',
+        kind: 'command' as const,
+        title: 'Lancer ls',
+        input: {},
+      };
+      emit({ ...ev, type: 'tool_start', toolCallId: 'c1', toolName: 'bash', input: {} });
+      emit({ ...ev, type: 'permission_request', request });
+      const decision = await this.options.requestPermission(request);
+      emit({
+        ...ev,
+        type: 'tool_result',
+        toolCallId: 'c1',
+        toolName: 'bash',
+        ok: false,
+        denied: decision === 'deny',
+        output: 'refusé',
+      });
+    }
     if (mode === 'tool') {
       emit({ ...ev, type: 'tool_start', toolCallId: 'c1', toolName: 'bash', input: {} });
       emit({
@@ -138,6 +163,7 @@ function setup(
   store: SessionStore = new InMemorySessionStore(),
   trackChanges?: (workspace: string) => ChangeTracker,
   usage: UsageStore = new InMemoryUsageStore(),
+  extra: { lease?: WorkspaceLease } = {},
 ) {
   let defaultModel = 'qwen3.5:35b';
   const models = new FakeModels();
@@ -146,11 +172,13 @@ function setup(
   const sent: SentTurn[] = [];
   const created: NewAgentSession[] = [];
   const prepared: string[] = [];
+  const sandboxUse: boolean[] = [];
   let generation = 0;
   const agents: AgentSessionFactory = {
     generation: () => generation,
-    beforeTurn: (sessionId, workspace) => {
+    beforeTurn: (sessionId, workspace, options) => {
       prepared.push(`${sessionId}@${workspace}`);
+      sandboxUse.push(options?.sandbox !== false);
       return Promise.resolve();
     },
     createSession: (options) => {
@@ -172,6 +200,7 @@ function setup(
     usage,
     defaultModel: () => defaultModel,
     models,
+    ...(extra.lease ? { lease: extra.lease } : {}),
   });
   const wait = async (sessionId: string): Promise<void> => {
     while (chats.isRunning(sessionId)) await new Promise((r) => setTimeout(r, 1));
@@ -196,6 +225,7 @@ function setup(
     usage,
     setDefault,
     models,
+    sandboxUse,
   };
 }
 
@@ -587,5 +617,158 @@ describe('ChatManager : modèle par conversation (#13)', () => {
     await expect(chats.setModel('inconnue', null)).rejects.toMatchObject({
       code: 'session/not_found',
     });
+  });
+});
+
+describe('ChatManager : tours sans témoin (prompts planifiés, ADR-002)', () => {
+  const deny = (): Promise<'deny'> => Promise.resolve('deny');
+
+  it('conversation de run liée à sa tâche, absente des « Récentes » par défaut', () => {
+    const { chats } = setup(() => 'ok');
+    const normal = chats.create('/w');
+    const run = chats.create('/w', {
+      scheduledTaskId: 't1',
+      title: 'Rapport · 31/10 08:00',
+      model: 'qwen3.5:9b',
+    });
+    expect(run).toMatchObject({
+      scheduledTaskId: 't1',
+      title: 'Rapport · 31/10 08:00',
+      model: 'qwen3.5:9b',
+    });
+    expect(chats.list().map((s) => s.id)).toEqual([normal.id]);
+    expect(
+      chats
+        .list(50, { includeScheduled: true })
+        .map((s) => s.id)
+        .sort(),
+    ).toEqual([normal.id, run.id].sort());
+  });
+
+  it('joue le tour avec le gestionnaire non interactif et attend sa fin', async () => {
+    const { chats, created, store, sandboxUse } = setup(() => 'ok');
+    const session = chats.create('/w', { scheduledTaskId: 't1', title: 'Rapport' });
+    const result = await chats.runUnattended(session.id, 'Fais le rapport', {
+      requestPermission: deny,
+      instructions: 'Tu travailles seul.',
+      useSandbox: false,
+    });
+    expect(result.reason).toBe('stop');
+    expect(result.message.parts).toEqual([{ type: 'text', text: 'Bonjour !' }]);
+    expect(created[0]?.requestPermission).toBe(deny);
+    expect(created[0]?.instructions).toBe('Tu travailles seul.');
+    // Run sans commandes : la VM n'est pas remontée, et la session n'en a pas
+    // (bash, même `ls` de la liste blanche, ne s'exécute jamais).
+    expect(sandboxUse).toEqual([false]);
+    expect(created[0]?.sandbox).toBe(false);
+    // Le titre reste celui de la tâche.
+    expect(store.get(session.id)?.title).toBe('Rapport');
+  });
+
+  it('une réponse de l’utilisateur après le run repasse en interactif (modale)', async () => {
+    const { chats, created, wait } = setup(() => 'ok');
+    const session = chats.create('/w', { scheduledTaskId: 't1' });
+    await chats.runUnattended(session.id, 'Run', { requestPermission: deny, useSandbox: false });
+    chats.send(session.id, 'Et ensuite ?');
+    await wait(session.id);
+    expect(created).toHaveLength(2);
+    expect(created[1]?.requestPermission).not.toBe(deny);
+    expect(created[1]?.instructions).toBeUndefined();
+  });
+
+  it('aucun `permission_request` relayé pendant un run, même refusé ; le refus reste visible', async () => {
+    const { chats, events } = setup(() => 'permission');
+    const session = chats.create('/w', { scheduledTaskId: 't1' });
+    const asked: string[] = [];
+    const result = await chats.runUnattended(session.id, 'Run', {
+      requestPermission: (request) => {
+        asked.push(request.toolName);
+        return Promise.resolve('deny');
+      },
+      useSandbox: false,
+    });
+    expect(asked).toEqual(['bash']);
+    expect(events.map((e) => e.type)).not.toContain('permission_request');
+    expect(events.find((e) => e.type === 'tool_result')).toMatchObject({ denied: true });
+    expect(result.message.parts[0]).toMatchObject({ type: 'tool_call', status: 'denied' });
+  });
+
+  it('un tour interactif relaie toujours la demande (modale)', async () => {
+    const { chats, events, wait } = setup(() => 'permission');
+    const session = chats.create('/w');
+    chats.send(session.id, 'Salut');
+    await new Promise((r) => setTimeout(r, 5));
+    expect(events.map((e) => e.type)).toContain('permission_request');
+    await chats.stop(session.id);
+    await wait(session.id);
+  });
+
+  it('run avec commandes : la session garde la VM du runtime', async () => {
+    const { chats, created } = setup(() => 'ok');
+    const session = chats.create('/w', { scheduledTaskId: 't1' });
+    await chats.runUnattended(session.id, 'Run', { requestPermission: deny, useSandbox: true });
+    expect(created[0]?.sandbox).toBeUndefined();
+  });
+
+  it('le signal du run arrête le tour', async () => {
+    const { chats } = setup(() => 'hang');
+    const session = chats.create('/w', { scheduledTaskId: 't1' });
+    const controller = new AbortController();
+    const pending = chats.runUnattended(session.id, 'Long', {
+      requestPermission: deny,
+      useSandbox: true,
+      signal: controller.signal,
+    });
+    await new Promise((r) => setTimeout(r, 5));
+    controller.abort();
+    expect((await pending).reason).toBe('aborted');
+  });
+
+  it('un tour interactif attend le run qui tient la VM dans un autre dossier', async () => {
+    const lease = new WorkspaceLease();
+    const { chats, prepared, wait } = setup(() => 'ok', false, undefined, undefined, undefined, {
+      lease,
+    });
+    const release = lease.tryAcquire({
+      workspace: '/autre',
+      runId: 'r1',
+      taskName: 'Rapport',
+    });
+    const session = chats.create('/w');
+    chats.send(session.id, 'Salut');
+    await new Promise((r) => setTimeout(r, 5));
+    expect(prepared).toEqual([]);
+    expect(chats.isRunning(session.id)).toBe(true);
+    release?.();
+    await wait(session.id);
+    expect(prepared).toEqual([`${session.id}@/w`]);
+    // Le bail est rendu à la fin du tour.
+    expect(lease.workspace()).toBeUndefined();
+  });
+
+  it('« Arrêter » pendant l’attente de la VM termine le tour en « arrêté »', async () => {
+    const lease = new WorkspaceLease();
+    const { chats, events, wait } = setup(() => 'ok', false, undefined, undefined, undefined, {
+      lease,
+    });
+    lease.tryAcquire({ workspace: '/autre', runId: 'r1', taskName: 'Rapport' });
+    const session = chats.create('/w');
+    chats.send(session.id, 'Salut');
+    await new Promise((r) => setTimeout(r, 5));
+    await chats.stop(session.id);
+    await wait(session.id);
+    expect(events.at(-1)).toMatchObject({ type: 'done', reason: 'aborted' });
+  });
+
+  it('même dossier que le run : aucune attente', async () => {
+    const lease = new WorkspaceLease();
+    const { chats, prepared, wait } = setup(() => 'ok', false, undefined, undefined, undefined, {
+      lease,
+    });
+    lease.tryAcquire({ workspace: '/w', runId: 'r1', taskName: 'Rapport' });
+    const session = chats.create('/w');
+    chats.send(session.id, 'Salut');
+    await wait(session.id);
+    expect(prepared).toEqual([`${session.id}@/w`]);
   });
 });

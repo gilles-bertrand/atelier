@@ -27,6 +27,7 @@ type CapabilityLookup = (model: string) => Promise<readonly ModelCapability[] | 
 /** Hôte dont les runtimes sont factices : on compte les créations par modèle. */
 function fakeHost(settings: () => AppSettings, capabilities?: CapabilityLookup) {
   const built: string[] = [];
+  const sessions: unknown[] = [];
   const refreshes: ReturnType<typeof vi.fn>[] = [];
   const host = new AgentRuntimeHost({
     settings,
@@ -42,7 +43,10 @@ function fakeHost(settings: () => AppSettings, capabilities?: CapabilityLookup) 
         contextWindow: 32_768,
         contextWindowSource: 'fallback',
         refreshContextWindow,
-        createSession: () => ({ history: [] }),
+        createSession: (options: unknown) => {
+          sessions.push(options);
+          return { history: [] };
+        },
       } as unknown as AgentRuntime);
     },
   });
@@ -54,7 +58,7 @@ function fakeHost(settings: () => AppSettings, capabilities?: CapabilityLookup) 
       requestPermission: () => Promise.resolve('deny'),
       history: [],
     });
-  return { host, built, refreshes, open };
+  return { host, built, refreshes, open, sessions };
 }
 
 describe('searchProviders', () => {
@@ -173,5 +177,23 @@ describe('AgentRuntimeHost', () => {
     await open('b');
     await host.refreshIfFallback();
     expect(refreshes.map((refresh) => refresh.mock.calls.length)).toEqual([1, 1]);
+  });
+});
+
+describe('AgentRuntimeHost : runs planifiés (ADR-002)', () => {
+  it('session sans VM et consignes du mode autonome transmises à agent-core', async () => {
+    const { host, sessions } = fakeHost(() => configured());
+    const base = {
+      sessionId: 's',
+      workspace: '/w',
+      model: 'qwen3.5:35b',
+      requestPermission: () => Promise.resolve('deny' as const),
+      history: [],
+    };
+    await host.createSession({ ...base, sandbox: false, instructions: 'Tu travailles seul.' });
+    await host.createSession(base);
+    expect(sessions[0]).toMatchObject({ sandbox: false, extraInstructions: 'Tu travailles seul.' });
+    expect(sessions[1]).not.toHaveProperty('sandbox');
+    expect(sessions[1]).not.toHaveProperty('extraInstructions');
   });
 });
