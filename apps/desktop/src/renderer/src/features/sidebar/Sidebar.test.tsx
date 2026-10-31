@@ -236,6 +236,10 @@ describe('colonne de gauche : actions', () => {
     await user.keyboard('{ArrowDown}');
     expect(screen.getByRole('menuitem', { name: 'Nouvelle conversation ici' })).toHaveFocus();
     await user.keyboard('{ArrowDown}');
+    expect(
+      screen.getByRole('menuitem', { name: 'Créer un projet à partir de ce dossier' }),
+    ).toHaveFocus();
+    await user.keyboard('{ArrowDown}');
     expect(screen.getByRole('menuitem', { name: 'Retirer de la liste' })).toHaveFocus();
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();

@@ -173,6 +173,10 @@ export function permissionsAfterDenied(
       case 'mcp_write':
         if (!next.mcpTools.includes(action.scopeKey)) next.mcpTools.push(action.scopeKey);
         break;
+      case 'memory_write':
+        // Mémoire du projet (ADR-003 D4) : case dédiée.
+        next.memory = true;
+        break;
       default:
         notGrantable.push(action);
     }

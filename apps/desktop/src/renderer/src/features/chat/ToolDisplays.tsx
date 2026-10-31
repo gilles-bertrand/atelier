@@ -25,6 +25,7 @@ import { errorMessage } from '@renderer/lib/error-messages';
 import { formatBytes } from '@renderer/lib/format';
 import { fileName, hostname, safeHttpUrl, siteMark } from '@renderer/lib/tool-labels';
 import { cn } from '@renderer/lib/utils';
+import { useArtifactPreview } from '../projects/artifact-preview-context';
 import { useFilePreview } from './file-preview-context';
 
 /** Étiquette de la carte : « Créé » en succès, « Modifié » en info. */
@@ -219,6 +220,45 @@ export function isProminentDisplay(display: ToolDisplay): boolean {
   );
 }
 
+/**
+ * Carte « Artefact publié » (ADR-003 D5) : un clic ouvre la page dans le panneau
+ * droit de la conversation (visionneuse isolée), quand elle le fournit.
+ */
+function ArtifactCardView({
+  artifact,
+}: {
+  artifact: Extract<ToolDisplay, { type: 'artifact' }>['artifact'];
+}) {
+  const preview = useArtifactPreview();
+  const content = (
+    <>
+      <AppWindow className="size-4 shrink-0 text-brand-text" aria-hidden />
+      <span className="min-w-0 flex-1 truncate font-medium">{artifact.title}</span>
+      <span className="shrink-0 text-xs text-muted-foreground">Artefact · v{artifact.version}</span>
+    </>
+  );
+  const classes = 'flex w-full items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm';
+  if (!preview) return <p className={classes}>{content}</p>;
+  const selected = preview.selectedId === artifact.id;
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      aria-label={`Ouvrir l’artefact « ${artifact.title} » (version ${String(artifact.version)})`}
+      onClick={() => {
+        preview.toggle(artifact.id);
+      }}
+      className={cn(
+        classes,
+        'text-left hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        selected ? 'border-brand ring-1 ring-brand' : undefined,
+      )}
+    >
+      {content}
+    </button>
+  );
+}
+
 /** Rendu d'un affichage riche. */
 export function ToolDisplayView({ display }: { display: ToolDisplay }) {
   switch (display.type) {
@@ -293,15 +333,6 @@ export function ToolDisplayView({ display }: { display: ToolDisplay }) {
     case 'todos':
       return <TodoList todos={display.todos} />;
     case 'artifact':
-      // Carte minimale (ADR-003 D5) : la visionneuse arrive avec la page du projet (L4).
-      return (
-        <p className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm">
-          <AppWindow className="size-4 shrink-0 text-brand-text" aria-hidden />
-          <span className="min-w-0 flex-1 truncate font-medium">{display.artifact.title}</span>
-          <span className="shrink-0 text-xs text-muted-foreground">
-            Artefact · v{display.artifact.version}
-          </span>
-        </p>
-      );
+      return <ArtifactCardView artifact={display.artifact} />;
   }
 }

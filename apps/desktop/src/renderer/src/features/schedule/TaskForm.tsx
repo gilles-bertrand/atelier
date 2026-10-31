@@ -14,6 +14,7 @@ import {
   type IsoWeekday,
   type LlmModelInfo,
   type McpServerStatus,
+  type ProjectSummary,
   type Schedule,
   type ScheduledPermissions,
   type ScheduledTask,
@@ -144,11 +145,14 @@ type WebMode = 'none' | 'all' | 'list';
 export function TaskForm({
   task,
   denied,
+  projectId: presetProject,
   onDone,
   onCancel,
 }: {
   /** Tâche à modifier ; absente : nouvelle tâche. */
   task?: ScheduledTask;
+  /** Nouvelle tâche demandée depuis la page d'un projet : projet présélectionné (ADR-003). */
+  projectId?: string;
   /** « Autoriser pour cette tâche » : refus du run, à pré-cocher. */
   denied?: readonly DeniedAction[];
   onDone: (task: ScheduledTask, created: boolean) => void;
@@ -170,6 +174,7 @@ export function TaskForm({
     domains: `${id}-domains`,
     domainsHint: `${id}-domains-hint`,
     duration: `${id}-duration`,
+    project: `${id}-project`,
   };
   const granted = useMemo(
     () =>
@@ -182,6 +187,10 @@ export function TaskForm({
 
   const [name, setName] = useState(task?.name ?? '');
   const [workspace, setWorkspace] = useState(task?.workspace ?? '');
+  // Projet (ADR-003 D6) : la tâche hérite de ses dossiers, consignes et mémoire.
+  const [projectId, setProjectId] = useState(task?.projectId ?? presetProject ?? '');
+  const [projects, setProjects] = useState<ProjectSummary[] | undefined>();
+  const [memory, setMemory] = useState(initial.memory === true);
   const [prompt, setPrompt] = useState(task?.prompt ?? '');
   const [model, setModel] = useState(task?.model ?? '');
   const [fields, setFields] = useState(() => fieldsFrom(task?.schedule));
@@ -221,6 +230,25 @@ export function TaskForm({
       off();
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    call('project:list', { includeArchived: true }).then(
+      (list) => {
+        // Un projet archivé reste visible pour la tâche qui en fait déjà partie.
+        if (!cancelled) {
+          setProjects(list.filter((p) => p.archivedAt === undefined || p.id === task?.projectId));
+        }
+      },
+      () => {
+        if (!cancelled) setProjects([]);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [task?.projectId]);
+  const project = projects?.find((p) => p.id === projectId);
 
   useEffect(() => {
     let cancelled = false;
@@ -270,7 +298,9 @@ export function TaskForm({
     const input: ScheduledTaskInput = {
       name,
       prompt,
-      workspace,
+      // Tâche de projet : le main impose de toute façon son dossier principal.
+      workspace: project?.folders[0]?.path ?? workspace,
+      ...(projectId !== '' ? { projectId } : {}),
       ...(model !== '' ? { model } : {}),
       schedule,
       permissions: {
@@ -278,6 +308,7 @@ export function TaskForm({
         commands,
         webDomains: webMode === 'all' ? '*' : webMode === 'list' ? parseList(domains) : [],
         mcpTools,
+        ...(projectId !== '' && memory ? { memory: true } : {}),
       },
       maxDurationMinutes: durationValue,
       enabled: task?.enabled ?? true,
@@ -334,6 +365,31 @@ export function TaskForm({
           ) : null}
         </div>
         <div className="space-y-2">
+          <Label htmlFor={ids.project}>Projet</Label>
+          <Select
+            id={ids.project}
+            value={projectId}
+            onChange={(e) => {
+              setProjectId(e.target.value);
+            }}
+          >
+            <option value="">Aucun : un seul dossier</option>
+            {(projects ?? []).map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </Select>
+        </div>
+      </div>
+
+      {project ? (
+        <Hint>
+          La tâche travaille dans les dossiers du projet « {project.name} » (principal :{' '}
+          {project.folders[0]?.path}), suit ses consignes et relit sa mémoire.
+        </Hint>
+      ) : (
+        <div className="space-y-2">
           <span className="text-sm font-medium">Dossier</span>
           <div className="flex items-center gap-2">
             <Button type="button" variant="outline" onClick={() => void chooseFolder()}>
@@ -348,7 +404,7 @@ export function TaskForm({
             <Hint className="text-destructive">{fieldError('workspace')}</Hint>
           ) : null}
         </div>
-      </div>
+      )}
 
       <div className="space-y-2">
         <Label htmlFor={ids.prompt}>Demande</Label>
@@ -559,8 +615,25 @@ export function TaskForm({
         <Checkbox
           checked={fileWrite}
           onChange={setFileWrite}
-          label="Créer et modifier des fichiers dans le dossier"
+          label={
+            project
+              ? 'Créer et modifier des fichiers dans les dossiers du projet'
+              : 'Créer et modifier des fichiers dans le dossier'
+          }
+          {...(project
+            ? {
+                hint: 'Seulement les dossiers en lecture et écriture, jamais ceux en lecture seule.',
+              }
+            : {})}
         />
+        {project ? (
+          <Checkbox
+            checked={memory}
+            onChange={setMemory}
+            label="Mettre à jour la mémoire du projet"
+            hint="L’assistant peut y retenir ce qu’il apprend pendant l’exécution ; chaque ajout reste visible dans l’historique."
+          />
+        ) : null}
         <Checkbox
           checked={commands}
           onChange={setCommands}
