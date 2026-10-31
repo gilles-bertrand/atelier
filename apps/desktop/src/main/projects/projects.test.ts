@@ -463,6 +463,13 @@ describe('ProjectService', () => {
     const nestedLink = join(root, 'lien-sous');
     await symlink(join(main, 'sous'), nestedLink);
     await refused(nestedLink);
+    // Un lien vers le $HOME entier ou vers la racine du disque (relecture du Lead, PR #124).
+    const toHome = join(root, 'lien-home');
+    const toRoot = join(root, 'lien-racine');
+    await symlink(home, toHome);
+    await symlink('/', toRoot);
+    await refused(toHome);
+    await refused(toRoot);
   });
 
   it('changer le dossier principal déplace les conversations et les tâches du projet', async () => {

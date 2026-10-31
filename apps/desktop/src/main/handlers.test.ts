@@ -1,4 +1,4 @@
-import { mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -38,7 +38,27 @@ describe('assertWorkspace', () => {
     await expect(assertWorkspace('relatif', home)).rejects.toMatchObject({
       code: 'sandbox/invalid_workspace',
     });
-    expect(await assertWorkspace(tmpdir(), home)).toBeTruthy();
+    const workspace = await mkdtemp(join(tmpdir(), 'atelier-ws-'));
+    expect(await assertWorkspace(workspace, home)).toBe(workspace);
+  });
+
+  it('refuse un lien symbolique vers $HOME ou vers /, et un dossier qui contient $HOME', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'atelier-rules-'));
+    const home = join(root, 'home');
+    await mkdir(join(home, 'Documents'), { recursive: true });
+    const toHome = join(root, 'lien-home');
+    const toRoot = join(root, 'lien-racine');
+    await symlink(home, toHome);
+    await symlink('/', toRoot);
+    for (const dir of [toHome, toRoot, root]) {
+      await expect(assertWorkspace(dir, home), dir).rejects.toMatchObject({
+        code: 'sandbox/invalid_workspace',
+      });
+    }
+    // Un sous-dossier du $HOME, même atteint par un lien, reste accepté.
+    const toDocuments = join(root, 'lien-documents');
+    await symlink(join(home, 'Documents'), toDocuments);
+    expect(await assertWorkspace(toDocuments, home)).toBe(toDocuments);
   });
 });
 
@@ -213,7 +233,8 @@ describe('prompts planifiés (ADR-002)', () => {
     const task = {
       name: 'Rapport',
       prompt: 'Fais-le',
-      workspace: tmpdir(),
+      // Pas tmpdir() lui-même : il contient le faux $HOME du test, refusé (dossier trop large).
+      workspace: await mkdtemp(join(tmpdir(), 'atelier-tache-')),
       schedule: { kind: 'daily' as const, time: '08:00' },
       permissions: { fileWrite: true, commands: false, webDomains: [], mcpTools: [] },
     };
