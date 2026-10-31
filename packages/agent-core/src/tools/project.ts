@@ -6,7 +6,7 @@
  * valider, lire le fichier à publier (garde des dossiers comprise) et décrire
  * les demandes de permission.
  */
-import { readFile, stat } from 'node:fs/promises';
+import { open } from 'node:fs/promises';
 import { z } from 'zod';
 import {
   AtelierError,
@@ -192,6 +192,13 @@ export function createMemoryTools(memory: ProjectMemoryWriter): AnyToolDefinitio
     }),
     execute: (input, context) =>
       guardedProject(async () => {
+        if (input.content.trim() === '') {
+          return {
+            ok: false,
+            content:
+              "Mémoire vide refusée : pour tout effacer, l'utilisateur le fait lui-même depuis la page du projet.",
+          };
+        }
         const updated = await memory.rewrite(context.sessionId, input.content.trim());
         return {
           ok: true,
@@ -256,15 +263,23 @@ export function createPublishArtifactTool(publisher: ArtifactPublisher): AnyTool
             content: `${input.path} ne peut pas être publié : seuls les fichiers .html, .htm et .md sont des artefacts.`,
           };
         }
-        const info = await stat(resolved.absolutePath);
-        if (!info.isFile()) return { ok: false, content: `${input.path} n'est pas un fichier.` };
-        if (info.size > MAX_ARTIFACT_BYTES) {
-          return {
+        // Un seul descripteur pour la vérification et la lecture : le fichier ne
+        // peut pas être remplacé entre les deux.
+        const handle = await open(resolved.absolutePath, 'r');
+        let content: Buffer;
+        try {
+          const info = await handle.stat();
+          if (!info.isFile()) return { ok: false, content: `${input.path} n'est pas un fichier.` };
+          const tooBig = (size: number): ToolOutput => ({
             ok: false,
-            content: `${input.path} pèse ${megabytes(info.size)} : un artefact est limité à ${megabytes(MAX_ARTIFACT_BYTES)}. Allège la page (données résumées, images plus petites).`,
-          };
+            content: `${input.path} pèse ${megabytes(size)} : un artefact est limité à ${megabytes(MAX_ARTIFACT_BYTES)}. Allège la page (données résumées, images plus petites).`,
+          });
+          if (info.size > MAX_ARTIFACT_BYTES) return tooBig(info.size);
+          content = await handle.readFile();
+          if (content.byteLength > MAX_ARTIFACT_BYTES) return tooBig(content.byteLength);
+        } finally {
+          await handle.close();
         }
-        const content = await readFile(resolved.absolutePath);
         const title = input.title.trim();
         const description = input.description?.trim();
         const card = await publisher.publish({

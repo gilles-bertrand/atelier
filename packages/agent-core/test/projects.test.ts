@@ -166,6 +166,27 @@ describe('resolveFolderPath', () => {
     });
   });
 
+  it('refuse l’écriture dans un dossier en lecture seule atteint par un autre chemin', async () => {
+    await withProject(async (p) => {
+      // « Sous » est un sous-dossier du principal, rattaché en lecture seule par un lien.
+      await mkdir(path.join(p.primary, 'sous'));
+      const link = path.join(p.root, 'lien-sous');
+      await symlink(path.join(p.primary, 'sous'), link);
+      const context = ctx(p, {
+        folders: [...p.folders, { path: link, label: 'Sous', access: 'read' }],
+      });
+      await expect(resolveFolderPath(context, 'sous/x.md', { write: true })).rejects.toMatchObject({
+        code: 'tool/read_only',
+      });
+      await expect(
+        resolveFolderPath(context, path.join(p.primary, 'sous', 'x.md'), { write: true }),
+      ).rejects.toMatchObject({ code: 'tool/read_only' });
+      await expect(resolveFolderPath(context, 'sous/x.md')).resolves.toMatchObject({
+        exists: false,
+      });
+    });
+  });
+
   it('sans dossiers rattachés, garde le comportement d’un seul dossier', async () => {
     await withProject(async (p) => {
       const single = ctx(p, { folders: [] });
@@ -245,6 +266,15 @@ describe('outils natifs dans un projet', () => {
     });
   });
 
+  it('list_dir signale un sous-dossier du principal qui masque un dossier rattaché', async () => {
+    await withProject(async (p) => {
+      await mkdir(path.join(p.primary, 'Compta'));
+      const root = await listDirTool.execute({}, ctx(p));
+      expect(root.content).toContain('le sous-dossier « Compta » du dossier principal masque');
+      expect(root.content).not.toContain('« Archives » du dossier principal masque');
+    });
+  });
+
   it('glob et present_file fonctionnent dans un dossier rattaché', async () => {
     await withProject(async (p) => {
       await mkdir(path.join(p.compta, '2026'));
@@ -312,11 +342,16 @@ describe('prompt système d’un projet', () => {
   });
 
   it('dit quand retenir quelque chose si memory_add est disponible, et tronque une longue mémoire', () => {
-    const long = { ...project, memory: 'x'.repeat(MEMORY_PROMPT_CHARS + 500) };
+    const long = {
+      ...project,
+      memory: `${'x'.repeat(MEMORY_PROMPT_CHARS - 10)}\n${'y'.repeat(500)}`,
+    };
     const prompt = buildSystemPrompt({ ...base, project: long, toolNames: ['memory_add'] });
-    expect(prompt).toContain('retiens-le avec memory_add');
+    expect(prompt).toContain('Utilise memory_add seulement');
     expect(prompt).toContain('Mémoire tronquée');
-    expect(prompt).not.toContain('x'.repeat(MEMORY_PROMPT_CHARS + 1));
+    // Coupée en fin de ligne : aucun morceau de la ligne suivante.
+    expect(prompt).toContain(`${'x'.repeat(MEMORY_PROMPT_CHARS - 10)}\n--- fin de la mémoire ---`);
+    expect(prompt).not.toContain('yyy');
     const empty = buildSystemPrompt({
       ...base,
       project: { ...project, memory: '' },
@@ -462,6 +497,17 @@ describe('outils de mémoire', () => {
         ok: false,
         content: 'Cette conversation n’appartient à aucun projet.',
       });
+    });
+  });
+
+  it('memory_rewrite refuse une mémoire vide', async () => {
+    await withProject(async (p) => {
+      const { writer, rewrite: rewriteSpy } = memoryWriter();
+      const rewrite = toolNamed(createMemoryTools(writer), 'memory_rewrite');
+      const out = await executeTool(rewrite, { content: '   ' }, 'c', runtimeFor(p));
+      expect(out.ok).toBe(false);
+      expect(out.content).toContain('Mémoire vide refusée');
+      expect(rewriteSpy).not.toHaveBeenCalled();
     });
   });
 
@@ -658,7 +704,7 @@ describe('session de projet (createAgentRuntime)', () => {
       const sent = promptText(model, 0);
       expect(sent).toContain('Projet : « Ventes »');
       expect(sent).toContain('- note du projet');
-      expect(sent).toContain('retiens-le avec memory_add');
+      expect(sent).toContain('Utilise memory_add seulement');
       // Un projet illisible n'empêche pas le tour : seul le dossier principal reste accessible.
       const broken = runtime.createSession({
         sessionId: 's2',
@@ -667,6 +713,41 @@ describe('session de projet (createAgentRuntime)', () => {
         project: () => Promise.reject(new Error('base indisponible')),
       });
       await expect(broken.agent.currentProject()).resolves.toBeUndefined();
+    });
+  });
+
+  it('lecture du projet en échec : le dernier projet lu garde les dossiers rattachés', async () => {
+    await withProject(async (p) => {
+      const model = scriptedModel([
+        { text: 'Premier tour.' },
+        { toolCalls: [{ name: 'write_file', input: { path: 'Compta/y.md', content: 'ok' } }] },
+        { text: 'Écrit.' },
+      ]);
+      const fetch = vi.fn<typeof globalThis.fetch>(() =>
+        Promise.resolve(new Response(JSON.stringify({ parameters: 'num_ctx 32768' }))),
+      );
+      const runtime = await createAgentRuntime({
+        llm: { baseUrl: 'https://llm.example.com', model: 'm', fetch },
+        models: { model, fastModel: scriptedModel([]) },
+      });
+      let calls = 0;
+      const session = runtime.createSession({
+        sessionId: 's',
+        workspace: p.primary,
+        requestPermission: permissions(),
+        project: () => {
+          calls += 1;
+          return calls === 1
+            ? Promise.resolve({ name: 'Ventes', folders: p.folders })
+            : Promise.reject(new Error('base occupée'));
+        },
+      });
+      const { emit } = collect();
+      await session.send('Bonjour', emit);
+      await session.send('Écris dans Compta.', emit);
+      expect(await readFile(path.join(p.compta, 'y.md'), 'utf8')).toBe('ok');
+      await expect(readFile(path.join(p.primary, 'Compta', 'y.md'))).rejects.toThrow();
+      expect(promptText(model, 1)).toContain('Projet : « Ventes »');
     });
   });
 });

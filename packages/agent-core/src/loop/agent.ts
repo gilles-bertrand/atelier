@@ -150,6 +150,8 @@ type EventPayload = AgentEvent extends infer E
 /** Agent Atelier : exécute des tours de conversation. */
 export class Agent {
   readonly #options: AgentOptions;
+  /** Dernier projet lu avec succès : repli si une lecture échoue (dossiers rattachés gardés). */
+  #lastProject: PromptProject | undefined;
 
   constructor(options: AgentOptions) {
     this.#options = options;
@@ -171,17 +173,25 @@ export class Agent {
     return (typeof skills === 'function' ? skills() : skills) ?? [];
   }
 
-  /** Projet du tour (getter relu) ; `undefined` sans projet ou si sa lecture échoue. */
+  /**
+   * Projet du tour (getter relu). Si la lecture échoue, le dernier projet lu
+   * avec succès sert encore : sans lui, `write_file("Compta/x")` se résoudrait
+   * dans le dossier principal et y créerait un dossier `Compta/` qui masquerait
+   * ensuite le dossier rattaché. `undefined` sans projet ou sans lecture réussie.
+   */
   async currentProject(): Promise<PromptProject | undefined> {
     const { project } = this.#options;
     if (!project) return undefined;
     try {
-      return await project();
+      const read = await project();
+      this.#lastProject = read;
+      return read;
     } catch (error) {
       this.#options.log?.('project:unavailable', {
         message: error instanceof Error ? error.message : String(error),
+        fallback: this.#lastProject !== undefined,
       });
-      return undefined;
+      return this.#lastProject;
     }
   }
 

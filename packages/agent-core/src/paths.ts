@@ -395,6 +395,15 @@ export async function resolveFolderPath(
   if (found?.folder && found.folder.access === 'read' && options.write === true) {
     throw readOnlyFolder(found.folder, input);
   }
+  if (found && options.write === true) {
+    // Un dossier en lecture seule peut aussi être atteint par un autre dossier
+    // (lien symbolique vers un sous-dossier du principal) : chemin canonique.
+    for (const folder of folders) {
+      if (folder.access !== 'read') continue;
+      const root = (await canonicalize(path.resolve(folder.path))).canonical;
+      if (isInside(root, found.absolutePath)) throw readOnlyFolder(folder, input);
+    }
+  }
   if (found && (found.exists || readRoots.length === 0)) return found;
   if (readRoots.length > 0) {
     // Skills en lecture seule : seulement si le chemin n'existe dans aucun dossier.

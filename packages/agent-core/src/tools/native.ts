@@ -226,8 +226,9 @@ export function createListDirTool(options: NativeToolsOptions = {}) {
         const attachmentLine =
           isRoot || isAppDir ? await attachmentsLine(context.workspace) : undefined;
         // À la racine du principal, rappel des autres dossiers du projet (ADR-003).
+        const names = new Set(entries.map((e) => e.name.toLocaleLowerCase('fr')));
         const attachments =
-          [attachmentLine, isRoot ? projectFoldersLines(context) : undefined]
+          [attachmentLine, isRoot ? projectFoldersLines(context, names) : undefined]
             .filter((line): line is string => line !== undefined)
             .join('\n\n') || undefined;
         const visible = entries
@@ -295,14 +296,24 @@ async function attachmentsLine(workspace: string): Promise<string | undefined> {
   return `Pièces jointes : ${shown.join(', ')}${more}`;
 }
 
-/** Rappel des dossiers rattachés d'un projet (liste du principal). */
-function projectFoldersLines(context: ToolExecutionContext): string | undefined {
+/**
+ * Rappel des dossiers rattachés d'un projet (liste du principal). Un
+ * sous-dossier du principal qui porte le même nom masque « <libellé>/… » :
+ * il est signalé, avec le chemin complet à utiliser.
+ */
+function projectFoldersLines(
+  context: ToolExecutionContext,
+  primaryNames: ReadonlySet<string>,
+): string | undefined {
   const folders = context.folders ?? [];
   if (folders.length === 0) return undefined;
-  const lines = folders.map(
-    (f) =>
-      `- ${f.label.trim()}/ (${f.access === 'read' ? 'lecture seule' : 'lecture et écriture'}) : ${f.path}`,
-  );
+  const lines = folders.map((f) => {
+    const label = f.label.trim();
+    const line = `- ${label}/ (${f.access === 'read' ? 'lecture seule' : 'lecture et écriture'}) : ${f.path}`;
+    return primaryNames.has(label.toLocaleLowerCase('fr'))
+      ? `${line} [attention : le sous-dossier « ${label} » du dossier principal masque « ${label}/… » ; utilise le chemin complet]`
+      : line;
+  });
   return `Autres dossiers du projet (chemins « <dossier>/… ») :\n${lines.join('\n')}`;
 }
 

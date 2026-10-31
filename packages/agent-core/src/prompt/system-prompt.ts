@@ -224,7 +224,7 @@ function memorySection(project: PromptProject, canWrite: boolean): string {
   } else {
     const truncated = memory.length > MEMORY_PROMPT_CHARS;
     parts.push(
-      `--- début de la mémoire ---\n${truncated ? memory.slice(0, MEMORY_PROMPT_CHARS) : memory}\n--- fin de la mémoire ---`,
+      `--- début de la mémoire ---\n${truncated ? truncateAtLine(memory, MEMORY_PROMPT_CHARS) : memory}\n--- fin de la mémoire ---`,
     );
     if (truncated) {
       parts.push(
@@ -234,10 +234,17 @@ function memorySection(project: PromptProject, canWrite: boolean): string {
   }
   if (canWrite) {
     parts.push(
-      "Quand tu apprends quelque chose d'utile pour la suite du projet (décision, préférence, information durable comme un nom, une échéance ou une convention, étape franchie d'un travail en plusieurs fois), retiens-le avec memory_add, en une phrase. Si l'utilisateur dit « retiens que… », utilise memory_add. Ne retiens jamais de secret (mot de passe, jeton, clé) ni le contenu brut d'un document. memory_rewrite sert seulement à réorganiser la mémoire quand l'utilisateur le demande.",
+      "Utilise memory_add seulement quand l'utilisateur te demande de retenir quelque chose (« retiens que… ») ou quand il prend une décision explicite utile pour la suite du projet : une phrase, une note au plus par réponse (chaque note lui est soumise). Ne retiens jamais de secret (mot de passe, jeton, clé) ni le contenu brut d'un document. memory_rewrite sert seulement à réorganiser la mémoire quand l'utilisateur le demande.",
     );
   }
   return parts.join('\n');
+}
+
+/** Coupe un texte à `max` caractères, en fin de ligne quand c'est possible. */
+function truncateAtLine(text: string, max: number): string {
+  const head = text.slice(0, max);
+  const end = head.lastIndexOf('\n');
+  return end > 0 ? head.slice(0, end) : head;
 }
 
 /** Dossier parent d'un chemin POSIX (chemins de la VM). */
