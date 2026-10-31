@@ -143,6 +143,44 @@ describe('createAgentRuntime', () => {
     });
   });
 
+  it('session sans VM (`sandbox: false`) : bash n’exécute rien, l’autre session garde la VM', async () => {
+    await withTempDir(async (ws) => {
+      const exec = vi.fn(() =>
+        Promise.resolve({
+          exitCode: 0,
+          stdout: 'rapport.md\n',
+          stderr: '',
+          truncated: false,
+          timedOut: false,
+          durationMs: 5,
+        }),
+      );
+      const vm = { exec } as unknown as Sandbox;
+      const bashLs = { toolCalls: [{ name: 'bash', input: { command: 'ls' } }] };
+      const model = scriptedModel([bashLs, { text: 'sans VM' }, bashLs, { text: 'avec VM' }]);
+      const runtime = await createAgentRuntime({
+        llm: { ...llm, numCtx: 8192 },
+        models: { model, fastModel: model },
+        sandbox: () => vm,
+      });
+      const base = { workspace: ws, requestPermission: permissions() };
+
+      const run = runtime.createSession({ ...base, sessionId: 'run', sandbox: false });
+      expect(run.agent.currentSandbox()).toBeUndefined();
+      const runEvents = collect();
+      await run.send('Liste le dossier.', runEvents.emit);
+      expect(exec).not.toHaveBeenCalled();
+      const refused = runEvents.events.find((e) => e.type === 'tool_result');
+      expect(refused).toMatchObject({ toolName: 'bash', ok: false });
+      expect(JSON.stringify(refused)).toContain("n'est pas disponible");
+
+      const chat = runtime.createSession({ ...base, sessionId: 'chat' });
+      expect(chat.agent.currentSandbox()).toBe(vm);
+      await chat.send('Liste le dossier.', collect().emit);
+      expect(exec).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('permissions « pour la session » mémorisées par session', async () => {
     await withTempDir(async (ws) => {
       const model = scriptedModel([
