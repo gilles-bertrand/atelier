@@ -1,6 +1,15 @@
 /** Écran des Réglages : navigation par rubrique, une rubrique affichée à la fois. */
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Box, ChartColumn, Globe, Plug, Server, Sparkles } from 'lucide-react';
+import {
+  ArrowLeft,
+  Box,
+  CalendarClock,
+  ChartColumn,
+  Globe,
+  Plug,
+  Server,
+  Sparkles,
+} from 'lucide-react';
 import { ServerStatusBadge } from '@renderer/components/status/ServerStatusBadge';
 import { Button } from '@renderer/components/ui/button';
 import { cn } from '@renderer/lib/utils';
@@ -8,6 +17,7 @@ import { headerInset, SidebarOpenButton, useShellChrome } from '../sidebar/shell
 import { useApp } from '@renderer/state/app-state';
 import { McpSettings, SkillsSettings } from './ExtensionsSettings';
 import { SandboxSettings } from './SandboxSettings';
+import { ScheduleSettings } from './ScheduleSettings';
 import { SearchSettings } from './SearchSettings';
 import { ServerSettings } from './ServerSettings';
 import { UsageSettings } from './UsageSettings';
@@ -16,6 +26,7 @@ const SECTIONS = [
   { id: 'server', label: 'Serveur et modèle', icon: Server },
   { id: 'usage', label: 'Utilisation', icon: ChartColumn },
   { id: 'sandbox', label: 'Machine isolée', icon: Box },
+  { id: 'schedule', label: 'Tâches planifiées', icon: CalendarClock },
   { id: 'search', label: 'Recherche web', icon: Globe },
   { id: 'skills', label: 'Skills', icon: Sparkles },
   { id: 'mcp', label: 'Connecteurs', icon: Plug },
@@ -94,6 +105,7 @@ export function Settings({ onClose }: { onClose: () => void }) {
             {section === 'server' ? <ServerSettings /> : null}
             {section === 'usage' ? <UsageSettings /> : null}
             {section === 'sandbox' ? <SandboxSettings /> : null}
+            {section === 'schedule' ? <ScheduleSettings /> : null}
             {section === 'search' ? <SearchSettings /> : null}
             {section === 'skills' ? <SkillsSettings /> : null}
             {section === 'mcp' ? <McpSettings /> : null}

@@ -5,7 +5,7 @@
  * conversation en arrière-plan).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { SessionSummary } from '@atelier/shared';
+import type { DeniedAction, SessionSummary } from '@atelier/shared';
 import { HistoryBanner } from '@renderer/components/status/HistoryBanner';
 import { Alert } from '@renderer/components/ui/primitives';
 import { atelier, call, toSerializedError } from '@renderer/lib/api';
@@ -14,6 +14,7 @@ import { ChatProvider, useChat } from '@renderer/state/chat-store';
 import { ChatView } from './chat/ChatView';
 import { PermissionDialog } from './chat/PermissionDialog';
 import { Home } from './home/Home';
+import { ScheduleView, type FormRequest } from './schedule/ScheduleView';
 import { Settings } from './settings/Settings';
 import { sessionActivity } from './sidebar/activity';
 import { ShellChromeProvider, type ShellChrome } from './sidebar/shell-chrome';
@@ -58,6 +59,8 @@ function WorkspaceViews() {
   const [current, setCurrent] = useState<SessionSummary | undefined>();
   const [error, setError] = useState<string | undefined>();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Tâches planifiées (ADR-002 D7) : tableau de bord, ou formulaire demandé par un run.
+  const [schedule, setSchedule] = useState<{ request?: FormRequest } | undefined>();
   const searchRef = useRef<HTMLInputElement>(null);
   // ⌘K avec la colonne masquée : le champ n'existe qu'après son affichage.
   const pendingSearchFocus = useRef(false);
@@ -91,7 +94,50 @@ function WorkspaceViews() {
 
   const open = useCallback((session: SessionSummary): void => {
     setSettingsOpen(false);
+    setSchedule(undefined);
     setCurrent(session);
+  }, []);
+
+  /** Conversation d'un run (absente des « Récentes ») ouverte depuis le tableau de bord. */
+  const openSessionById = useCallback(
+    (sessionId: string): void => {
+      call('session:open', { sessionId }).then(
+        ({ session }) => {
+          open(session);
+        },
+        (e: unknown) => {
+          setError(errorMessage(toSerializedError(e)));
+        },
+      );
+    },
+    [open],
+  );
+
+  // Clic sur la notification de fin d'un run (ADR-002 D7) : sa conversation s'ouvre.
+  useEffect(
+    () =>
+      atelier().on('app:open-session', ({ sessionId }) => {
+        openSessionById(sessionId);
+      }),
+    [openSessionById],
+  );
+
+  /** « Autoriser pour cette tâche » : formulaire de la tâche, cases des refus pré-cochées. */
+  const authorizeTask = useCallback((taskId: string, denied: DeniedAction[]): void => {
+    call('schedule:list').then(
+      (tasks) => {
+        const task = tasks.find((t) => t.id === taskId);
+        if (!task) {
+          setError('Cette tâche planifiée n’existe plus.');
+          return;
+        }
+        setSettingsOpen(false);
+        setSchedule({ request: { task, denied } });
+      },
+      (e: unknown) => {
+        setError(errorMessage(toSerializedError(e)));
+      },
+    );
   }, []);
 
   const { showFolder } = sidebar;
@@ -190,6 +236,7 @@ function WorkspaceViews() {
               activity={activity}
               current={current}
               settingsActive={settingsOpen}
+              scheduleActive={schedule !== undefined && !settingsOpen}
               hiddenFolders={sidebar.hiddenFolders}
               searchRef={searchRef}
               onNewConversation={newFromShortcut}
@@ -201,6 +248,10 @@ function WorkspaceViews() {
               onOpenSettings={() => {
                 setSettingsOpen(true);
               }}
+              onOpenSchedule={() => {
+                setSettingsOpen(false);
+                setSchedule({});
+              }}
               onCollapse={toggleSidebar}
             />
           ) : null}
@@ -210,6 +261,13 @@ function WorkspaceViews() {
                 onClose={() => {
                   setSettingsOpen(false);
                 }}
+              />
+            ) : schedule ? (
+              <ScheduleView
+                // Nouvelle demande (« Autoriser… ») : le formulaire repart de zéro.
+                key={schedule.request ? `form-${schedule.request.task?.id ?? 'new'}` : 'dashboard'}
+                onOpenSession={openSessionById}
+                {...(schedule.request ? { request: schedule.request } : {})}
               />
             ) : current ? (
               <ChatView
@@ -224,6 +282,7 @@ function WorkspaceViews() {
                   setCurrent(updated);
                   setSessions((list) => list?.map((s) => (s.id === updated.id ? updated : s)));
                 }}
+                onAuthorizeTask={authorizeTask}
               />
             ) : (
               <Home onChooseFolder={chooseFolder} />

@@ -13,7 +13,7 @@ import {
   Upload,
   type LucideIcon,
 } from 'lucide-react';
-import type { FileCard, LlmModelInfo, SessionSummary } from '@atelier/shared';
+import type { DeniedAction, FileCard, LlmModelInfo, SessionSummary } from '@atelier/shared';
 import { AtelierMark } from '@renderer/components/AtelierMark';
 import { ServerStatusBadge } from '@renderer/components/status/ServerStatusBadge';
 import { Button } from '@renderer/components/ui/button';
@@ -28,6 +28,7 @@ import { isRunning } from '@renderer/state/chat-reducer';
 import { useChat, useSessionView } from '@renderer/state/chat-store';
 import { deriveSessionTitle } from '../../../../common/chat-reducer';
 import { sameModel } from '../../../../common/model-name';
+import { RunBanner } from '../schedule/RunBanner';
 import { headerInset, SidebarOpenButton, useShellChrome } from '../sidebar/shell-chrome';
 import { Composer, type PendingAttachment } from './Composer';
 import { ContextGauge } from './ContextGauge';
@@ -81,12 +82,15 @@ export function ChatView({
   session,
   onTitleChange,
   onSessionChange,
+  onAuthorizeTask,
 }: {
   session: SessionSummary;
   /** Titre dérivé du premier message (la colonne de gauche le reprend aussitôt). */
   onTitleChange?: (title: string) => void;
   /** Conversation mise à jour par le main (modèle choisi). */
   onSessionChange?: (session: SessionSummary) => void;
+  /** Conversation d'un run planifié : « Autoriser pour cette tâche » (ADR-002 D4). */
+  onAuthorizeTask?: (taskId: string, denied: DeniedAction[]) => void;
 }) {
   const { state } = useApp();
   const { sidebarOpen } = useShellChrome();
@@ -106,6 +110,13 @@ export function ChatView({
   const [error, setError] = useState<string | undefined>();
   const dragDepth = useRef(0);
   const running = isRunning(view);
+  // La VM est tenue ailleurs (run planifié ou autre conversation) : le tour attend (ADR-002 D5).
+  const heldBy = state.sandbox.heldBy;
+  const waitingForVm =
+    running &&
+    (view.live?.parts.length ?? 0) === 0 &&
+    heldBy !== undefined &&
+    heldBy.workspace !== session.workspace;
   // Conversation antérieure au choix par conversation : elle suit le défaut (D1).
   const model = session.model ?? state.settings.llm.model;
   const visionModel = state.settings.llm.visionModel;
@@ -326,6 +337,14 @@ export function ChatView({
         </div>
       </header>
 
+      {session.scheduledTaskId !== undefined ? (
+        <RunBanner
+          sessionId={session.id}
+          taskId={session.scheduledTaskId}
+          {...(onAuthorizeTask ? { onAuthorize: onAuthorizeTask } : {})}
+        />
+      ) : null}
+
       <FilePreviewContext.Provider value={previewControls}>
         <div className="flex min-h-0 flex-1">
           <div className="flex min-w-0 flex-1 flex-col">
@@ -421,7 +440,30 @@ export function ChatView({
                 </>
               }
               notice={
-                imageUnreadable ? (
+                waitingForVm ? (
+                  <Alert tone="info">
+                    <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      {heldBy.runId !== undefined
+                        ? 'Une tâche planifiée utilise la machine isolée. Votre demande partira ensuite.'
+                        : 'Une autre conversation utilise la machine isolée. Votre demande partira ensuite.'}
+                      {heldBy.runId !== undefined ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const runId = heldBy.runId;
+                            if (runId === undefined) return;
+                            call('schedule:stop-run', { runId }).catch((e: unknown) => {
+                              setError(errorMessage(toSerializedError(e)));
+                            });
+                          }}
+                        >
+                          Arrêter la tâche
+                        </Button>
+                      ) : null}
+                    </span>
+                  </Alert>
+                ) : imageUnreadable ? (
                   <Alert tone="warning">
                     Le modèle {model} ne lit pas les images et aucun modèle pour les images n’est
                     réglé : l’image jointe ne pourra pas être analysée. Choisissez un autre modèle,
