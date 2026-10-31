@@ -179,6 +179,44 @@ Modelfile `qa-9b-ctx8k` (`FROM qwen3.5:9b`, `PARAMETER num_ctx 8192`). Premier t
 - Ce qui en tient compte : sélecteur, séparateur, pastille et avertissement à froid, Réglages, validation de `session:set-model`, runtimes, statistiques d'utilisation.
 - Le nom envoyé au serveur ne change pas : vLLM sert `atelier` sans étiquette.
 
+## Prompts planifiés (ADR-002 L4, ticket #20, 31/10/2026)
+
+`main` 55d0317 (L0 à L3 : #106, #105, #111, #108, #112). Specs : `qa/e2e/scheduled-tasks.spec.ts` (mock, CI) et `qa/e2e/scheduled-tasks.real.spec.ts` (réel, local seulement). Le faux modèle lit `ventes-bruxelles.csv`, écrit `note-ventes.md`, puis rend un compte rendu.
+
+### Mock (CI) : 3/3
+
+| Cas                                                                                                            | Résultat |
+| -------------------------------------------------------------------------------------------------------------- | -------- |
+| Tâche « toutes les 15 minutes » créée dans le formulaire, 3 prochaines exécutions affichées                    | ✅       |
+| « Créer et modifier des fichiers » coché par défaut ; proposition « Ouvrir à la connexion » à la 1re tâche     | ✅       |
+| « Exécuter maintenant » : run « Manuel », « Réussi », 1 fichier, 0 refus, fichier écrit sur le disque          | ✅       |
+| Tuiles (100 % de réussite) et dernier statut de la tâche mis à jour en direct                                  | ✅       |
+| Aucune modale ouverte pendant un run (observateur DOM), avec ou sans refus                                     | ✅       |
+| Conversation du run absente des « Récentes », avant et après son ouverture depuis le tableau de bord           | ✅       |
+| Bandeau « Exécution planifiée de “…” » dans la conversation du run                                             | ✅       |
+| Sans « Créer des fichiers » : run « Réussi », 0 fichier, 1 refus, aucun fichier sur le disque                  | ✅       |
+| « Autoriser pour cette tâche » : formulaire de la tâche, case d'écriture pré-cochée, commandes non cochées     | ✅       |
+| Après enregistrement, le run suivant écrit le fichier (1 fichier, 0 refus)                                     | ✅       |
+| Intervalle de 10 minutes : « L’intervalle doit être d’au moins 15 minutes. », aperçu masqué, Enregistrer grisé | ✅       |
+
+### Réel : « rapport hebdo »
+
+Ollama **local**, modèle `atelier` (Qwen 3.5 35B MoE, MLX), VM Lima partagée. Tâche « Rapport hebdo », chaque lundi à 08:00, « Créer des fichiers » et « Exécuter des commandes » cochés, dossier `fixtures/demo-ventes`. Demande : calculer le total de la colonne `montant` de chaque magasin et écrire `rapport-hebdo.md` (tableau et phrase de synthèse). Lancé par « Exécuter maintenant ».
+
+- **Réussi en 57 s**, 114,2 k tokens, 1 fichier, 0 refus. Statut « En cours » visible en direct pendant le run.
+- La VM a été remontée sur le dossier de la tâche (7,5 s) : le bail de D5 est pris quand les commandes sont cochées.
+- **Totaux justes au centime** : Bruxelles 40 337,50 €, Liège 28 277,10 €, Namur 20 622,50 €, total 89 237,10 €. Le modèle a calculé en Python dans la VM.
+- Plan de tâches tenu (2 étapes cochées), carte `rapport-hebdo.md` « Créé » dans la conversation.
+- Un `read_file` sans chemin en échec, que le modèle a corrigé seul. Une relance `empty-final` dans le journal, sans effet visible.
+- **Défaut (#116)** : la colonne « Compte rendu » affiche le markdown brut du modèle (`**Résultats :** - **Bruxelles** : …`), lignes collées.
+
+### Non couvert ici (manuel, build empaqueté)
+
+À faire par Gilles devant le Mac, sur `pnpm dist:mac:adhoc` :
+
+- « Ouvrir Atelier à la connexion », fermer puis rouvrir la session macOS : l'app doit démarrer sans fenêtre (`wasOpenedAtLogin` peut ne pas fonctionner avec SMAppService sur macOS 13 et plus).
+- Mettre le Mac en veille au moment d'une exécution prévue, puis le réveiller : un seul run « Rattrapage ».
+
 ## Bugs relevés
 
 | Issue | Sujet                                                                                            | Agent(s)            | État                                          |
@@ -197,6 +235,7 @@ Modelfile `qa-9b-ctx8k` (`FROM qwen3.5:9b`, `PARAMETER num_ctx 8192`). Premier t
 | #69   | Ollama répond 500 « tool call parsing failed: EOF » : tour arrêté sans relance, message trompeur | Core, UI            | ✅ corrigé (#70, #71), pas réapparu en 3 runs |
 | #73   | Le tour s'arrête sans réponse ni erreur après un appel d'outil en échec                          | Core                | ✅ corrigé (#76, #81), vérifié en réel        |
 | #79   | Le tour s'arrête sur un texte qui annonce la suite, sans appel d'outil                           | Core                | ✅ corrigé (#81), vérifié en réel             |
+| #116  | Tâches planifiées : le compte rendu du tableau de bord affiche le markdown brut                  | UI                  | ouvert                                        |
 
 Corrigé directement par QA : le générateur des fichiers de démo n'était pas déterministe (dates des PDF), contrairement à ce qu'annonçait `docs/DEMO.md`.
 
