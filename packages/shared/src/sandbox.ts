@@ -45,6 +45,24 @@ export interface SandboxStatus {
   networkEnabled: boolean;
   /** Message d'erreur lisible si `state === 'error'`. */
   error?: string;
+  /**
+   * Qui tient la VM en ce moment (une seule VM, montée sur un seul dossier :
+   * les tours qui l'utilisent sont sérialisés par dossier, ADR-002 D5). Absent :
+   * personne. Le Composer l'affiche et propose « Arrêter » pour un run planifié.
+   */
+  heldBy?: SandboxHolder;
+}
+
+/** Détenteur de la VM : un run planifié (`runId`, `taskName`) ou une conversation (`sessionId`). */
+export interface SandboxHolder {
+  /** Dossier monté pour ce détenteur. */
+  workspace: string;
+  /** Présent : un run planifié tient la VM. */
+  runId?: string;
+  /** Nom de la tâche, présent avec `runId`. */
+  taskName?: string;
+  /** Présent : une conversation interactive tient la VM. */
+  sessionId?: string;
 }
 
 /** Options d'exécution d'une commande. */
