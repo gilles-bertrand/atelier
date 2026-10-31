@@ -19,7 +19,8 @@ export type ToolSource = 'native' | 'documents' | 'web' | 'mcp' | 'skills';
 /**
  * Politique de permission d'un outil.
  * - `never` : jamais de confirmation (lecture, todo…) ;
- * - `always` : confirmation systématique (via le {@link PermissionHandler}) ;
+ * - `always` : confirmation systématique (via le {@link PermissionHandler}), après
+ *   la vérification préalable de l'outil s'il en a une (`precheck`) ;
  * - `conditional` : l'outil décide lui-même dans `execute` (ex. `bash` hors liste
  *   blanche, `web_fetch` la première fois par domaine).
  */
@@ -89,6 +90,17 @@ export interface ToolOutput {
 }
 
 /**
+ * Échec d'une vérification préalable ({@link ToolDefinition.precheck}) : l'appel
+ * échouerait de toute façon. Il est rendu au modèle comme un résultat d'outil en
+ * échec. Ce n'est pas un refus de l'utilisateur, d'où l'absence de `denied`.
+ */
+export interface ToolPrecheckFailure {
+  ok: false;
+  /** Raison, en français, pour le modèle (« Le dossier « Archives » est en lecture seule… »). */
+  content: string;
+}
+
+/**
  * Définition d'un outil Atelier.
  *
  * @typeParam I - Type de l'entrée, inféré depuis `inputSchema`.
@@ -122,6 +134,21 @@ export interface ToolDefinition<I = unknown> {
    * un libellé générique est produit. Doit être pur et rapide (pas d'I/O).
    */
   describePermission?(input: I): PermissionDescription;
+  /**
+   * Vérification préalable d'un outil `permission: 'always'` (ADR-003, D9).
+   * `agent-core` l'appelle **avant** la demande de permission. Si l'appel
+   * échouera de toute façon (chemin hors des dossiers, dossier en lecture seule,
+   * fichier ou passage introuvable), l'échec est rendu au modèle sans rien
+   * demander à l'utilisateur. Renvoie `undefined` pour continuer.
+   *
+   * Ne modifie rien et ne demande aucune permission. Ce n'est pas une garde de
+   * sécurité : l'état peut changer pendant que la modale est ouverte, donc
+   * `execute` refait tous ses contrôles. Une exception vaut `undefined` (la
+   * question est posée, puis `execute` décide), sauf l'annulation du tour.
+   * Ignorée pour `never` et `conditional` : ces outils ordonnent leurs contrôles
+   * eux-mêmes dans `execute`.
+   */
+  precheck?(input: I, context: ToolExecutionContext): Promise<ToolPrecheckFailure | undefined>;
   /**
    * Exécute l'outil. Ne doit lever que pour des erreurs inattendues : les cas
    * métier (refus, fichier introuvable…) renvoient `{ ok: false, content }`.
