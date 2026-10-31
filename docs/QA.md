@@ -242,12 +242,26 @@ Suite e2e mock complète : 18 réussis, 3 ignorés (mode réel).
 
 Compromis accepté par le Lead (31/10) : un artefact qui tente de rediriger son cadre vers le web perd son affichage, car Chromium y montre sa page d'erreur. Aucune requête ne sort, et la page reste lisible depuis le fichier source.
 
-### Réel : « tableau de bord hebdo » (à jouer)
+### Réel : « tableau de bord hebdo » (à jouer au signal de Gilles)
 
-Pas encore joué : l'Ollama local est partagé avec les autres campagnes. Procédure à suivre :
+Pas encore joué. L'Ollama local est partagé avec les autres campagnes, et Gilles a demandé d'attendre son signal (31/10).
+
+Le scénario est automatisé dans `qa/e2e/projects.real.spec.ts`, ignoré hors mode réel. À son signal, avec l'app Atelier fermée :
+
+```bash
+cd qa && pnpm --filter @atelier/desktop build && \
+  ATELIER_E2E_MODE=real ATELIER_E2E_MODEL=atelier pnpm exec playwright test e2e/projects.real.spec.ts
+```
+
+- Les constats sont joints au rapport (`projets-reel`), même si une étape échoue, avec trois captures.
+- Contrôles stricts (ce que l'app garantit) : projet, imbrication refusée, deux runs réussis, et dossier en lecture seule dans la VM.
+- Contrôles souples (`expect.soft`, ce qui dépend du modèle) : skill, page autonome, totaux, modale de mémoire, même fichier republié.
+- Les étapes d'interface ont été vérifiées à blanc en mode mock, sans VM ni Ollama : création, refus d'imbrication, conversation, mémoire lue par IPC, tâche et deux runs.
+
+Procédure (celle de la spec) :
 
 1. Ollama local, modèle `atelier` (Qwen 3.5 35B), VM Lima prête.
-2. Créer un projet « Ventes » sur `fixtures/demo-ventes`, avec un dossier « Archives » en lecture seule. Vérifier qu'ajouter le dossier parent `fixtures/` est refusé, parce qu'il contient le dossier principal.
+2. Créer un projet « Ventes » sur `fixtures/demo-ventes`, avec un dossier « Archives » en lecture seule. Vérifier qu'ajouter un dossier imbriqué est refusé : la spec ajoute `Archives/2024` et attend « Le dossier « 2024 » est déjà inclus dans « Archives » ». Le parent du dossier de travail ne sert pas à ce test, car il contient aussi le dossier des skills de l'e2e : il serait refusé pour une autre raison (données internes d'Atelier).
 3. Demander : « Fais-moi un tableau de bord des ventes par magasin, publie-le, et retiens que le client veut une synthèse mensuelle. »
 4. Vérifier :
    - le skill `artefact-html` est chargé (déclencheur « tableau de bord ») ;
@@ -255,7 +269,7 @@ Pas encore joué : l'Ollama local est partagé avec les autres campagnes. Procé
    - la modale `memory_write` s'ouvre ;
    - les totaux sont justes au centime : Bruxelles 40 337,50 €, Liège 28 277,10 €, Namur 20 622,50 €.
 5. Tâche du projet « Tableau hebdo », « Exécuter maintenant » deux fois : même fichier republié en v2 et v3, sans nouveau fichier `tableau-v2.html`.
-6. Dans la vraie VM (suggestion du Lead), avec « Exécuter des commandes » autorisé : `touch /dossiers/Archives/essai` doit échouer (« Read-only file system »), alors que `touch /workspace/essai` réussit.
+6. Dans la vraie VM (suggestion du Lead), avec « Exécuter des commandes » autorisé : `touch /dossiers/Archives/essai` doit échouer (« Read-only file system »), alors que `touch /workspace/essai` réussit. La spec le vérifie par `limactl shell`, une fois les runs terminés.
 
 ### Suite relevée par l'e2e : traitée (ADR-003 D9, lot L6)
 
