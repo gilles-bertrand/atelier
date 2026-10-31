@@ -2,8 +2,9 @@
  * Demandes de permission construites par agent-core.
  *
  * Les outils `permission: 'always'` sont protégés génériquement par l'adaptateur
- * (voir `registry.ts`) ; les outils `conditional` (ex. `bash`) appellent
- * {@link askPermission} eux-mêmes dans leur `execute`.
+ * (voir `registry.ts`), après leur vérification préalable ({@link precheckTool}) ;
+ * les outils `conditional` (ex. `bash`) appellent {@link askPermission} eux-mêmes
+ * dans leur `execute`.
  */
 import { randomUUID } from 'node:crypto';
 import {
@@ -17,7 +18,31 @@ import {
   type ScheduledPermissions,
   type ToolExecutionContext,
   type ToolOutput,
+  type ToolPrecheckFailure,
 } from '@atelier/shared';
+
+/**
+ * Vérification préalable d'un outil (ADR-003, D9) : l'échec à rendre au modèle
+ * sans poser de question, ou `undefined` pour continuer.
+ *
+ * Indicative : une exception laisse poser la question, puis `execute` décide.
+ * Seule l'annulation du tour est propagée. L'échec est recopié champ par champ,
+ * pour qu'aucun `denied` ni `display` ne passe : l'utilisateur n'a rien refusé.
+ */
+export async function precheckTool(
+  definition: AnyToolDefinition,
+  input: unknown,
+  context: ToolExecutionContext,
+): Promise<ToolPrecheckFailure | undefined> {
+  if (!definition.precheck) return undefined;
+  try {
+    const failure = await definition.precheck(input, context);
+    return failure ? { ok: false, content: failure.content } : undefined;
+  } catch (error) {
+    if (context.abortSignal.aborted) throw error;
+    return undefined;
+  }
+}
 
 /**
  * Libellés de permission fournis par l'application (`AgentOptions.describePermission`).

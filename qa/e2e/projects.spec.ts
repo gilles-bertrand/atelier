@@ -99,6 +99,12 @@ test('projet sur trois dossiers : mémoire, écriture, lecture seule, artefact i
   expect(approvals.records.map((r) => r.title)).toContain(
     `Retenir dans la mémoire du projet : « ${PROJECT_NOTE} »`,
   );
+  // L'écriture dans « Archives » (lecture seule) est refusée avant la modale (D9) :
+  // aucune question n'a été posée pour elle.
+  expect(approvals.records.map((r) => r.title)).not.toContain(
+    'Écrire le fichier Archives/brouillon.md',
+  );
+  expect(approvals.records.map((r) => r.title)).toContain('Écrire le fichier Compta/synthese.md');
 
   expect(await readFile(join(compta, 'synthese.md'), 'utf8')).toContain('Synthèse');
   await expect(readFile(join(archives, 'brouillon.md'))).rejects.toThrow();

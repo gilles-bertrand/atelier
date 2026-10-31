@@ -463,3 +463,84 @@ describe('utilitaires', () => {
     expect(registry.get('read_file')?.description).toBe('documents');
   });
 });
+
+describe('vérification préalable (ADR-003, D9)', () => {
+  const base = (ws: string) => ({
+    sessionId: 's',
+    workspace: ws,
+    abortSignal: new AbortController().signal,
+  });
+  const update = {
+    name: 'mcp__crm__update',
+    description: 'x',
+    inputSchema: writeFileTool.inputSchema,
+    permission: 'always' as const,
+    source: 'mcp' as const,
+    execute: () => Promise.resolve({ ok: true, content: 'fait' }),
+  };
+
+  it('une exception dans precheck laisse poser la question, puis execute décide', async () => {
+    await withTempDir(async (ws) => {
+      const perms = permissions();
+      const out = await executeTool(
+        { ...update, precheck: () => Promise.reject(new Error('bug de vérification')) },
+        { id: 1 },
+        'c1',
+        { ...base(ws), requestPermission: perms },
+      );
+      expect(out).toEqual({ ok: true, content: 'fait' });
+      expect(perms.requests).toHaveLength(1);
+    });
+  });
+
+  it("l'annulation du tour pendant precheck est propagée, sans question", async () => {
+    await withTempDir(async (ws) => {
+      const controller = new AbortController();
+      const perms = permissions();
+      const run = executeTool(
+        {
+          ...update,
+          precheck: () => {
+            controller.abort();
+            return Promise.reject(new Error('tour annulé'));
+          },
+        },
+        { id: 1 },
+        'c1',
+        { ...base(ws), abortSignal: controller.signal, requestPermission: perms },
+      );
+      await expect(run).rejects.toThrow('tour annulé');
+      expect(perms.requests).toHaveLength(0);
+    });
+  });
+
+  it('l’échec est recopié sans « denied » ni « display », et ignoré hors des outils « always »', async () => {
+    await withTempDir(async (ws) => {
+      const perms = permissions();
+      const failure = {
+        ok: false as const,
+        content: 'Non.',
+        denied: true,
+        display: { type: 'diff' as const, path: 'x', before: '', after: '' },
+      };
+      const checked = { ...update, precheck: () => Promise.resolve(failure) };
+      const out = await executeTool(checked, { id: 1 }, 'c1', {
+        ...base(ws),
+        requestPermission: perms,
+      });
+      expect(out).toEqual({ ok: false, content: 'Non.' });
+      expect(perms.requests).toHaveLength(0);
+      // `never` : aucune question, donc aucune vérification préalable ; execute décide.
+      const never = await executeTool(
+        { ...checked, permission: 'never' as const },
+        { id: 2 },
+        'c2',
+        {
+          ...base(ws),
+          requestPermission: perms,
+        },
+      );
+      expect(never).toEqual({ ok: true, content: 'fait' });
+    });
+  });
+});

@@ -200,6 +200,7 @@ export {
   deniedOutput,
   describePermissionFor,
   genericDescribePermission,
+  precheckTool,
   UNATTENDED_INSTRUCTIONS,
   unattendedPermissionHandler,
   withSessionMemory,

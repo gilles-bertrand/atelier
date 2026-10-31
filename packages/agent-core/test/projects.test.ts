@@ -762,3 +762,123 @@ describe('session de projet (createAgentRuntime)', () => {
     });
   });
 });
+
+describe('vérification préalable avant la modale (ADR-003, D9)', () => {
+  it('écriture dans un dossier en lecture seule : refusée sans question ni « denied »', async () => {
+    await withProject(async (p) => {
+      const runtime = runtimeFor(p);
+      const out = await executeTool(
+        writeFileTool,
+        { path: 'Archives/essai.md', content: 'x' },
+        'c1',
+        runtime,
+      );
+      expect(out.ok).toBe(false);
+      expect(out.content).toContain('Le dossier « Archives » est en lecture seule');
+      expect(out).not.toHaveProperty('denied');
+      expect(runtime.requestPermission.requests).toHaveLength(0);
+      await expect(readFile(path.join(p.archives, 'essai.md'))).rejects.toThrow();
+    });
+  });
+
+  it('écriture hors des dossiers du projet : refusée sans question', async () => {
+    await withProject(async (p) => {
+      const runtime = runtimeFor(p);
+      const out = await executeTool(
+        writeFileTool,
+        { path: path.join(p.root, 'dehors.md'), content: 'x' },
+        'c1',
+        runtime,
+      );
+      expect(out.ok).toBe(false);
+      expect(runtime.requestPermission.requests).toHaveLength(0);
+      await expect(readFile(path.join(p.root, 'dehors.md'))).rejects.toThrow();
+    });
+  });
+
+  it('edit_file : fichier absent, passage absent ou ambigu, lecture seule, sans question', async () => {
+    await withProject(async (p) => {
+      await writeFile(path.join(p.primary, 'f.txt'), 'alpha beta\nalpha gamma\n');
+      await writeFile(path.join(p.archives, 'a.txt'), 'alpha\n');
+      const runtime = runtimeFor(p);
+      const cases: [{ path: string; old_str: string }, RegExp][] = [
+        [{ path: 'absent.txt', old_str: 'x' }, /Fichier introuvable/],
+        [{ path: 'f.txt', old_str: 'delta' }, /Texte introuvable/],
+        [{ path: 'f.txt', old_str: 'alpha' }, /apparaît 2 fois/],
+        [{ path: 'Archives/a.txt', old_str: 'alpha' }, /lecture seule/],
+      ];
+      for (const [input, message] of cases) {
+        const out = await executeTool(editFileTool, { ...input, new_str: 'Z' }, 'c', runtime);
+        expect(out.ok).toBe(false);
+        expect(out.content).toMatch(message);
+      }
+      expect(runtime.requestPermission.requests).toHaveLength(0);
+      // Un remplacement possible pose la question, une fois, puis s'applique.
+      const ok = await executeTool(
+        editFileTool,
+        { path: 'f.txt', old_str: 'alpha gamma', new_str: 'ALPHA GAMMA' },
+        'c',
+        runtime,
+      );
+      expect(ok.ok).toBe(true);
+      expect(runtime.requestPermission.requests).toHaveLength(1);
+      expect(await readFile(path.join(p.primary, 'f.txt'), 'utf8')).toBe(
+        'alpha beta\nALPHA GAMMA\n',
+      );
+    });
+  });
+
+  it('si le chemin change pendant la modale, execute refuse quand même', async () => {
+    await withProject(async (p) => {
+      // Vérification préalable réussie (« lien » n'existe pas encore), puis un lien
+      // vers le dossier en lecture seule apparaît pendant que la modale est ouverte.
+      const requests: PermissionRequest[] = [];
+      const runtime: ToolRuntime = {
+        sessionId: 's',
+        workspace: p.primary,
+        folders: p.folders,
+        abortSignal: new AbortController().signal,
+        requestPermission: async (request) => {
+          requests.push(request);
+          await symlink(p.archives, path.join(p.compta, 'lien'));
+          return 'allow_once';
+        },
+      };
+      const out = await executeTool(
+        writeFileTool,
+        { path: 'Compta/lien/piege.md', content: 'x' },
+        'c1',
+        runtime,
+      );
+      expect(requests).toHaveLength(1);
+      expect(out.ok).toBe(false);
+      await expect(readFile(path.join(p.archives, 'piege.md'))).rejects.toThrow();
+    });
+  });
+
+  it('memory_add et memory_rewrite : note ou contenu vides refusés sans question', async () => {
+    await withProject(async (p) => {
+      const { writer, append, rewrite: rewriteSpy } = memoryWriter();
+      const tools = createMemoryTools(writer);
+      const runtime = runtimeFor(p);
+      const note = await executeTool(
+        toolNamed(tools, 'memory_add'),
+        { note: ' \n ' },
+        'c',
+        runtime,
+      );
+      expect(note).toEqual({ ok: false, content: 'Note vide : rien à retenir.' });
+      const memory = await executeTool(
+        toolNamed(tools, 'memory_rewrite'),
+        { content: '   ' },
+        'c',
+        runtime,
+      );
+      expect(memory.ok).toBe(false);
+      expect(memory.content).toContain('Mémoire vide refusée');
+      expect(runtime.requestPermission.requests).toHaveLength(0);
+      expect(append).not.toHaveBeenCalled();
+      expect(rewriteSpy).not.toHaveBeenCalled();
+    });
+  });
+});
