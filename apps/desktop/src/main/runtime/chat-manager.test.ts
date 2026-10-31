@@ -1,7 +1,7 @@
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { TurnResult } from '@atelier/agent-core';
 import { AtelierError, type AgentEvent, type AgentEventSink } from '@atelier/shared';
 import type { ModelMessage } from 'ai';
@@ -697,8 +697,11 @@ describe('ChatManager : tours sans témoin (prompts planifiés, ADR-002)', () =>
     const { chats, events, wait } = setup(() => 'permission');
     const session = chats.create('/w');
     chats.send(session.id, 'Salut');
-    await new Promise((r) => setTimeout(r, 5));
-    expect(events.map((e) => e.type)).toContain('permission_request');
+    // Attente de la condition, pas d'un délai fixe : sous la charge de la suite
+    // complète, le tour met parfois plus de 5 ms à demander la permission.
+    await vi.waitFor(() => {
+      expect(events.map((e) => e.type)).toContain('permission_request');
+    });
     await chats.stop(session.id);
     await wait(session.id);
   });
