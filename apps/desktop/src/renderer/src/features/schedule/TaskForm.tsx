@@ -24,6 +24,7 @@ import { call, toSerializedError } from '@renderer/lib/api';
 import { errorMessage } from '@renderer/lib/error-messages';
 import { chatModels } from '@renderer/lib/models';
 import {
+  checkMcpTools,
   formatUpcoming,
   parseList,
   permissionsAfterDenied,
@@ -199,6 +200,21 @@ export function TaskForm({
   const [models, setModels] = useState<LlmModelInfo[] | undefined>();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<{ field?: string; message: string } | undefined>();
+  // Serveurs MCP connus : un outil d'un serveur absent est signalé (saisie libre, D4).
+  const [mcpServers, setMcpServers] = useState<string[] | undefined>();
+
+  useEffect(() => {
+    let cancelled = false;
+    call('mcp:status').then(
+      (status) => {
+        if (!cancelled) setMcpServers(status.servers.map((server) => server.name));
+      },
+      () => undefined,
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -218,6 +234,7 @@ export function TaskForm({
   const schedule = scheduleFrom(fields);
   const scheduleProblem = validateSchedule(schedule);
   const upcoming = scheduleProblem === undefined ? upcomingRuns(schedule, new Date()) : [];
+  const mcpCheck = checkMcpTools(parseList(mcpTools), mcpServers);
   const durationValue = Number(duration);
   const durationInvalid =
     !Number.isInteger(durationValue) ||
@@ -597,6 +614,7 @@ export function TaskForm({
             rows={2}
             placeholder="mcp__github__create_issue"
             aria-describedby={ids.mcpHint}
+            aria-invalid={mcpCheck.invalid.length > 0 ? true : undefined}
             onChange={(e) => {
               setMcpTools(e.target.value);
             }}
@@ -606,6 +624,17 @@ export function TaskForm({
             Un outil par ligne, sous la forme mcp__serveur__outil. Laissez vide pour n’en autoriser
             aucun.
           </Hint>
+          {mcpCheck.invalid.length > 0 ? (
+            <Hint className="text-destructive">
+              Format attendu mcp__serveur__outil : {mcpCheck.invalid.join(', ')}.
+            </Hint>
+          ) : null}
+          {mcpCheck.unknownServers.length > 0 ? (
+            <Hint className="text-warning-text">
+              Connecteur absent de Réglages › Connecteurs : {mcpCheck.unknownServers.join(', ')}.
+              L’outil sera refusé tant qu’il n’est pas configuré.
+            </Hint>
+          ) : null}
         </div>
         <p className="text-sm text-muted-foreground">
           Jamais sans vous : supprimer des fichiers, et toute action d’un type inconnu.
@@ -632,7 +661,15 @@ export function TaskForm({
       {error && error.field === undefined ? <Alert tone="error">{error.message}</Alert> : null}
 
       <div className="flex items-center gap-2">
-        <Button type="submit" disabled={saving || scheduleProblem !== undefined || durationInvalid}>
+        <Button
+          type="submit"
+          disabled={
+            saving ||
+            scheduleProblem !== undefined ||
+            durationInvalid ||
+            mcpCheck.invalid.length > 0
+          }
+        >
           {saving ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
           Enregistrer
         </Button>

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { DeniedAction, ScheduledPermissions } from '@atelier/shared';
 import {
+  checkMcpTools,
   formatDuration,
   parseList,
   permissionsAfterDenied,
@@ -73,5 +74,17 @@ describe('affichage des tâches planifiées', () => {
 
   it('listes saisies : séparateurs souples, sans doublon ni vide', () => {
     expect(parseList(' a.fr, b.fr\n\na.fr ;c.fr ')).toEqual(['a.fr', 'b.fr', 'c.fr']);
+  });
+});
+
+describe('connecteurs en écriture saisis à la main', () => {
+  it('format mcp__serveur__outil obligatoire ; serveur absent signalé', () => {
+    expect(
+      checkMcpTools(
+        ['mcp__github__create_issue', 'github_issue', 'mcp__jira__add', 'mcp____x'],
+        ['github'],
+      ),
+    ).toEqual({ invalid: ['github_issue', 'mcp____x'], unknownServers: ['jira'] });
+    expect(checkMcpTools(['mcp__jira__add'], undefined).unknownServers).toEqual([]);
   });
 });

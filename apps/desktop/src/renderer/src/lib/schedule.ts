@@ -190,3 +190,29 @@ export function parseList(text: string): string[] {
     ),
   ];
 }
+
+/** Nom complet d'un outil MCP : `mcp__<serveur>__<outil>`. */
+const MCP_TOOL = /^mcp__([^\s_][^\s]*?)__([^\s]+)$/;
+
+/**
+ * Connecteurs en écriture saisis à la main (en attendant le catalogue des outils) :
+ * noms au mauvais format (bloquant) et serveurs absents de `mcp:status` (signalés).
+ * `servers` absent : statut inconnu, aucun serveur n'est signalé.
+ */
+export function checkMcpTools(
+  tools: readonly string[],
+  servers: readonly string[] | undefined,
+): { invalid: string[]; unknownServers: string[] } {
+  const invalid: string[] = [];
+  const unknown = new Set<string>();
+  for (const tool of tools) {
+    const match = MCP_TOOL.exec(tool);
+    if (!match) {
+      invalid.push(tool);
+      continue;
+    }
+    const server = match[1] ?? '';
+    if (servers && !servers.includes(server)) unknown.add(server);
+  }
+  return { invalid, unknownServers: [...unknown] };
+}

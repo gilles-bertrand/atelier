@@ -178,6 +178,38 @@ describe('tableau de bord des tâches planifiées', () => {
   });
 });
 
+describe('formulaire : connecteurs en écriture', () => {
+  it('format invalide bloquant, serveur inconnu signalé', async () => {
+    const api = setup();
+    api.handlers['mcp:status'] = () => ({
+      servers: [
+        {
+          name: 'github',
+          transport: 'stdio',
+          state: 'connected',
+          toolCount: 3,
+          reconnectAttempts: 0,
+        },
+      ],
+      issues: [],
+    });
+    const user = await openDashboard();
+    await user.click(await screen.findByRole('button', { name: 'Nouvelle tâche' }));
+    const field = await screen.findByLabelText('Connecteurs en écriture autorisés');
+    await user.type(field, 'github_issue');
+    expect(
+      screen.getByText(/Format attendu mcp__serveur__outil : github_issue/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Enregistrer' })).toBeDisabled();
+    await user.clear(field);
+    await user.type(field, 'mcp__jira__add');
+    expect(
+      await screen.findByText(/Connecteur absent de Réglages › Connecteurs : jira/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Enregistrer' })).toBeEnabled();
+  });
+});
+
 describe('notification de fin de run', () => {
   it('`app:open-session` ouvre la conversation du run, même hors des « Récentes »', async () => {
     const api = setup();
