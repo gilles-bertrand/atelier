@@ -78,6 +78,13 @@ export interface CreateSessionOptions {
    * entre les conversations du même modèle.
    */
   extraInstructions?: string;
+  /**
+   * `false` : session sans machine isolée, même si celle du runtime est prête
+   * (`bash` répond « indisponible » sans rien exécuter). Ex. run planifié dont
+   * la politique ne coche pas les commandes : sans bail sur la VM, celle-ci peut
+   * être montée sur le dossier d'une autre conversation. Défaut : la VM du runtime.
+   */
+  sandbox?: false;
 }
 
 /** Provenance de la fenêtre de contexte ; `fallback` = serveur injoignable au démarrage. */
@@ -149,7 +156,7 @@ export async function createAgentRuntime(options: AgentRuntimeOptions): Promise<
       contextWindow,
       serverUrl: llmOptions.baseUrl,
       ...(options.lazyTools ? { lazyTools: options.lazyTools } : {}),
-      ...(options.sandbox ? { sandbox: options.sandbox } : {}),
+      ...(options.sandbox && session.sandbox !== false ? { sandbox: options.sandbox } : {}),
       ...(options.skills ? { skills: options.skills } : {}),
       ...sessionInstructions(options.extraInstructions, session.extraInstructions),
       ...(options.describePermission ? { describePermission: options.describePermission } : {}),
