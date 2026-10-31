@@ -5,13 +5,14 @@ import { describe, expect, it, vi } from 'vitest';
 import type { PermissionKind, PermissionRequest } from '@atelier/shared';
 import {
   Agent,
+  createAgentRuntime,
   createDefaultRegistry,
   UNATTENDED_INSTRUCTIONS,
   unattendedPermissionHandler,
   type DeniedAction,
   type ScheduledPermissions,
 } from '../src/index.js';
-import { collect, promptText, scriptedModel, withTempDir } from './helpers.js';
+import { collect, permissions, promptText, scriptedModel, withTempDir } from './helpers.js';
 
 const NONE: ScheduledPermissions = {
   fileWrite: false,
@@ -161,6 +162,44 @@ describe('unattendedPermissionHandler', () => {
       const sent = promptText(model, 1);
       expect(sent).toContain('a refusé');
       expect(promptText(model, 0)).toContain("Tu travailles en l'absence de l'utilisateur");
+    });
+  });
+});
+
+describe('CreateSessionOptions.extraInstructions', () => {
+  it('consignes de session : seule la session concernée les voit, après celles du runtime', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(() =>
+      Promise.resolve(new Response(JSON.stringify({ parameters: 'num_ctx 32768' }))),
+    );
+    let mcpSection = 'SECTION MCP v1';
+    const runtime = await createAgentRuntime({
+      llm: { baseUrl: 'https://llm.example.com', model: 'm', fetch },
+      models: { model: scriptedModel([]), fastModel: scriptedModel([]) },
+      extraInstructions: () => mcpSection,
+    });
+    await withTempDir((ws) => {
+      const base = { workspace: ws, requestPermission: permissions() };
+      const planned = runtime.createSession({
+        ...base,
+        sessionId: 'run',
+        extraInstructions: UNATTENDED_INSTRUCTIONS,
+      });
+      const interactive = runtime.createSession({ ...base, sessionId: 'chat' });
+
+      const plannedPrompt = planned.agent.systemPrompt();
+      expect(plannedPrompt).toContain(UNATTENDED_INSTRUCTIONS);
+      expect(plannedPrompt.indexOf('SECTION MCP v1')).toBeGreaterThanOrEqual(0);
+      expect(plannedPrompt.indexOf('SECTION MCP v1')).toBeLessThan(
+        plannedPrompt.indexOf(UNATTENDED_INSTRUCTIONS),
+      );
+      const interactivePrompt = interactive.agent.systemPrompt();
+      expect(interactivePrompt).toContain('SECTION MCP v1');
+      expect(interactivePrompt).not.toContain(UNATTENDED_INSTRUCTIONS);
+
+      // Les consignes du runtime restent relues à chaque tour.
+      mcpSection = 'SECTION MCP v2';
+      expect(planned.agent.systemPrompt()).toContain('SECTION MCP v2');
+      return Promise.resolve();
     });
   });
 });

@@ -72,6 +72,12 @@ export interface CreateSessionOptions {
    * remplacée) : garde la compaction préalable quand on recrée une session.
    */
   lastInputTokens?: number;
+  /**
+   * Consignes propres à cette session (ex. `UNATTENDED_INSTRUCTIONS` d'un run
+   * planifié), ajoutées après les `extraInstructions` du runtime, partagé
+   * entre les conversations du même modèle.
+   */
+  extraInstructions?: string;
 }
 
 /** Provenance de la fenêtre de contexte ; `fallback` = serveur injoignable au démarrage. */
@@ -145,9 +151,7 @@ export async function createAgentRuntime(options: AgentRuntimeOptions): Promise<
       ...(options.lazyTools ? { lazyTools: options.lazyTools } : {}),
       ...(options.sandbox ? { sandbox: options.sandbox } : {}),
       ...(options.skills ? { skills: options.skills } : {}),
-      ...(options.extraInstructions !== undefined
-        ? { extraInstructions: options.extraInstructions }
-        : {}),
+      ...sessionInstructions(options.extraInstructions, session.extraInstructions),
       ...(options.describePermission ? { describePermission: options.describePermission } : {}),
       ...(options.maxSteps !== undefined ? { maxSteps: options.maxSteps } : {}),
       ...(options.keepRecentOnCompaction !== undefined
@@ -173,5 +177,23 @@ export async function createAgentRuntime(options: AgentRuntimeOptions): Promise<
     },
     refreshContextWindow,
     createSession,
+  };
+}
+
+/**
+ * Consignes du runtime (relues à chaque tour) suivies de celles de la session.
+ */
+function sessionInstructions(
+  runtime: AgentRuntimeOptions['extraInstructions'],
+  session: string | undefined,
+): { extraInstructions?: string | (() => string | undefined) } {
+  if (session === undefined || session.trim() === '') {
+    return runtime !== undefined ? { extraInstructions: runtime } : {};
+  }
+  return {
+    extraInstructions: () => {
+      const shared = typeof runtime === 'function' ? runtime() : runtime;
+      return shared !== undefined && shared !== '' ? `${shared}\n\n${session}` : session;
+    },
   };
 }
