@@ -12,6 +12,7 @@ import {
   type PermissionDecision,
   type PermissionDescription,
   type PermissionHandler,
+  type PermissionKind,
   type PermissionRequest,
   type ToolExecutionContext,
   type ToolOutput,
@@ -144,5 +145,92 @@ export function withSessionMemory(handler: PermissionHandler): PermissionHandler
     const decision = await handler(request, signal);
     if (decision === 'allow_session') granted.add(key);
     return decision;
+  };
+}
+
+/**
+ * Politique d'une tâche planifiée : ce qu'elle a le droit de faire sans
+ * l'utilisateur (ADR-002 §3). Type local en attendant `@atelier/shared` (lot L0).
+ */
+export interface ScheduledPermissions {
+  fileWrite: boolean;
+  commands: boolean;
+  /** `'*'` = tous les domaines ; liste vide = pas d'accès aux pages web. */
+  webDomains: '*' | string[];
+  /** Noms complets `mcp__<serveur>__<outil>` autorisés en écriture. */
+  mcpTools: string[];
+}
+
+/** Action refusée pendant un run planifié (ADR-002 §3). Type local en attendant L0. */
+export interface DeniedAction {
+  toolName: string;
+  kind: PermissionKind;
+  scopeKey: string;
+  title: string;
+}
+
+/**
+ * Consignes ajoutées au prompt système d'un run planifié (`extraInstructions`,
+ * ADR-002 D3).
+ */
+export const UNATTENDED_INSTRUCTIONS =
+  "Tu travailles en l'absence de l'utilisateur. Ne pose pas de question et ne demande pas de " +
+  "confirmation. Si une action t'est refusée, n'essaie pas de la contourner et continue avec ce " +
+  'que tu peux faire. Termine par un compte rendu court : ce que tu as fait, les fichiers ' +
+  'produits, ce qui a échoué.';
+
+const WEB_FETCH_SCOPE = 'web_fetch:';
+
+/** Domaine comparable : minuscules, sans `www.` (comme `permissionDomain` de @atelier/web). */
+function normalizeDomain(domain: string): string {
+  return domain
+    .trim()
+    .toLowerCase()
+    .replace(/^www\./, '');
+}
+
+function webFetchAllowed(scopeKey: string, domains: ScheduledPermissions['webDomains']): boolean {
+  if (!scopeKey.startsWith(WEB_FETCH_SCOPE)) return false;
+  if (domains === '*') return true;
+  const domain = normalizeDomain(scopeKey.slice(WEB_FETCH_SCOPE.length));
+  return domain !== '' && domains.some((d) => normalizeDomain(d) === domain);
+}
+
+/** Vrai si la politique couvre la demande. `file_delete` et `other` ne le sont jamais. */
+function unattendedAllows(request: PermissionRequest, policy: ScheduledPermissions): boolean {
+  const scopeKey = request.scopeKey ?? request.toolName;
+  switch (request.kind) {
+    case 'file_write':
+      return policy.fileWrite;
+    case 'command':
+      return policy.commands;
+    case 'network':
+      return webFetchAllowed(scopeKey, policy.webDomains);
+    case 'mcp_write':
+      return policy.mcpTools.includes(scopeKey);
+    default:
+      return false;
+  }
+}
+
+/**
+ * Gestionnaire non interactif des runs planifiés (ADR-002 D4) : ne pose jamais
+ * de question. Accorde ce que la politique coche (`allow_once`, jamais
+ * mémorisé) ; refuse tout le reste et le signale à `onDenied`, le modèle
+ * recevant le {@link deniedOutput} habituel.
+ */
+export function unattendedPermissionHandler(
+  policy: ScheduledPermissions,
+  onDenied: (denied: DeniedAction) => void,
+): PermissionHandler {
+  return (request) => {
+    if (unattendedAllows(request, policy)) return Promise.resolve('allow_once');
+    onDenied({
+      toolName: request.toolName,
+      kind: request.kind,
+      scopeKey: request.scopeKey ?? request.toolName,
+      title: request.title,
+    });
+    return Promise.resolve('deny');
   };
 }
