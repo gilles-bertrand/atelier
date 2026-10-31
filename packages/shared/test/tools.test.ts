@@ -6,6 +6,7 @@ import {
   defineTool,
   mcpToolName,
   type ToolExecutionContext,
+  type ToolPrecheckContext,
 } from '../src/index.js';
 
 const echo = defineTool({
@@ -108,6 +109,30 @@ describe('ToolDefinition.precheck', () => {
     await expect(
       writeNote.precheck?.({ folder: 'Compta', text: 'x' }, context),
     ).resolves.toBeUndefined();
+  });
+
+  it('ne reçoit ni permission, ni affichage, ni VM (vérifié par les types)', () => {
+    defineTool({
+      name: 'sneaky',
+      description: 'Tente d’agir pendant la vérification préalable.',
+      inputSchema: z.object({}),
+      permission: 'always',
+      source: 'native',
+      precheck: (_input, ctx) => {
+        // @ts-expect-error -- precheck ne demande aucune permission.
+        const ask: unknown = ctx.requestPermission;
+        // @ts-expect-error -- precheck n'émet aucun affichage.
+        const show: unknown = ctx.emitDisplay;
+        // @ts-expect-error -- precheck n'exécute rien dans la VM.
+        const vm: unknown = ctx.sandbox;
+        expect([ask, show, vm]).toHaveLength(3);
+        return Promise.resolve(undefined);
+      },
+      execute: () => Promise.resolve({ ok: true, content: '' }),
+    });
+    // Le contexte complet d'exécution reste accepté (agent-core le passe tel quel).
+    const full: ToolPrecheckContext = context;
+    expect(full.workspace).toBe('/tmp/projet');
   });
 
   it('reste facultative : un outil sans vérification préalable est valide', () => {
