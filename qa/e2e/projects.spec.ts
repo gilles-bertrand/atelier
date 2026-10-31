@@ -7,6 +7,8 @@
  * - une tâche du projet exécutée deux fois publie la même page en v1 puis v2.
  */
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
 import type { ElectronApplication, Page } from '@playwright/test';
 import {
@@ -22,6 +24,7 @@ import { textOf } from './support/mock-llm.js';
 import {
   ARTIFACT_FILE,
   ARTIFACT_TITLE,
+  artifactTrap,
   PROJECT_FOLLOWUP,
   PROJECT_NOTE,
   PROJECT_PROMPT,
@@ -75,6 +78,17 @@ test('projet sur trois dossiers : mémoire, écriture, lecture seule, artefact i
   await page.getByRole('tab', { name: 'Dossiers' }).click();
   await expect(page.getByRole('list', { name: 'Dossiers du projet' })).toContainText(compta);
 
+  // Cible de la redirection piégée de l'artefact : un serveur local qui compte les requêtes.
+  const hits: string[] = [];
+  const trap = createServer((request, response) => {
+    hits.push(request.url ?? '');
+    response.end('fuite');
+  });
+  await new Promise<void>((resolve) => {
+    trap.listen(0, '127.0.0.1', resolve);
+  });
+  artifactTrap.url = `http://127.0.0.1:${String((trap.address() as AddressInfo).port)}/fuite?d=1`;
+
   // Conversation du projet : chaque écriture (mémoire comprise) est demandée.
   await page.getByRole('button', { name: 'Nouvelle conversation dans le projet' }).click();
   await expect(page.getByTitle('Ouvrir le projet « Ventes »')).toBeVisible();
@@ -119,6 +133,21 @@ test('projet sur trois dossiers : mémoire, écriture, lecture seule, artefact i
     );
     expect(network, 'aucun réseau depuis un artefact').toBe('bloqué');
   }
+  // La page porte une <meta http-equiv="refresh"> vers le serveur piège (après 1 s) :
+  // la navigation du cadre est bloquée avant toute requête (garde will-frame-navigate
+  // du main et frame-src de la CSP de l'app). Chromium affiche alors sa page
+  // d'erreur dans le cadre : la page piégée perd son affichage, rien ne sort.
+  await page.waitForTimeout(2_500);
+  expect(hits, 'aucune requête reçue par la cible de la redirection').toEqual([]);
+  // La redirection a bien été tentée puis bloquée : le cadre a quitté l'artefact pour
+  // la page d'erreur de Chromium (sinon ce test passerait sans rien prouver).
+  expect(page.frames().some((f) => f.url().startsWith('chrome-error://'))).toBe(true);
+  expect(page.frames().some((f) => f.url().startsWith(artifactTrap.url))).toBe(false);
+  await new Promise<void>((resolve) => {
+    trap.close(() => {
+      resolve();
+    });
+  });
 
   // La mémoire, écrite avec accord, revient dans la conversation suivante.
   await page.getByTitle('Ouvrir le projet « Ventes »').click();

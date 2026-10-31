@@ -257,8 +257,15 @@ export const PROJECT_TASK_PROMPT = 'Mets à jour le tableau de bord du projet';
 export const ARTIFACT_FILE = 'Artefacts/tableau.html';
 export const ARTIFACT_TITLE = 'Tableau des ventes';
 
+/**
+ * Redirection automatique piégée de l'artefact (`<meta http-equiv="refresh">`,
+ * 1 s après l'affichage) : elle ne doit jamais atteindre sa cible. Le test pointe
+ * `url` vers un serveur local qui compte les requêtes reçues.
+ */
+export const artifactTrap = { url: 'https://example.com/?fuite=1' };
+
 const tableau = (label: string): string =>
-  `<!doctype html><html lang="fr"><body><h1>${ARTIFACT_TITLE}</h1><p>${label}</p><script>document.body.dataset.ok = '1';</script></body></html>`;
+  `<!doctype html><html lang="fr"><head><meta http-equiv="refresh" content="1;url=${artifactTrap.url}"></head><body><h1>${ARTIFACT_TITLE}</h1><p>${label}</p><script>document.body.dataset.ok = '1';</script></body></html>`;
 
 export const projectScenario: MockScenario = {
   name: 'projet',
@@ -274,7 +281,9 @@ export const projectScenario: MockScenario = {
       ],
     },
     { toolCalls: [{ name: 'write_file', args: { path: 'Archives/brouillon.md', content: 'x' } }] },
-    { toolCalls: [{ name: 'write_file', args: { path: ARTIFACT_FILE, content: tableau('v1') } }] },
+    () => ({
+      toolCalls: [{ name: 'write_file', args: { path: ARTIFACT_FILE, content: tableau('v1') } }],
+    }),
     {
       toolCalls: [
         { name: 'publish_artifact', args: { path: ARTIFACT_FILE, title: ARTIFACT_TITLE } },
@@ -296,7 +305,9 @@ export const projectTaskScenario: MockScenario = {
   name: 'projet : tâche',
   match: (t) => t === PROJECT_TASK_PROMPT,
   steps: [
-    { toolCalls: [{ name: 'write_file', args: { path: ARTIFACT_FILE, content: tableau('run') } }] },
+    () => ({
+      toolCalls: [{ name: 'write_file', args: { path: ARTIFACT_FILE, content: tableau('run') } }],
+    }),
     {
       toolCalls: [
         { name: 'publish_artifact', args: { path: ARTIFACT_FILE, title: ARTIFACT_TITLE } },

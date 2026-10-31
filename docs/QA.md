@@ -223,19 +223,20 @@ Branche `feat/qa-projects` (pile L0 à L4 : PR #121 à #125). Spec : `qa/e2e/pro
 
 ### Mock (CI) : 2/2
 
-| Cas                                                                                                                    | Résultat |
-| ---------------------------------------------------------------------------------------------------------------------- | -------- |
-| « Nouveau projet » : dossier existant comme principal, « Compta » en écriture, « Archives » en lecture seule           | ✅       |
-| Conversation du projet : pastille du projet dans l'en-tête                                                             | ✅       |
-| `memory_add` demandé dans une modale « Retenir dans la mémoire du projet : « … » »                                     | ✅       |
-| `Compta/synthese.md` écrit dans le dossier rattaché                                                                    | ✅       |
-| Écriture dans « Archives » refusée (« Le dossier « Archives » est en lecture seule »), aucun fichier créé              | ✅       |
-| Carte « Artefact publié » : page dans une iframe `sandbox="allow-scripts"`, script de la page exécuté                  | ✅       |
-| Dans l'artefact : `window.atelier` absent, `fetch('https://…')` bloqué                                                 | ✅       |
-| La note apparaît dans l'onglet « Mémoire et consignes »                                                                | ✅       |
-| Conversation suivante : prompt système avec le projet, la note et « Archives » en lecture seule                        | ✅       |
-| Tâche du projet (projet présélectionné, case « dossiers du projet » cochée) exécutée deux fois : même page, v1 puis v2 | ✅       |
-| Onglet Artefacts : vignette « v2 · … · Tableau hebdo », 2 versions dans le sélecteur, iframe sur `/v2/`                | ✅       |
+| Cas                                                                                                                         | Résultat |
+| --------------------------------------------------------------------------------------------------------------------------- | -------- |
+| « Nouveau projet » : dossier existant comme principal, « Compta » en écriture, « Archives » en lecture seule                | ✅       |
+| Conversation du projet : pastille du projet dans l'en-tête                                                                  | ✅       |
+| `memory_add` demandé dans une modale « Retenir dans la mémoire du projet : « … » »                                          | ✅       |
+| `Compta/synthese.md` écrit dans le dossier rattaché                                                                         | ✅       |
+| Écriture dans « Archives » refusée (« Le dossier « Archives » est en lecture seule »), aucun fichier créé                   | ✅       |
+| Carte « Artefact publié » : page dans une iframe `sandbox="allow-scripts"`, script de la page exécuté                       | ✅       |
+| Dans l'artefact : `window.atelier` absent, `fetch('https://…')` bloqué                                                      | ✅       |
+| `<meta http-equiv="refresh">` vers un serveur local : aucune requête reçue, le cadre passe sur la page d'erreur de Chromium | ✅       |
+| La note apparaît dans l'onglet « Mémoire et consignes »                                                                     | ✅       |
+| Conversation suivante : prompt système avec le projet, la note et « Archives » en lecture seule                             | ✅       |
+| Tâche du projet (projet présélectionné, case « dossiers du projet » cochée) exécutée deux fois : même page, v1 puis v2      | ✅       |
+| Onglet Artefacts : vignette « v2 · … · Tableau hebdo », 2 versions dans le sélecteur, iframe sur `/v2/`                     | ✅       |
 
 Suite e2e mock complète : 18 réussis, 3 ignorés (mode réel).
 
