@@ -16,6 +16,7 @@ import {
   type ToolExecutionContext,
   type ToolOutput,
   type ToolRegistry,
+  type WorkspaceFolder,
 } from '@atelier/shared';
 import {
   askPermission,
@@ -28,6 +29,8 @@ import {
 export interface ToolRuntime {
   sessionId: string;
   workspace: string;
+  /** Dossiers rattachés du projet de la conversation (ADR-003), relus à chaque tour. */
+  folders?: readonly WorkspaceFolder[];
   abortSignal: AbortSignal;
   requestPermission: PermissionHandler;
   sandbox?: Sandbox;
@@ -63,6 +66,7 @@ export async function executeTool(
     sessionId: runtime.sessionId,
     toolCallId,
     workspace: runtime.workspace,
+    ...(runtime.folders && runtime.folders.length > 0 ? { folders: runtime.folders } : {}),
     abortSignal: runtime.abortSignal,
     requestPermission: runtime.requestPermission,
     ...(runtime.sandbox ? { sandbox: runtime.sandbox } : {}),

@@ -188,6 +188,9 @@ function unattendedAllows(request: PermissionRequest, policy: ScheduledPermissio
       return webFetchAllowed(scopeKey, policy.webDomains);
     case 'mcp_write':
       return policy.mcpTools.includes(scopeKey);
+    case 'memory_write':
+      // Mémoire du projet : case dédiée, « fichiers » ne la couvre pas (ADR-003 D4).
+      return policy.memory === true;
     default:
       return false;
   }

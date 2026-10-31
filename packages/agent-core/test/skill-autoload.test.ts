@@ -167,7 +167,7 @@ async function exampleSkills(): Promise<SkillInfo[]> {
 describe('anti-régression : demandes des critères d’acceptation', () => {
   it('critère 2 ne déclenche que xlsx ; critère 4 ne déclenche aucun skill', async () => {
     const skills = await exampleSkills();
-    expect(skills.map((s) => s.name).sort()).toEqual(['rapport-markdown', 'xlsx']);
+    expect(skills.map((s) => s.name).sort()).toEqual(['artefact-html', 'rapport-markdown', 'xlsx']);
     const names = (request: string): string[] =>
       triggeredSkills(request, skills).map((t) => t.skill.name);
     expect(
@@ -179,5 +179,7 @@ describe('anti-régression : demandes des critères d’acceptation', () => {
       names('Résume le rapport et fais un tableau des montants de la facture et du ticket'),
     ).toEqual([]);
     expect(names('Rédige un rapport en Markdown sur ces ventes')).toEqual(['rapport-markdown']);
+    // Artefacts (ADR-003) : un tableau de bord charge le gabarit, un tableau de montants non.
+    expect(names('Mets à jour le tableau de bord des ventes')).toEqual(['artefact-html']);
   });
 });

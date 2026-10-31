@@ -137,18 +137,30 @@ export type { FetchFunction, RetryInfo, RetryOptions } from './llm/retry-fetch.j
 export { isNetworkError, toLlmError, unsupportedCapability } from './llm/errors.js';
 
 // Prompt
-export { buildSystemPrompt } from './prompt/system-prompt.js';
-export type { SystemPromptOptions } from './prompt/system-prompt.js';
+export {
+  ARTIFACT_CHART_LIB,
+  buildSystemPrompt,
+  MAX_PROMPT_ARTIFACTS,
+} from './prompt/system-prompt.js';
+export type { PromptProject, SystemPromptOptions } from './prompt/system-prompt.js';
 
 // Chemins (réutilisé par packages/documents)
 export {
   isInside,
+  resolveFolderPath,
   resolveReadablePath,
   resolveWorkspacePath,
   skillReadRoots,
   tryResolveWorkspacePath,
 } from './paths.js';
-export type { ReadRoot, ResolvedReadablePath, ResolvedWorkspacePath } from './paths.js';
+export type {
+  FolderContext,
+  ReadRoot,
+  ResolvedFolderPath,
+  ResolvedReadablePath,
+  ResolvedWorkspacePath,
+  ResolveFolderOptions,
+} from './paths.js';
 
 // Outils
 export {
@@ -165,6 +177,21 @@ export {
   writeFileTool,
 } from './tools/native.js';
 export type { NativeToolsOptions } from './tools/native.js';
+export {
+  appendMemoryNote,
+  createMemoryTools,
+  createPublishArtifactTool,
+  externalResources,
+  MAX_ARTIFACT_DESCRIPTION_CHARS,
+  MAX_ARTIFACT_TITLE_CHARS,
+  MAX_MEMORY_NOTE_CHARS,
+  MEMORY_NOTES_HEADING,
+} from './tools/project.js';
+export type {
+  ArtifactPublisher,
+  ArtifactPublishRequest,
+  ProjectMemoryWriter,
+} from './tools/project.js';
 export { BASH_TIMEOUT_MS, BASH_WHITELIST, bashTool, isWhitelistedCommand } from './tools/bash.js';
 export { executeTool, isToolOutput, toAiSdkTools } from './tools/registry.js';
 export type { ToolRuntime } from './tools/registry.js';

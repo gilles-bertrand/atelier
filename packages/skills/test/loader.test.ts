@@ -139,16 +139,16 @@ describe('skillsPrompt', () => {
 });
 
 describe("skills d'exemple", () => {
-  it('se chargent tous les deux', async () => {
+  it('se chargent tous', async () => {
     const skills = await loadSkills(bundledExamplesDir());
-    expect(skills.map((s) => s.name)).toEqual(['rapport-markdown', 'xlsx']);
+    expect(skills.map((s) => s.name)).toEqual(['artefact-html', 'rapport-markdown', 'xlsx']);
     for (const s of skills) expect(s.description.length).toBeGreaterThan(50);
   });
 
   it("s'installent sans écraser un skill existant", async () => {
     await skill('xlsx', '---\nname: xlsx\ndescription: version modifiée\n---\n');
     const installed = await installExampleSkills(bundledExamplesDir(), root);
-    expect(installed).toEqual(['rapport-markdown']);
+    expect(installed).toEqual(['artefact-html', 'rapport-markdown']);
     const skills = await loadSkills(root);
     expect(skills.find((s) => s.name === 'xlsx')?.description).toBe('version modifiée');
     expect(await readdir(join(root, 'rapport-markdown'))).toContain('modele.md');
