@@ -20,6 +20,7 @@ import {
   withSessionMemory,
   writeFileTool,
 } from '../src/index.js';
+import { guardedPrecheck } from '../src/tools/native.js';
 import { permissions, withTempDir } from './helpers.js';
 
 function ctx(workspace: string, extra: Partial<ToolExecutionContext> = {}): ToolExecutionContext {
@@ -478,6 +479,47 @@ describe('vérification préalable (ADR-003, D9)', () => {
     source: 'mcp' as const,
     execute: () => Promise.resolve({ ok: true, content: 'fait' }),
   };
+
+  it('l’échec passe par limitOutput, comme la sortie d’execute', async () => {
+    await withTempDir(async (ws) => {
+      const perms = permissions();
+      const out = await executeTool(
+        { ...update, precheck: () => Promise.resolve({ ok: false as const, content: 'Non.' }) },
+        { id: 1 },
+        'c1',
+        {
+          ...base(ws),
+          requestPermission: perms,
+          limitOutput: (name, output) => ({ ...output, content: `[${name}] ${output.content}` }),
+        },
+      );
+      expect(out).toEqual({ ok: false, content: '[mcp__crm__update] Non.' });
+      expect(perms.requests).toHaveLength(0);
+    });
+  });
+
+  it('guardedPrecheck : refus certains en échec, erreurs passagères relancées (la question est posée)', async () => {
+    const fsError = (code: string) =>
+      Promise.reject(Object.assign(new Error(`erreur ${code}`), { code }));
+    await expect(guardedPrecheck(() => fsError('ENOENT'))).resolves.toEqual({
+      ok: false,
+      content: 'Fichier ou dossier introuvable.',
+    });
+    await expect(guardedPrecheck(() => fsError('EMFILE'))).rejects.toThrow('erreur EMFILE');
+    await expect(guardedPrecheck(() => fsError('EBUSY'))).rejects.toThrow('erreur EBUSY');
+    // Dans executeTool, l'erreur passagère ne conclut pas : la question est posée.
+    await withTempDir(async (ws) => {
+      const perms = permissions();
+      const out = await executeTool(
+        { ...update, precheck: () => guardedPrecheck(() => fsError('EMFILE')) },
+        { id: 1 },
+        'c1',
+        { ...base(ws), requestPermission: perms },
+      );
+      expect(out).toEqual({ ok: true, content: 'fait' });
+      expect(perms.requests).toHaveLength(1);
+    });
+  });
 
   it('une exception dans precheck laisse poser la question, puis execute décide', async () => {
     await withTempDir(async (ws) => {

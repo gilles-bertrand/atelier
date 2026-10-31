@@ -36,15 +36,42 @@ export async function guarded(run: () => Promise<ToolOutput>): Promise<ToolOutpu
 }
 
 /**
- * Vérification préalable (ADR-003, D9) faite des contrôles d'`execute` : ce
- * qu'ils lèvent est traduit par {@link guarded}, donc les messages sont les
- * mêmes. `check` renvoie un échec, ou `undefined` si l'appel peut se faire.
+ * Erreurs du système de fichiers qui condamnent l'appel : chemin absent, pas un
+ * dossier, droits, boucle de liens… Les autres (`EMFILE`, `EBUSY`…) peuvent être
+ * passagères : la vérification préalable les laisse à `execute`.
+ */
+const CERTAIN_FS_ERRORS: ReadonlySet<string> = new Set([
+  'ENOENT',
+  'ENOTDIR',
+  'EISDIR',
+  'EACCES',
+  'EPERM',
+  'ELOOP',
+  'ENAMETOOLONG',
+]);
+
+/**
+ * Vérification préalable (ADR-003, D9) faite des contrôles d'`execute`, avec les
+ * mêmes messages que {@link guarded}. `check` renvoie un échec, ou `undefined`
+ * si l'appel peut se faire. Seuls les refus certains deviennent un échec : une
+ * erreur passagère ou inattendue est relancée, et `executeTool` pose alors la
+ * question (la vérification ne conclut pas).
  */
 export async function guardedPrecheck(
   check: () => Promise<ToolPrecheckFailure | undefined>,
 ): Promise<ToolPrecheckFailure | undefined> {
-  const output = await guarded(async () => (await check()) ?? { ok: true, content: '' });
-  return output.ok ? undefined : { ok: false, content: output.content };
+  try {
+    const failure = await check();
+    return failure ? { ok: false, content: failure.content } : undefined;
+  } catch (error) {
+    if (error instanceof AtelierError && error.code.startsWith('tool/')) {
+      return { ok: false, content: error.message };
+    }
+    if (isFsError(error) && error.code !== undefined && CERTAIN_FS_ERRORS.has(error.code)) {
+      return { ok: false, content: fsErrorMessage(error) };
+    }
+    throw error;
+  }
 }
 
 function isFsError(error: unknown): error is NodeJS.ErrnoException {
