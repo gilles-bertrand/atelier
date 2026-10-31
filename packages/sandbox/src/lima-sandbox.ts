@@ -17,6 +17,7 @@ import {
   type SandboxDiagnostics,
   type SandboxExecOptions,
   type SandboxExecResult,
+  type SandboxFolderMount,
   type SandboxProgress,
   type SandboxResources,
   type SandboxState,
@@ -24,7 +25,14 @@ import {
 } from '@atelier/shared';
 import { classifyLimaFailure } from './errors.js';
 import { Limactl, type LimaInstance } from './limactl.js';
-import { assertMountableWorkspace, mountsMatch, mountsSetExpression } from './mounts.js';
+import {
+  assertMountableFolders,
+  assertMountableWorkspace,
+  currentMounts,
+  mountsMatch,
+  mountsSetExpression,
+  sameFolderMounts,
+} from './mounts.js';
 import { DEFAULT_MAX_OUTPUT_BYTES, splitOutputBudget } from './output.js';
 import {
   chooseLimaHome,
@@ -116,6 +124,10 @@ export class LimaSandbox implements Sandbox {
   private mountedWorkspace: string | undefined;
   /** Dossier voulu, appliqué au prochain démarrage. */
   private desiredWorkspace: string | undefined;
+  /** Dossiers rattachés réellement montés sous /dossiers (projet, ADR-003). */
+  private mountedFolders: SandboxFolderMount[] = [];
+  /** Dossiers rattachés voulus, appliqués au prochain démarrage. */
+  private desiredFolders: SandboxFolderMount[] = [];
   private networkEnabled: boolean;
   private queue: Promise<unknown> = Promise.resolve();
   private limaVersion: string | undefined;
@@ -154,8 +166,9 @@ export class LimaSandbox implements Sandbox {
     return this.serialize(() => this.doEnsureReady(onProgress ?? (() => undefined)));
   }
 
-  async setWorkspace(hostDir: string): Promise<void> {
-    assertMountableWorkspace(hostDir, { limaHome: this.limaHome, skillsDir: this.skillsDir });
+  async setWorkspace(hostDir: string, folders: readonly SandboxFolderMount[] = []): Promise<void> {
+    const forbidden = { limaHome: this.limaHome, skillsDir: this.skillsDir };
+    assertMountableWorkspace(hostDir, forbidden);
     let dir: string;
     try {
       dir = await realpath(hostDir);
@@ -165,11 +178,31 @@ export class LimaSandbox implements Sandbox {
       });
     }
     // Le chemin résolu (liens symboliques) doit lui aussi être acceptable.
-    assertMountableWorkspace(dir, { limaHome: this.limaHome, skillsDir: this.skillsDir });
+    assertMountableWorkspace(dir, forbidden);
+    // Dossiers rattachés d'un projet : chemins canoniques, mêmes règles, pas d'imbrication.
+    const resolvedFolders = await Promise.all(
+      folders.map(async (folder): Promise<SandboxFolderMount> => {
+        try {
+          return {
+            host: await realpath(folder.host),
+            guest: folder.guest,
+            writable: folder.writable,
+          };
+        } catch (cause) {
+          throw new AtelierError('tool/failed', `Dossier rattaché introuvable : ${folder.host}`, {
+            cause,
+          });
+        }
+      }),
+    );
+    assertMountableFolders(dir, resolvedFolders, forbidden);
     return this.serialize(async () => {
       this.desiredWorkspace = dir;
+      this.desiredFolders = resolvedFolders;
       if (this.state !== 'ready') return; // appliqué au prochain ensureReady
-      if (this.mountedWorkspace === dir) return; // rien à faire : pas de redémarrage
+      if (this.mountedWorkspace === dir && sameFolderMounts(this.mountedFolders, resolvedFolders)) {
+        return; // rien à faire : pas de redémarrage
+      }
       const started = Date.now();
       this.state = 'restarting';
       try {
@@ -197,6 +230,7 @@ export class LimaSandbox implements Sandbox {
       const instance = await this.limactl.get(this.name);
       if (instance?.status === 'Running') await this.limactl.stop(this.name);
       this.mountedWorkspace = undefined;
+      this.mountedFolders = [];
       this.state = instance ? 'stopped' : 'absent';
       this.error = undefined;
     });
@@ -209,6 +243,7 @@ export class LimaSandbox implements Sandbox {
       const instance = await this.limactl.get(this.name);
       if (instance) await this.limactl.delete(this.name, true);
       this.mountedWorkspace = undefined;
+      this.mountedFolders = [];
       this.state = 'absent';
       await this.doEnsureReady(report);
     });
@@ -218,6 +253,9 @@ export class LimaSandbox implements Sandbox {
     return {
       state: this.state,
       ...(this.mountedWorkspace ? { workspace: this.mountedWorkspace } : {}),
+      ...(this.mountedFolders.length > 0
+        ? { folders: this.mountedFolders.map((folder) => ({ ...folder })) }
+        : {}),
       networkEnabled: this.networkEnabled,
       ...(this.error ? { error: this.error } : {}),
     };
@@ -360,6 +398,9 @@ export class LimaSandbox implements Sandbox {
     const mappings: MountMapping[] = [];
     if (this.mountedWorkspace)
       mappings.push({ host: this.mountedWorkspace, guest: GUEST_WORKSPACE });
+    for (const folder of this.mountedFolders) {
+      mappings.push({ host: folder.host, guest: folder.guest });
+    }
     mappings.push({ host: this.skillsDir, guest: GUEST_SKILLS });
     return mappings;
   }
@@ -424,10 +465,15 @@ export class LimaSandbox implements Sandbox {
     }
   }
 
-  private desired(): { workspace?: string; skillsDir: string } {
+  private desired(): {
+    workspace?: string;
+    skillsDir: string;
+    folders?: readonly SandboxFolderMount[];
+  } {
     return {
       ...(this.desiredWorkspace ? { workspace: this.desiredWorkspace } : {}),
       skillsDir: this.skillsDir,
+      ...(this.desiredFolders.length > 0 ? { folders: this.desiredFolders } : {}),
     };
   }
 
@@ -540,6 +586,8 @@ export class LimaSandbox implements Sandbox {
     this.mountedWorkspace = this.desiredWorkspace;
     const mounted = instance.mounts.find((m) => m.mountPoint === GUEST_WORKSPACE);
     if (mounted) this.mountedWorkspace = mounted.location;
+    // Dossiers rattachés tels que la VM les monte vraiment (ADR-003).
+    this.mountedFolders = [...(currentMounts(instance.mounts).folders ?? [])];
     report(progressAt('configuring_mounts', 'Application des règles réseau…', 0.5));
     await this.applyNetwork();
     this.state = 'ready';
