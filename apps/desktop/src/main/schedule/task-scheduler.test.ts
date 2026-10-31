@@ -207,6 +207,13 @@ describe('TaskScheduler', () => {
     ).toThrow('Au moins toutes les 15 minutes.');
     expect(() => scheduler.saveTask(input({ maxDurationMinutes: 200 }))).toThrow(/entre 5 et 120/);
     expect(scheduler.saveTask(input()).maxDurationMinutes).toBe(20);
+    // Code et champ transmis au renderer, qui affiche le message sous ce champ.
+    expect(() => scheduler.saveTask(input({ name: '' }))).toThrow(
+      expect.objectContaining({ code: 'schedule/invalid', details: { field: 'name' } }),
+    );
+    expect(() => scheduler.runNow('absente')).toThrow(
+      expect.objectContaining({ code: 'schedule/not_found' }),
+    );
   });
 
   it('renommer une tâche garde sa prochaine exécution ; changer la récurrence la recalcule', async () => {

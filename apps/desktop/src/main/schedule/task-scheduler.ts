@@ -59,18 +59,14 @@ interface Queued {
   taskId: string;
 }
 
-/** Erreur de validation d'une tâche (`schedule/invalid` au L0). */
+/** Tâche invalide : le renderer affiche le message tel quel, sous le champ `field`. */
 function invalid(field: string, message: string): AtelierError {
-  // TODO(L0) : code `schedule/invalid` dès qu'il existe dans errors.ts.
-  return new AtelierError('tool/invalid_input', message, {
-    details: { kind: 'schedule_invalid', field },
-  });
+  return new AtelierError('schedule/invalid', message, { details: { field } });
 }
 
 function notFound(id: string): AtelierError {
-  // TODO(L0) : code `schedule/not_found`.
-  return new AtelierError('tool/invalid_input', 'Tâche planifiée introuvable.', {
-    details: { kind: 'schedule_not_found', id },
+  return new AtelierError('schedule/not_found', 'Tâche planifiée introuvable.', {
+    details: { id },
   });
 }
 
