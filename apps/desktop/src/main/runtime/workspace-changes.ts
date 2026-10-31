@@ -122,11 +122,15 @@ export function diffSnapshots(
 export class WorkspaceChangeTracker {
   readonly #root: string;
   readonly #options: SnapshotOptions;
+  /** Libellé d'un dossier rattaché (ADR-003) : préfixe des chemins des cartes. */
+  readonly #label: string | undefined;
   #baseline: WorkspaceSnapshot | undefined;
 
-  constructor(root: string, options: SnapshotOptions = {}) {
+  constructor(root: string, options: SnapshotOptions & { label?: string } = {}) {
     this.#root = root;
-    this.#options = options;
+    const { label, ...snapshot } = options;
+    this.#options = snapshot;
+    this.#label = label;
   }
 
   async start(): Promise<void> {
@@ -145,14 +149,50 @@ export class WorkspaceChangeTracker {
         : display?.type === 'diff'
           ? display.path
           : undefined;
+    const shown = (path: string): string =>
+      this.#label === undefined ? path : `${this.#label}/${path}`;
     return diffSnapshots(before, after)
-      .filter((change) => change.path !== ownCard)
+      .filter((change) => shown(change.path) !== ownCard)
       .slice(0, MAX_CARDS_PER_TOOL)
       .map((change) => ({
-        path: change.path,
+        path: shown(change.path),
         absolutePath: join(this.#root, ...change.path.split('/')),
         size: change.size,
         action: change.action,
       }));
+  }
+}
+
+/** Dossier suivi : le principal (sans libellé) ou un dossier rattaché en écriture. */
+export interface TrackedFolder {
+  path: string;
+  label?: string;
+}
+
+/**
+ * Suivi des fichiers d'un tour de projet (ADR-003) : le dossier principal et
+ * chaque dossier rattaché en écriture (un dossier en lecture seule ne change
+ * pas). Cartes au plus {@link MAX_CARDS_PER_TOOL} par outil, tous dossiers confondus.
+ */
+export class FolderChangeTracker {
+  readonly #trackers: WorkspaceChangeTracker[];
+
+  constructor(folders: readonly TrackedFolder[], options: SnapshotOptions = {}) {
+    this.#trackers = folders.map(
+      (folder) =>
+        new WorkspaceChangeTracker(folder.path, {
+          ...options,
+          ...(folder.label !== undefined ? { label: folder.label } : {}),
+        }),
+    );
+  }
+
+  async start(): Promise<void> {
+    await Promise.all(this.#trackers.map((tracker) => tracker.start()));
+  }
+
+  async afterTool(display: ToolDisplay | undefined): Promise<FileCard[]> {
+    const cards = await Promise.all(this.#trackers.map((tracker) => tracker.afterTool(display)));
+    return cards.flat().slice(0, MAX_CARDS_PER_TOOL);
   }
 }

@@ -16,27 +16,35 @@ export interface SessionPatch {
   title?: string;
   updatedAt?: string;
   model?: string | null;
+  /** Projet de la conversation (ADR-003) ; `null` : hors projet. */
+  projectId?: string | null;
+  /** Dossier de travail (dossier principal d'un projet qui change, ADR-003). */
+  workspace?: string;
 }
 
 /** Applique un {@link SessionPatch} (fonction pure, partagée par les deux stores). */
 export function applySessionPatch(current: SessionSummary, patch: SessionPatch): SessionSummary {
-  const { model, ...rest } = patch;
+  const { model, projectId, ...rest } = patch;
   const next: SessionSummary = { ...current, ...rest };
   if (model === null) delete next.model;
   else if (model !== undefined) next.model = model;
+  if (projectId === null) delete next.projectId;
+  else if (projectId !== undefined) next.projectId = projectId;
   return next;
 }
 
 export interface SessionListOptions {
   /** Inclure les conversations des runs planifiés (exclues des « Récentes », ADR-002 D3). */
   includeScheduled?: boolean;
+  /** Seulement les conversations de ce projet (ADR-003). */
+  projectId?: string;
 }
 
 export interface SessionStore {
   list(limit?: number, options?: SessionListOptions): SessionSummary[];
   get(sessionId: string): SessionSummary | undefined;
   create(session: SessionSummary): SessionSummary;
-  /** Met à jour le titre, la date de dernière activité et/ou le modèle. */
+  /** Met à jour le titre, la date de dernière activité, le modèle et/ou le projet. */
   update(sessionId: string, patch: SessionPatch): SessionSummary;
   delete(sessionId: string): void;
   messages(sessionId: string): ChatMessage[];
@@ -66,6 +74,7 @@ export class InMemorySessionStore implements SessionStore {
   list(limit = 50, options: SessionListOptions = {}): SessionSummary[] {
     return [...this.#sessions.values()]
       .filter((s) => options.includeScheduled === true || s.scheduledTaskId === undefined)
+      .filter((s) => options.projectId === undefined || s.projectId === options.projectId)
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
       .slice(0, limit);
   }

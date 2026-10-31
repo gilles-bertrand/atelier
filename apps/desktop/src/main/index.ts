@@ -1,6 +1,7 @@
 import { mkdir } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import {
   app,
   BrowserWindow,
@@ -19,9 +20,14 @@ import {
   UNATTENDED_INSTRUCTIONS,
   unattendedPermissionHandler,
 } from '@atelier/agent-core';
-import type { AppHealth, ScheduledRun, ScheduledTask } from '@atelier/shared';
+import {
+  ARTIFACT_SCHEME,
+  type AppHealth,
+  type ScheduledRun,
+  type ScheduledTask,
+} from '@atelier/shared';
 import { loadMcpConfig, McpManager } from '@atelier/mcp-bridge';
-import { LimaSandbox } from '@atelier/sandbox';
+import { defaultLimaHome, fallbackLimaHome, LimaSandbox } from '@atelier/sandbox';
 import { installExampleSkills } from '@atelier/skills';
 import { broadcast } from './broadcast.js';
 import { handlePreviewRequest, PREVIEW_SCHEME } from './file-preview.js';
@@ -32,6 +38,22 @@ import { ServerMonitor } from './llm/server-monitor.js';
 import { limaPreflight, resolveAppPaths } from './paths.js';
 import { AgentRuntimeHost } from './runtime/agent-runtime.js';
 import { ChatManager } from './runtime/chat-manager.js';
+import {
+  handleArtifactRequest,
+  isAllowedSubframeUrl,
+  type ArtifactLibraries,
+} from './projects/artifact-protocol.js';
+import {
+  InMemoryArtifactStore,
+  SqliteArtifactStore,
+  type ArtifactStore,
+} from './projects/artifact-store.js';
+import { ProjectService } from './projects/project-service.js';
+import {
+  InMemoryProjectStore,
+  SqliteProjectStore,
+  type ProjectStore,
+} from './projects/project-store.js';
 import { PermissionBroker } from './runtime/permission-broker.js';
 import { SandboxManager } from './runtime/sandbox-manager.js';
 import { InMemorySessionStore, type SessionStore } from './runtime/session-store.js';
@@ -57,15 +79,17 @@ const CONTENT_SECURITY_POLICY = [
   // atelier-file: aperçu des fichiers de la conversation (voir file-preview.ts).
   `img-src 'self' data: blob: ${PREVIEW_SCHEME}:`,
   "font-src 'self' data:",
-  `connect-src 'self' ${PREVIEW_SCHEME}:`,
-  `frame-src ${PREVIEW_SCHEME}:`,
+  // atelier-artifact: pages publiées par l'agent (ADR-003 D5), dans une iframe isolée.
+  `connect-src 'self' ${PREVIEW_SCHEME}: ${ARTIFACT_SCHEME}:`,
+  `frame-src ${PREVIEW_SCHEME}: ${ARTIFACT_SCHEME}:`,
   "object-src 'none'",
   "base-uri 'none'",
   "frame-ancestors 'none'",
   "form-action 'none'",
 ].join('; ');
 
-// Protocole d'aperçu : à déclarer avant `ready` (fetch, flux et visionneuse PDF).
+// Protocoles d'aperçu et d'artefacts : à déclarer avant `ready` (fetch, flux,
+// visionneuse PDF, pages publiées).
 protocol.registerSchemesAsPrivileged([
   {
     scheme: PREVIEW_SCHEME,
@@ -77,7 +101,22 @@ protocol.registerSchemesAsPrivileged([
       corsEnabled: true,
     },
   },
+  {
+    scheme: ARTIFACT_SCHEME,
+    privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true },
+  },
 ]);
+
+/** Chart.js servi localement aux artefacts (jamais de CDN, ADR-003 D5). */
+function artifactLibraries(): ArtifactLibraries {
+  try {
+    // `exports` ne publie pas le fichier UMD : on part de l'entrée du paquet.
+    const entry = createRequire(import.meta.url).resolve('chart.js');
+    return { 'chart.umd.min.js': join(dirname(entry), 'chart.umd.min.js') };
+  } catch {
+    return {};
+  }
+}
 
 /** Identifiant fixe de la visionneuse PDF intégrée de Chromium / Electron. */
 const PDF_VIEWER_EXTENSION_ID = 'mhjfbmdgcfjbbpaeojofohoefgiehjai';
@@ -169,6 +208,19 @@ function createMainWindow(): BrowserWindow {
     const devUrl = process.env['ELECTRON_RENDERER_URL'];
     if (!(isDev && devUrl && url.startsWith(devUrl))) event.preventDefault();
   });
+  // Sous-cadres (artefacts, aperçu) : jamais vers le web. Sans ce garde-fou, une
+  // page publiée piégée pourrait s'envoyer vers https://…?données (ADR-003 D5).
+  // WebRTC hors proxy coupé : un artefact ne peut pas faire sortir de données par
+  // STUN, canal que la CSP ne couvre pas partout (ADR-003 D5). L'app n'utilise pas WebRTC.
+  window.webContents.setWebRTCIPHandlingPolicy('disable_non_proxied_udp');
+  window.webContents.on('will-frame-navigate', (event) => {
+    if (event.isMainFrame) return;
+    const allowed = isAllowedSubframeUrl(event.url, [
+      `${PREVIEW_SCHEME}:`,
+      `chrome-extension://${PDF_VIEWER_EXTENSION_ID}/`,
+    ]);
+    if (!allowed) event.preventDefault();
+  });
   // Un fichier déposé hors de la zone de dépôt ne doit jamais remplacer l'app.
   window.webContents.on('will-attach-webview', (event) => {
     event.preventDefault();
@@ -191,6 +243,8 @@ function installContentSecurityPolicy(): void {
     // (extension interne) doit pouvoir s'afficher dans l'iframe d'aperçu.
     if (
       details.url.startsWith(`${PREVIEW_SCHEME}:`) ||
+      // Les artefacts portent leur propre CSP (sans réseau, `sandbox allow-scripts`).
+      details.url.startsWith(`${ARTIFACT_SCHEME}:`) ||
       details.url.startsWith(`chrome-extension://${PDF_VIEWER_EXTENSION_ID}/`)
     ) {
       callback({});
@@ -330,22 +384,81 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
   let store: SessionStore;
   let usage: UsageStore;
   let schedules: ScheduleStore;
+  let projectStore: ProjectStore;
+  let artifactStore: ArtifactStore;
   let health: AppHealth = { historyPersistent: true };
   try {
     const db = await openDatabase(join(paths.userData, 'atelier.db'));
     store = new SqliteSessionStore(db);
     usage = new SqliteUsageStore(db);
     schedules = new SqliteScheduleStore(db);
+    projectStore = new SqliteProjectStore(db);
+    artifactStore = new SqliteArtifactStore(db);
   } catch (error) {
     log('historique SQLite indisponible, conversations gardées en mémoire', error);
     store = new InMemorySessionStore();
     usage = new InMemoryUsageStore();
     schedules = new InMemoryScheduleStore();
+    projectStore = new InMemoryProjectStore();
+    artifactStore = new InMemoryArtifactStore();
     health = {
       historyPersistent: false,
       historyError: error instanceof Error ? error.message : String(error),
     };
   }
+
+  // Projets (ADR-003) : conversations et tâches sont branchées plus bas (fonctions).
+  const late: { chats?: ChatManager; scheduler?: TaskScheduler } = {};
+  const projects = new ProjectService({
+    store: projectStore,
+    artifacts: artifactStore,
+    sessions: store,
+    projectsDir: () => settings.get().projectsDir ?? join(home, 'Atelier', 'Projets'),
+    home,
+    // Jamais un dossier qui contient (ou est dans) les données de la VM, de l'app ou les skills.
+    forbiddenRoots: () => [
+      defaultLimaHome(home),
+      fallbackLimaHome(home),
+      paths.userData,
+      settings.get().skillsDir,
+    ],
+    deleteSession: (sessionId) => late.chats?.delete(sessionId) ?? Promise.resolve(),
+    tasks: () => {
+      const scheduler = late.scheduler;
+      if (!scheduler) return undefined;
+      return {
+        list: () => scheduler.listTasks(),
+        setEnabled: (id, enabled) => scheduler.setEnabled(id, enabled),
+        delete: (id) => scheduler.deleteTask(id),
+        retarget: (id, workspace) => {
+          const task = schedules.getTask(id);
+          if (!task) return;
+          const {
+            lastRun: _lastRun,
+            nextRunAt: _nextRunAt,
+            id: _id,
+            createdAt: _createdAt,
+            updatedAt: _updatedAt,
+            ...input
+          } = task;
+          scheduler.saveTask({ ...input, workspace }, id);
+        },
+      };
+    },
+    runOf: (sessionId) => {
+      const taskId = store.get(sessionId)?.scheduledTaskId;
+      if (taskId === undefined) return undefined;
+      const run = schedules.openRuns(taskId).find((r) => r.sessionId === sessionId);
+      const task = schedules.getTask(taskId);
+      return run && task ? { runId: run.id, taskName: task.name } : undefined;
+    },
+    onProjectChanged: (projectId) => {
+      broadcast('project:changed', { projectId });
+    },
+    onArtifactChanged: (artifact, deleted) => {
+      broadcast('artifact:changed', { artifact, ...(deleted ? { deleted } : {}) });
+    },
+  });
 
   const permissions = new PermissionBroker();
   const chats = new ChatManager({
@@ -362,8 +475,10 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
     defaultModel: () => settings.get().llm.model,
     models,
     lease,
+    projects,
     log,
   });
+  late.chats = chats;
 
   // Prompts planifiés (ADR-002) : un run à la fois, permissions non interactives.
   const runner = new ScheduledRunner({
@@ -371,6 +486,8 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
     lease,
     permissionHandler: unattendedPermissionHandler,
     instructions: UNATTENDED_INSTRUCTIONS,
+    // Tâche de projet : le bail couvre les dossiers rattachés montés (ADR-003 D6).
+    leaseFor: (task) => projects.leaseFor(task),
     // Pas d'App Nap pendant un run ; la mise en veille du Mac reste possible (rattrapage).
     keepAwake: () => {
       const id = powerSaveBlocker.start('prevent-app-suspension');
@@ -388,6 +505,7 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
     onFinished: notifyRun,
     log,
   });
+  late.scheduler = scheduler;
   // Réveil ou déverrouillage du Mac : une exécution par tâche en retard.
   powerMonitor.on('resume', () => {
     scheduler.catchUp();
@@ -421,11 +539,19 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
     if (next.openAtLogin !== previous.openAtLogin) applyOpenAtLogin(next.openAtLogin === true);
   });
 
-  // Aperçu : seulement les fichiers des dossiers de travail des conversations connues.
+  // Aperçu : seulement les fichiers des dossiers des conversations et des projets connus.
   protocol.handle(PREVIEW_SCHEME, (request) =>
     handlePreviewRequest(request.url, [
-      ...new Set(chats.list(1000, { includeScheduled: true }).map((c) => c.workspace)),
+      ...new Set([
+        ...chats.list(1000, { includeScheduled: true }).map((c) => c.workspace),
+        ...projects.openableRoots(),
+      ]),
     ]),
+  );
+  // Artefacts publiés (ADR-003 D5) : versions servies depuis la base, isolées.
+  const libraries = artifactLibraries();
+  protocol.handle(ARTIFACT_SCHEME, (request) =>
+    handleArtifactRequest(request.url, artifactStore, libraries),
   );
 
   registerIpcHandlers(
@@ -438,6 +564,7 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
       usage,
       scheduler,
       permissions,
+      projects,
       sandbox,
       mcp,
       home,

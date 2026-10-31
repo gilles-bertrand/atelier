@@ -145,7 +145,7 @@ describe('SqliteSessionStore', () => {
     expect(store.update('s1', { model: 'qwen3.5:9b' }).model).toBe('qwen3.5:9b');
     expect(store.get('s1')?.model).toBe('qwen3.5:9b');
     store.close();
-    expect(SCHEMA_VERSION).toBe(4);
+    expect(SCHEMA_VERSION).toBe(5);
   });
 
   it('refuse une base créée par une version plus récente', async () => {

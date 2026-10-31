@@ -246,7 +246,7 @@ describe('SqliteScheduleStore', () => {
     v3.close();
 
     const db = await openDatabase(file);
-    expect(SCHEMA_VERSION).toBe(4);
+    expect(SCHEMA_VERSION).toBe(5);
     const sessions = new SqliteSessionStore(db);
     expect(sessions.get('s1')).toEqual({
       id: 's1',

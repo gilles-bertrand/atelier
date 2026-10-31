@@ -301,6 +301,7 @@ interface TaskRow {
   next_run_at: string | null;
   created_at: string;
   updated_at: string;
+  project_id: string | null;
 }
 
 interface RunRow {
@@ -338,6 +339,7 @@ function toTask(row: TaskRow): StoredTask {
     name: row.name,
     prompt: row.prompt,
     workspace: row.workspace,
+    ...(row.project_id !== null ? { projectId: row.project_id } : {}),
     ...(row.model !== null ? { model: row.model } : {}),
     schedule: parseJson<Schedule>(row.schedule, { kind: 'daily', time: '08:00' }),
     permissions: parseJson<ScheduledPermissions>(row.permissions, {
@@ -412,10 +414,11 @@ export class SqliteScheduleStore implements ScheduleStore {
     this.#db
       .prepare(
         `INSERT INTO scheduled_tasks (id, name, prompt, workspace, model, schedule, permissions,
-           max_duration_min, enabled, next_run_at, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           max_duration_min, enabled, next_run_at, created_at, updated_at, project_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (id) DO UPDATE SET
            name = excluded.name, prompt = excluded.prompt, workspace = excluded.workspace,
+           project_id = excluded.project_id,
            model = excluded.model, schedule = excluded.schedule,
            permissions = excluded.permissions, max_duration_min = excluded.max_duration_min,
            enabled = excluded.enabled, next_run_at = excluded.next_run_at,
@@ -434,6 +437,7 @@ export class SqliteScheduleStore implements ScheduleStore {
         task.nextRunAt ?? null,
         task.createdAt,
         task.updatedAt,
+        task.projectId ?? null,
       );
   }
 

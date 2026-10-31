@@ -102,6 +102,62 @@ export const MIGRATIONS: readonly string[] = [
    );
    CREATE INDEX scheduled_runs_task ON scheduled_runs (task_id, scheduled_for DESC);
    CREATE INDEX scheduled_runs_day ON scheduled_runs (scheduled_for);`,
+  // 5 : projets (ADR-003 D8, voir `projects/`). Supprimer un projet supprime ses
+  // conversations, ses tâches, sa mémoire et ses artefacts (jamais ses fichiers).
+  `CREATE TABLE projects (
+     id TEXT PRIMARY KEY,
+     name TEXT NOT NULL,
+     description TEXT NOT NULL DEFAULT '',
+     instructions TEXT NOT NULL DEFAULT '',
+     created_at TEXT NOT NULL,
+     updated_at TEXT NOT NULL,
+     archived_at TEXT
+   );
+   CREATE TABLE project_folders (
+     project_id TEXT NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
+     position INTEGER NOT NULL,
+     path TEXT NOT NULL,
+     label TEXT NOT NULL,
+     access TEXT NOT NULL CHECK (access IN ('read', 'write')),
+     PRIMARY KEY (project_id, path),
+     UNIQUE (project_id, label)
+   );
+   CREATE TABLE project_memory_revisions (
+     project_id TEXT NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
+     revision INTEGER NOT NULL,
+     content TEXT NOT NULL,
+     source TEXT NOT NULL CHECK (source IN ('user', 'agent')),
+     session_id TEXT REFERENCES sessions (id) ON DELETE SET NULL,
+     run_id TEXT,
+     created_at TEXT NOT NULL,
+     PRIMARY KEY (project_id, revision)
+   );
+   ALTER TABLE sessions ADD COLUMN project_id TEXT REFERENCES projects (id) ON DELETE CASCADE;
+   ALTER TABLE scheduled_tasks ADD COLUMN project_id TEXT REFERENCES projects (id) ON DELETE CASCADE;
+   CREATE INDEX sessions_project ON sessions (project_id, updated_at DESC);
+   CREATE TABLE artifacts (
+     id TEXT PRIMARY KEY,
+     project_id TEXT REFERENCES projects (id) ON DELETE CASCADE,
+     path TEXT NOT NULL,
+     title TEXT NOT NULL,
+     description TEXT,
+     format TEXT NOT NULL CHECK (format IN ('html', 'markdown')),
+     version INTEGER NOT NULL,
+     created_at TEXT NOT NULL,
+     updated_at TEXT NOT NULL
+   );
+   CREATE UNIQUE INDEX artifacts_identity ON artifacts (COALESCE(project_id, ''), path);
+   CREATE TABLE artifact_versions (
+     artifact_id TEXT NOT NULL REFERENCES artifacts (id) ON DELETE CASCADE,
+     version INTEGER NOT NULL,
+     content BLOB NOT NULL,
+     size INTEGER NOT NULL,
+     session_id TEXT REFERENCES sessions (id) ON DELETE SET NULL,
+     run_id TEXT,
+     task_name TEXT,
+     created_at TEXT NOT NULL,
+     PRIMARY KEY (artifact_id, version)
+   );`,
 ];
 
 /** Version de schéma courante. */
@@ -175,6 +231,7 @@ interface SessionRow {
   updated_at: string;
   model: string | null;
   scheduled_task_id: string | null;
+  project_id: string | null;
 }
 
 interface MessageRow {
@@ -195,6 +252,7 @@ function toSummary(row: SessionRow): SessionSummary {
     updatedAt: row.updated_at,
     ...(row.model !== null ? { model: row.model } : {}),
     ...(row.scheduled_task_id !== null ? { scheduledTaskId: row.scheduled_task_id } : {}),
+    ...(row.project_id !== null ? { projectId: row.project_id } : {}),
   };
 }
 
@@ -220,10 +278,17 @@ export class SqliteSessionStore implements SessionStore {
   }
 
   list(limit = 50, options: SessionListOptions = {}): SessionSummary[] {
-    const where = options.includeScheduled ? '' : 'WHERE scheduled_task_id IS NULL';
+    const conditions: string[] = [];
+    const params: (string | number)[] = [];
+    if (!options.includeScheduled) conditions.push('scheduled_task_id IS NULL');
+    if (options.projectId !== undefined) {
+      conditions.push('project_id = ?');
+      params.push(options.projectId);
+    }
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
     const rows = this.#db
       .prepare(`SELECT * FROM sessions ${where} ORDER BY updated_at DESC, rowid DESC LIMIT ?`)
-      .all(limit) as unknown as SessionRow[];
+      .all(...params, limit) as unknown as SessionRow[];
     return rows.map(toSummary);
   }
 
@@ -236,8 +301,8 @@ export class SqliteSessionStore implements SessionStore {
   create(session: SessionSummary): SessionSummary {
     this.#db
       .prepare(
-        `INSERT INTO sessions (id, title, workspace, created_at, updated_at, model, scheduled_task_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO sessions (id, title, workspace, created_at, updated_at, model, scheduled_task_id, project_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         session.id,
@@ -247,6 +312,7 @@ export class SqliteSessionStore implements SessionStore {
         session.updatedAt,
         session.model ?? null,
         session.scheduledTaskId ?? null,
+        session.projectId ?? null,
       );
     return session;
   }
@@ -256,8 +322,17 @@ export class SqliteSessionStore implements SessionStore {
     if (!current) throw sessionNotFound(sessionId);
     const next = applySessionPatch(current, patch);
     this.#db
-      .prepare('UPDATE sessions SET title = ?, updated_at = ?, model = ? WHERE id = ?')
-      .run(next.title, next.updatedAt, next.model ?? null, sessionId);
+      .prepare(
+        'UPDATE sessions SET title = ?, updated_at = ?, model = ?, project_id = ?, workspace = ? WHERE id = ?',
+      )
+      .run(
+        next.title,
+        next.updatedAt,
+        next.model ?? null,
+        next.projectId ?? null,
+        next.workspace,
+        sessionId,
+      );
     return next;
   }
 
