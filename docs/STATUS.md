@@ -130,6 +130,12 @@ _Dernière mise à jour : 2026-10-29, Lead._
 
 _Format : date, agent, type proposé, raison, packages impactés._
 
+- ✅ **Livrée (PR #106), conforme au §3. Ajouts : constantes de durée, `SandboxHolder` et `SandboxStatus.heldBy`. `nextRunAt` lève une `RangeError` si la récurrence n'a pas été validée par `validateSchedule`. À brancher par UI (L2/L3) ; Core bascule ses types locaux de #105.** **2026-10-31, architect (prompts planifiés, [ADR-002](adr/ADR-002-prompts-planifies.md) §3)** (impact : `shared`, `agent-core`, main, renderer, `qa/`). Raison : exécuter un prompt à intervalle régulier, avec des droits déclarés par la tâche et un tableau de bord des exécutions. Aucun nouvel `AgentEvent`. Demandes :
+  - Nouveau module `schedule.ts` : `Schedule` (5 formes), `ScheduledPermissions`, `ScheduledTask(Input)`, `ScheduledRun`, `DeniedAction`, `ScheduleDashboard`, et les fonctions pures `nextRunAt`, `validateSchedule` et `describeSchedule`, avec leurs tests.
+  - `SessionSummary.scheduledTaskId?` ; `AppSettings.openAtLogin?`.
+  - Canaux `schedule:list|save|delete|set-enabled|run-now|stop-run|dashboard|runs` ; `session:list` gagne `includeScheduled?` ; événement `schedule:changed`.
+  - Codes `schedule/invalid` et `schedule/not_found`.
+
 - ✅ **Livrée (PR `feat/lead-shared-model-per-session`), conforme au plan. Aucun nouvel `AgentEvent`, tous les champs sont optionnels : pas de `switch` exhaustif à compléter. Le message français de `llm/model_unsupported` est ajouté au renderer dans la même PR. À brancher par Core (L1 : capacités, `/api/ps`, modèle par tour), le main (L2 : colonne `model` des sessions, canal `session:set-model`) et l'UI (L3 : sélecteur dans le Composer, séparateur dans le fil).** **2026-10-30, architect (ticket #13, décisions D1 à D4 validées par Gilles le 2026-10-30)** (impact : `shared`, `agent-core`, main, renderer). Raison : choisir le modèle par conversation parmi ceux du serveur. Demandes :
   - `llm.ts` : type `ModelCapability` (`completion`, `tools`, `vision`, `thinking`, `embedding`) et liste `MODEL_CAPABILITIES` ; `LlmModelInfo` gagne `capabilities?` (absent = inconnu, par exemple vLLM), `contextWindow?` (`/api/show`) et `loaded?` (`/api/ps`) ; `LlmServerConfig.model` devient le modèle par défaut des nouvelles conversations.
   - `messages.ts` : `SessionSummary.model?` (absent = modèle par défaut des Réglages) et `ChatMessage.model?` (modèle qui a produit la réponse).
