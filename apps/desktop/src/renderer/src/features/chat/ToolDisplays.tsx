@@ -3,7 +3,15 @@
  * résultats web, page lue, commande, modification, liste de tâches.
  */
 import { useState } from 'react';
-import { CheckCircle2, Circle, CircleDot, ExternalLink, FolderOpen, Globe } from 'lucide-react';
+import {
+  AppWindow,
+  CheckCircle2,
+  Circle,
+  CircleDot,
+  ExternalLink,
+  FolderOpen,
+  Globe,
+} from 'lucide-react';
 import type {
   FileCard as FileCardData,
   TodoItem,
@@ -203,7 +211,12 @@ export function TodoList({ todos }: { todos: readonly TodoItem[] }) {
 
 /** Vrai si l'affichage doit rester visible même bloc replié (carte, liens). */
 export function isProminentDisplay(display: ToolDisplay): boolean {
-  return display.type === 'file' || display.type === 'web_results' || display.type === 'web_page';
+  return (
+    display.type === 'file' ||
+    display.type === 'web_results' ||
+    display.type === 'web_page' ||
+    display.type === 'artifact'
+  );
 }
 
 /** Rendu d'un affichage riche. */
@@ -279,5 +292,16 @@ export function ToolDisplayView({ display }: { display: ToolDisplay }) {
       );
     case 'todos':
       return <TodoList todos={display.todos} />;
+    case 'artifact':
+      // Carte minimale (ADR-003 D5) : la visionneuse arrive avec la page du projet (L4).
+      return (
+        <p className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm">
+          <AppWindow className="size-4 shrink-0 text-brand-text" aria-hidden />
+          <span className="min-w-0 flex-1 truncate font-medium">{display.artifact.title}</span>
+          <span className="shrink-0 text-xs text-muted-foreground">
+            Artefact · v{display.artifact.version}
+          </span>
+        </p>
+      );
   }
 }

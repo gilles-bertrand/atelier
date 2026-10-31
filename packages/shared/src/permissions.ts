@@ -7,9 +7,12 @@
 /** Réponse de l'utilisateur dans la modale de permission. */
 export type PermissionDecision = 'allow_once' | 'allow_session' | 'deny';
 
-/** Nature de l'action, pour adapter le libellé et l'icône de la modale. */
+/**
+ * Nature de l'action, pour adapter le libellé et l'icône de la modale.
+ * `memory_write` : écrire dans la mémoire d'un projet (ADR-003 D4).
+ */
 export type PermissionKind =
-  'file_write' | 'file_delete' | 'command' | 'network' | 'mcp_write' | 'other';
+  'file_write' | 'file_delete' | 'command' | 'network' | 'mcp_write' | 'memory_write' | 'other';
 
 /** Demande de permission présentée à l'utilisateur. */
 export interface PermissionRequest {

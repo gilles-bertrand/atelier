@@ -16,6 +16,15 @@ import type { Attachment, ChatMessage, SessionSummary, TokenUsage } from './mess
 import type { ConnectionTestResult, LlmModelInfo, ServerStatus } from './llm.js';
 import type { McpStatus } from './mcp.js';
 import type { PermissionDecision } from './permissions.js';
+import type {
+  Artifact,
+  ArtifactVersion,
+  MemoryRevision,
+  Project,
+  ProjectInput,
+  ProjectMemory,
+  ProjectSummary,
+} from './projects.js';
 import type { SandboxDiagnostics, SandboxProgress, SandboxStatus } from './sandbox.js';
 import type {
   ScheduleDashboard,
@@ -67,12 +76,22 @@ export interface IpcInvokeContract {
     request: { title?: string; defaultPath?: string };
     response: string | null;
   };
-  /** Conversations, les plus récentes d'abord ; sans les runs planifiés sauf `includeScheduled`. */
+  /**
+   * Conversations, les plus récentes d'abord ; sans les runs planifiés sauf
+   * `includeScheduled`. `projectId` : seulement celles de ce projet.
+   */
   'session:list': {
-    request: { limit?: number; includeScheduled?: boolean };
+    request: { limit?: number; includeScheduled?: boolean; projectId?: string };
     response: SessionSummary[];
   };
-  'session:create': { request: { workspace: string }; response: SessionSummary };
+  /**
+   * Nouvelle conversation dans `workspace`. Avec `projectId` : conversation du
+   * projet, `workspace` doit alors être son dossier principal (ADR-003).
+   */
+  'session:create': {
+    request: { workspace: string; projectId?: string };
+    response: SessionSummary;
+  };
   'session:open': {
     request: { sessionId: string };
     response: {
@@ -150,6 +169,50 @@ export interface IpcInvokeContract {
     request: { taskId?: string; before?: string; limit?: number };
     response: ScheduledRun[];
   };
+
+  // --- Projets (ADR-003)
+  /** Projets avec leurs compteurs, le plus récemment actif d'abord ; archivés exclus sauf demande. */
+  'project:list': { request: { includeArchived?: boolean }; response: ProjectSummary[] };
+  'project:get': { request: { id: string }; response: Project };
+  /** Sans `folders`, l'app crée `<projectsDir>/<nom>/` comme dossier principal. */
+  'project:create': { request: { project: ProjectInput }; response: Project };
+  /** Les champs présents remplacent ceux du projet ; `folders` remplace toute la liste. */
+  'project:update': {
+    request: { id: string; patch: Partial<ProjectInput> };
+    response: Project;
+  };
+  /** Archiver masque le projet et désactive ses tâches ; désarchiver ne les réactive pas. */
+  'project:set-archived': { request: { id: string; archived: boolean }; response: Project };
+  /**
+   * Retire le projet de l'app avec ses conversations, ses tâches, sa mémoire et
+   * l'historique de ses artefacts. Aucun fichier n'est supprimé du disque.
+   */
+  'project:delete': { request: { id: string }; response: undefined };
+  /**
+   * Projet dont le dossier principal est `workspace` ; les conversations hors
+   * projet de ce dossier le rejoignent. `name` absent : nom du dossier.
+   */
+  'project:from-folder': { request: { workspace: string; name?: string }; response: Project };
+  'project:memory': { request: { id: string }; response: ProjectMemory };
+  /** Enregistre une révision ; `project/conflict` si la mémoire a changé depuis `baseRevision`. */
+  'project:memory-save': {
+    request: { id: string; content: string; baseRevision: number };
+    response: ProjectMemory;
+  };
+  /** Révisions, la plus récente d'abord. */
+  'project:memory-history': {
+    request: { id: string; limit?: number };
+    response: MemoryRevision[];
+  };
+
+  // --- Artefacts (ADR-003 D5)
+  /** Artefacts, le plus récemment publié d'abord ; `projectId` : seulement ceux de ce projet. */
+  'artifact:list': { request: { projectId?: string }; response: Artifact[] };
+  'artifact:get': { request: { id: string }; response: Artifact };
+  /** Versions gardées, la plus récente d'abord. */
+  'artifact:versions': { request: { id: string }; response: ArtifactVersion[] };
+  /** Retire l'artefact de l'app (versions comprises) ; le fichier source reste sur le disque. */
+  'artifact:delete': { request: { id: string }; response: undefined };
 }
 
 /** Canal d'invocation. */
@@ -178,6 +241,10 @@ export interface IpcEventContract {
    * « Récentes » (clic sur une notification). Émis après l'affichage de la fenêtre.
    */
   'app:open-session': { sessionId: string };
+  /** Projet créé, modifié (dossiers, consignes, mémoire), archivé ou supprimé. */
+  'project:changed': { projectId: string };
+  /** Artefact publié (nouvelle version) ou retiré (`deleted`). */
+  'artifact:changed': { artifact: Artifact; deleted?: boolean };
 }
 
 /** Canal d'événement. */
@@ -227,6 +294,20 @@ export const IPC_INVOKE_CHANNELS = [
   'schedule:stop-run',
   'schedule:dashboard',
   'schedule:runs',
+  'project:list',
+  'project:get',
+  'project:create',
+  'project:update',
+  'project:set-archived',
+  'project:delete',
+  'project:from-folder',
+  'project:memory',
+  'project:memory-save',
+  'project:memory-history',
+  'artifact:list',
+  'artifact:get',
+  'artifact:versions',
+  'artifact:delete',
 ] as const satisfies readonly IpcInvokeChannel[];
 
 /** Liste exhaustive des canaux d'événements. */
@@ -238,6 +319,8 @@ export const IPC_EVENT_CHANNELS = [
   'mcp:status',
   'schedule:changed',
   'app:open-session',
+  'project:changed',
+  'artifact:changed',
 ] as const satisfies readonly IpcEventChannel[];
 
 // Vérifications à la compilation : les listes couvrent exactement les contrats.

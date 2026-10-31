@@ -33,10 +33,21 @@ export const ATELIER_ERROR_CODES = [
   'schedule/invalid',
   /** Tâche ou run inconnu (supprimé, identifiant invalide). */
   'schedule/not_found',
+  // Projets (ADR-003)
+  /** Projet refusé : `details.field` (et `details.index` pour un dossier), message français de `validateProjectInput`. */
+  'project/invalid',
+  /** Projet inconnu (supprimé, identifiant invalide). */
+  'project/not_found',
+  /** Mémoire modifiée entre sa lecture et l'enregistrement (`baseRevision` dépassée). */
+  'project/conflict',
+  /** Artefact ou version inconnus. */
+  'artifact/not_found',
   // Outils
   'tool/not_found',
   'tool/invalid_input',
   'tool/path_outside_workspace',
+  /** Écriture dans un dossier de projet en lecture seule (ADR-003 D1). */
+  'tool/read_only',
   'tool/not_unique',
   'tool/failed',
   // Sandbox

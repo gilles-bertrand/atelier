@@ -23,9 +23,15 @@ const MESSAGES: Record<AtelierErrorCode, string> = {
   'settings/invalid': 'Ce réglage n’est pas valide.',
   'schedule/invalid': 'Cette tâche planifiée n’est pas valide.',
   'schedule/not_found': 'Cette tâche planifiée n’existe plus.',
+  'project/invalid': 'Ce projet n’est pas valide.',
+  'project/not_found': 'Ce projet n’existe plus.',
+  'project/conflict':
+    'La mémoire du projet a changé entre-temps (l’assistant y a peut-être écrit). Rechargez-la avant d’enregistrer.',
+  'artifact/not_found': 'Cet artefact n’existe plus.',
   'tool/not_found': 'Action inconnue.',
   'tool/invalid_input': 'Paramètres d’action invalides.',
   'tool/path_outside_workspace': 'Ce fichier est en dehors du dossier de travail.',
+  'tool/read_only': 'Ce dossier du projet est en lecture seule.',
   'tool/not_unique': 'Le passage à modifier apparaît plusieurs fois.',
   'tool/failed': 'L’action a échoué.',
   'sandbox/virtualization_unavailable':
@@ -84,7 +90,8 @@ function detail(error: Pick<SerializedAtelierError, 'details'>, key: string): st
  * Message lisible pour une erreur sérialisée. Le message de l'erreur n'est repris
  * que lorsqu'il est rédigé en français pour l'utilisateur :
  * - `llm/bad_response` à cause connue sans message dédié ici (agent-core) ;
- * - `schedule/invalid` : message de `validateSchedule` (« au moins 15 minutes »…).
+ * - `schedule/invalid` : message de `validateSchedule` (« au moins 15 minutes »…) ;
+ * - `project/invalid` : message de `validateProjectInput` ou du main (dossier refusé…).
  */
 export function errorMessage(
   error: Pick<SerializedAtelierError, 'code' | 'details'> & { message?: string },
@@ -97,7 +104,7 @@ export function errorMessage(
     const message = error.message?.trim();
     return message ? message : BAD_RESPONSE_WITH_REASON;
   }
-  if (error.code === 'schedule/invalid') {
+  if (error.code === 'schedule/invalid' || error.code === 'project/invalid') {
     const message = error.message?.trim();
     if (message) return message;
   }

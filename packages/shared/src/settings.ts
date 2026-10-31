@@ -28,6 +28,11 @@ export interface AppSettings {
   skillsDir: string;
   /** Fichier de configuration MCP (défaut `~/Atelier/mcp.json`). */
   mcpConfigPath: string;
+  /**
+   * Racine des dossiers créés pour les nouveaux projets (ADR-003 D2).
+   * Absent = `~/Atelier/Projets`.
+   */
+  projectsDir?: string;
   /** Onboarding terminé. */
   onboardingCompleted: boolean;
   /** Avertissement de confidentialité accepté (horodatage ISO 8601). */

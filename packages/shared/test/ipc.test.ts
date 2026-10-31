@@ -42,4 +42,27 @@ describe('canaux IPC', () => {
     expect(IPC_EVENT_CHANNELS).toContain('schedule:changed');
     expect(IPC_EVENT_CHANNELS).toContain('app:open-session');
   });
+
+  it('expose les projets et les artefacts au renderer (ADR-003)', () => {
+    for (const channel of [
+      'project:list',
+      'project:get',
+      'project:create',
+      'project:update',
+      'project:set-archived',
+      'project:delete',
+      'project:from-folder',
+      'project:memory',
+      'project:memory-save',
+      'project:memory-history',
+      'artifact:list',
+      'artifact:get',
+      'artifact:versions',
+      'artifact:delete',
+    ] as const) {
+      expect(IPC_RENDERER_INVOKE_CHANNELS).toContain(channel);
+    }
+    expect(IPC_EVENT_CHANNELS).toContain('project:changed');
+    expect(IPC_EVENT_CHANNELS).toContain('artifact:changed');
+  });
 });

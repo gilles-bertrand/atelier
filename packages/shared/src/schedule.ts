@@ -44,6 +44,11 @@ export interface ScheduledPermissions {
   webDomains: '*' | string[];
   /** Noms complets `mcp__<serveur>__<outil>` autorisés en écriture. */
   mcpTools: string[];
+  /**
+   * Mettre à jour la mémoire du projet (`kind: 'memory_write'`, ADR-003 D4).
+   * Absent = `false`. « Créer et modifier des fichiers » ne la couvre pas.
+   */
+  memory?: boolean;
 }
 
 /** Tâche telle que saisie dans le formulaire. */
@@ -51,8 +56,13 @@ export interface ScheduledTaskInput {
   name: string;
   /** Prompt envoyé comme premier message de chaque run. */
   prompt: string;
-  /** Dossier de travail absolu. */
+  /** Dossier de travail absolu (pour une tâche de projet : son dossier principal). */
   workspace: string;
+  /**
+   * Projet de la tâche (ADR-003 D6) : ses runs héritent des dossiers, des
+   * consignes et de la mémoire du projet, et leurs conversations lui appartiennent.
+   */
+  projectId?: string;
   /** Modèle ; absent = modèle par défaut des Réglages au moment du run. */
   model?: string;
   schedule: Schedule;
@@ -64,9 +74,10 @@ export interface ScheduledTaskInput {
 }
 
 /** Tâche enregistrée. */
-export interface ScheduledTask extends Required<Omit<ScheduledTaskInput, 'model'>> {
+export interface ScheduledTask extends Required<Omit<ScheduledTaskInput, 'model' | 'projectId'>> {
   id: string;
   model?: string;
+  projectId?: string;
   /** Prochaine exécution (ISO 8601) ; absente si la tâche est désactivée. */
   nextRunAt?: string;
   lastRun?: Pick<ScheduledRun, 'id' | 'status' | 'scheduledFor'>;
