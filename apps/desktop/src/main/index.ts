@@ -210,6 +210,9 @@ function createMainWindow(): BrowserWindow {
   });
   // Sous-cadres (artefacts, aperçu) : jamais vers le web. Sans ce garde-fou, une
   // page publiée piégée pourrait s'envoyer vers https://…?données (ADR-003 D5).
+  // WebRTC hors proxy coupé : un artefact ne peut pas faire sortir de données par
+  // STUN, canal que la CSP ne couvre pas partout (ADR-003 D5). L'app n'utilise pas WebRTC.
+  window.webContents.setWebRTCIPHandlingPolicy('disable_non_proxied_udp');
   window.webContents.on('will-frame-navigate', (event) => {
     if (event.isMainFrame) return;
     const allowed = isAllowedSubframeUrl(event.url, [

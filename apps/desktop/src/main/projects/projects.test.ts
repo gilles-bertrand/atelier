@@ -294,6 +294,9 @@ describe('protocole atelier-artifact:', () => {
     expect(csp).toContain('sandbox allow-scripts');
     expect(csp).toContain("connect-src 'none'");
     expect(csp).toContain("form-action 'none'");
+    // Canaux que connect-src ne couvre pas : prérésolution DNS et WebRTC.
+    expect(csp).toContain("webrtc 'block'");
+    expect(response.headers.get('X-DNS-Prefetch-Control')).toBe('off');
     expect(await response.text()).toBe(html);
     const latest = await handleArtifactRequest('atelier-artifact://a1/latest/', artifacts, {});
     expect(latest.headers.get('X-Atelier-Artifact-Version')).toBe('1');

@@ -10,7 +10,12 @@
  * - aucun réseau (`default-src 'none'`, `connect-src 'none'`), aucun formulaire,
  *   aucun cadre ; scripts intégrés et bibliothèques locales seulement ;
  * - le main bloque en plus toute navigation de sous-cadre hors de ce protocole
- *   (`isAllowedSubframeUrl`) : une page piégée ne peut pas s'envoyer vers le web.
+ *   (`isAllowedSubframeUrl`) : une page piégée ne peut pas s'envoyer vers le web ;
+ * - deux canaux échappent à `connect-src` : la prérésolution DNS (des données
+ *   codées dans un nom d'hôte) et WebRTC (STUN). Ils sont coupés par
+ *   `X-DNS-Prefetch-Control: off` et `webrtc 'block'`, et le main limite WebRTC
+ *   aux proxys UDP (`disable_non_proxied_udp`) pour les navigateurs qui ignorent
+ *   cette directive.
  */
 import { readFile } from 'node:fs/promises';
 import { ARTIFACT_SCHEME } from '@atelier/shared';
@@ -34,6 +39,7 @@ export const ARTIFACT_CSP = [
   "object-src 'none'",
   "base-uri 'none'",
   "form-action 'none'",
+  "webrtc 'block'",
 ].join('; ');
 
 /** Bibliothèques servies aux artefacts : nom de fichier → chemin sur le disque. */
@@ -107,6 +113,7 @@ export async function handleArtifactRequest(
       // Markdown : lu en texte par le renderer, qui le rend lui-même (jamais en HTML brut).
       'Content-Type': html ? 'text/html; charset=utf-8' : 'text/markdown; charset=utf-8',
       'Content-Security-Policy': ARTIFACT_CSP,
+      'X-DNS-Prefetch-Control': 'off',
       'X-Atelier-Artifact-Version': String(found.version),
       'Access-Control-Expose-Headers': 'X-Atelier-Artifact-Version',
     },
