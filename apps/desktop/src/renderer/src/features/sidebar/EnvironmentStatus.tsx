@@ -4,10 +4,11 @@
  * des commandes de la conversation ouverte.
  */
 import { useId, useState } from 'react';
-import { ChevronUp, Cpu, Globe, Server } from 'lucide-react';
+import { ChevronUp, Cpu, Globe, RotateCw, Server } from 'lucide-react';
 import type { SandboxStatus, ServerStatus, SessionSummary } from '@atelier/shared';
 import { serverStatusText } from '@renderer/components/status/ServerStatusBadge';
 import { StatusDot, type StatusTone } from '@renderer/components/status/StatusDot';
+import { Button } from '@renderer/components/ui/button';
 import { Switch } from '@renderer/components/ui/primitives';
 import { call, toSerializedError } from '@renderer/lib/api';
 import { errorMessage } from '@renderer/lib/error-messages';
@@ -71,6 +72,21 @@ export function EnvironmentStatus({
     }
   };
 
+  // Arrêtée ou en échec : relance à la demande (même action que l'accueil).
+  const [restarting, setRestarting] = useState(false);
+  const canRestart = sandbox.state === 'error' || sandbox.state === 'stopped';
+  const restart = async (): Promise<void> => {
+    setRestarting(true);
+    setError(undefined);
+    try {
+      await call('sandbox:ensure-ready');
+    } catch (e) {
+      setError(errorMessage(toSerializedError(e)));
+    } finally {
+      setRestarting(false);
+    }
+  };
+
   const hint =
     session === undefined
       ? 'Ouvrez une conversation pour l’autoriser.'
@@ -115,8 +131,31 @@ export function EnvironmentStatus({
                 {VM_LABELS[sandbox.state]}
               </dd>
             </div>
-            {sandbox.state === 'error' && sandbox.error ? (
-              <p className="text-xs text-destructive">{sandbox.error}</p>
+            {sandbox.state === 'error' ? (
+              <div className="space-y-1 text-xs">
+                <p className="text-destructive">La machine isolée n’a pas pu démarrer.</p>
+                {sandbox.error ? (
+                  <details className="text-muted-foreground">
+                    <summary className="cursor-pointer">Détails techniques</summary>
+                    <p className="mt-1 break-words font-mono">{sandbox.error}</p>
+                  </details>
+                ) : null}
+              </div>
+            ) : null}
+            {canRestart ? (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={restarting}
+                onClick={() => void restart()}
+                className="w-full"
+              >
+                <RotateCw
+                  className={cn('size-3.5', restarting ? 'animate-spin' : undefined)}
+                  aria-hidden
+                />
+                {restarting ? 'Démarrage…' : 'Redémarrer la machine isolée'}
+              </Button>
             ) : null}
             {session !== undefined && sandbox.state === 'ready' && !mountedHere ? (
               <p className="text-xs text-muted-foreground">
