@@ -22,7 +22,7 @@ const task: ScheduledTask = {
   prompt: 'Fais le rapport',
   workspace: '/Users/test/Ventes',
   schedule: { kind: 'weekly', days: [1], time: '08:00' },
-  permissions: { fileWrite: false, commands: false, webDomains: [], mcpTools: [] },
+  permissions: { fileWrite: false, commands: false, webDomains: [], mcpTools: ['mcp__jira__add'] },
   maxDurationMinutes: 20,
   enabled: true,
   nextRunAt: new Date(Date.now() + 12 * 60_000).toISOString(),
@@ -179,7 +179,7 @@ describe('tableau de bord des tâches planifiées', () => {
 });
 
 describe('formulaire : connecteurs en écriture', () => {
-  it('format invalide bloquant, serveur inconnu signalé', async () => {
+  it('cases par serveur pour les outils en écriture ; outil enregistré indisponible signalé', async () => {
     const api = setup();
     api.handlers['mcp:status'] = () => ({
       servers: [
@@ -187,26 +187,31 @@ describe('formulaire : connecteurs en écriture', () => {
           name: 'github',
           transport: 'stdio',
           state: 'connected',
-          toolCount: 3,
+          toolCount: 2,
           reconnectAttempts: 0,
+          tools: [
+            { name: 'mcp__github__create_issue', title: 'Créer un ticket', readOnly: false },
+            { name: 'mcp__github__list_issues', readOnly: true },
+          ],
         },
       ],
       issues: [],
     });
     const user = await openDashboard();
-    await user.click(await screen.findByRole('button', { name: 'Nouvelle tâche' }));
-    const field = await screen.findByLabelText('Connecteurs en écriture autorisés');
-    await user.type(field, 'github_issue');
+    // Tâche existante qui autorisait un outil d'un connecteur retiré depuis.
+    await user.click(await screen.findByRole('button', { name: 'Modifier « Rapport hebdo »' }));
+    const group = await screen.findByRole('group', { name: 'Connecteurs en écriture' });
+    expect(within(group).queryByText(/list_issues/)).not.toBeInTheDocument();
+    await user.click(within(group).getByRole('checkbox', { name: 'Créer un ticket' }));
+    expect(within(group).getByRole('checkbox', { name: 'mcp__jira__add' })).toBeChecked();
     expect(
-      screen.getByText(/Format attendu mcp__serveur__outil : github_issue/),
+      within(group).getByText('connecteur absent de Réglages › Connecteurs'),
     ).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Enregistrer' })).toBeDisabled();
-    await user.clear(field);
-    await user.type(field, 'mcp__jira__add');
-    expect(
-      await screen.findByText(/Connecteur absent de Réglages › Connecteurs : jira/),
-    ).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Enregistrer' })).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: 'Enregistrer' }));
+    expect(api.callsTo('schedule:save')[0]?.task.permissions.mcpTools).toEqual([
+      'mcp__jira__add',
+      'mcp__github__create_issue',
+    ]);
   });
 });
 

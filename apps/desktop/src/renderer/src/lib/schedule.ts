@@ -7,6 +7,7 @@ import {
   nextRunAt,
   validateSchedule,
   type DeniedAction,
+  type McpServerStatus,
   type Schedule,
   type ScheduledPermissions,
   type ScheduledRunSkipReason,
@@ -191,28 +192,54 @@ export function parseList(text: string): string[] {
   ];
 }
 
-/** Nom complet d'un outil MCP : `mcp__<serveur>__<outil>`. */
-const MCP_TOOL = /^mcp__([^\s_][^\s]*?)__([^\s]+)$/;
+/** Serveur d'un nom d'outil `mcp__<serveur>__<outil>` (`undefined` hors de ce format). */
+export function mcpServerOf(tool: string): string | undefined {
+  return /^mcp__(.+?)__.+$/.exec(tool)?.[1];
+}
+
+/** Outil en écriture d'un serveur connecté (case à cocher du formulaire). */
+export interface WritableMcpTool {
+  name: string;
+  /** Titre annoncé, sinon le nom court de l'outil. */
+  label: string;
+}
+
+/** Pourquoi un outil enregistré ne peut pas être coché dans la liste du serveur. */
+export type UnavailableReason = 'missing_server' | 'disconnected' | 'missing_tool';
 
 /**
- * Connecteurs en écriture saisis à la main (en attendant le catalogue des outils) :
- * noms au mauvais format (bloquant) et serveurs absents de `mcp:status` (signalés).
- * `servers` absent : statut inconnu, aucun serveur n'est signalé.
+ * Cases des connecteurs en écriture (D4) : outils `readOnly: false` des serveurs
+ * connectés, groupés par serveur ; et outils déjà enregistrés qu'on ne retrouve
+ * pas dans ces groupes, gardés visibles avec la raison.
  */
-export function checkMcpTools(
-  tools: readonly string[],
-  servers: readonly string[] | undefined,
-): { invalid: string[]; unknownServers: string[] } {
-  const invalid: string[] = [];
-  const unknown = new Set<string>();
-  for (const tool of tools) {
-    const match = MCP_TOOL.exec(tool);
-    if (!match) {
-      invalid.push(tool);
-      continue;
-    }
-    const server = match[1] ?? '';
-    if (servers && !servers.includes(server)) unknown.add(server);
-  }
-  return { invalid, unknownServers: [...unknown] };
+export function mcpToolChoices(
+  servers: readonly McpServerStatus[],
+  selected: readonly string[],
+): {
+  groups: { server: string; connected: boolean; tools: WritableMcpTool[] }[];
+  unavailable: { name: string; reason: UnavailableReason }[];
+} {
+  const groups = servers.map((server) => ({
+    server: server.name,
+    connected: server.tools !== undefined,
+    tools: (server.tools ?? [])
+      .filter((tool) => !tool.readOnly)
+      .map((tool) => ({
+        name: tool.name,
+        label: tool.title ?? tool.name.replace(`mcp__${server.name}__`, ''),
+      })),
+  }));
+  const listed = new Set(groups.flatMap((g) => g.tools.map((t) => t.name)));
+  const unavailable = selected
+    .filter((name) => !listed.has(name))
+    .map((name) => {
+      const server = servers.find((s) => s.name === mcpServerOf(name));
+      const reason: UnavailableReason = !server
+        ? 'missing_server'
+        : server.tools === undefined
+          ? 'disconnected'
+          : 'missing_tool';
+      return { name, reason };
+    });
+  return { groups, unavailable };
 }

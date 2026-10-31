@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { DeniedAction, ScheduledPermissions } from '@atelier/shared';
 import {
-  checkMcpTools,
   formatDuration,
+  mcpToolChoices,
   parseList,
   permissionsAfterDenied,
   relativeNext,
@@ -77,14 +77,47 @@ describe('affichage des tâches planifiées', () => {
   });
 });
 
-describe('connecteurs en écriture saisis à la main', () => {
-  it('format mcp__serveur__outil obligatoire ; serveur absent signalé', () => {
-    expect(
-      checkMcpTools(
-        ['mcp__github__create_issue', 'github_issue', 'mcp__jira__add', 'mcp____x'],
-        ['github'],
-      ),
-    ).toEqual({ invalid: ['github_issue', 'mcp____x'], unknownServers: ['jira'] });
-    expect(checkMcpTools(['mcp__jira__add'], undefined).unknownServers).toEqual([]);
+describe('connecteurs en écriture : cases par serveur', () => {
+  it('outils en écriture des serveurs connectés ; outils enregistrés indisponibles gardés', () => {
+    const { groups, unavailable } = mcpToolChoices(
+      [
+        {
+          name: 'github',
+          transport: 'stdio',
+          state: 'connected',
+          toolCount: 3,
+          reconnectAttempts: 0,
+          tools: [
+            { name: 'mcp__github__create_issue', title: 'Créer un ticket', readOnly: false },
+            { name: 'mcp__github__list_issues', readOnly: true },
+            { name: 'mcp__github__comment', readOnly: false },
+          ],
+        },
+        {
+          name: 'jira',
+          transport: 'http',
+          state: 'reconnecting',
+          toolCount: 0,
+          reconnectAttempts: 2,
+        },
+      ],
+      ['mcp__github__create_issue', 'mcp__github__gone', 'mcp__jira__add', 'mcp__slack__post'],
+    );
+    expect(groups).toEqual([
+      {
+        server: 'github',
+        connected: true,
+        tools: [
+          { name: 'mcp__github__create_issue', label: 'Créer un ticket' },
+          { name: 'mcp__github__comment', label: 'comment' },
+        ],
+      },
+      { server: 'jira', connected: false, tools: [] },
+    ]);
+    expect(unavailable).toEqual([
+      { name: 'mcp__github__gone', reason: 'missing_tool' },
+      { name: 'mcp__jira__add', reason: 'disconnected' },
+      { name: 'mcp__slack__post', reason: 'missing_server' },
+    ]);
   });
 });

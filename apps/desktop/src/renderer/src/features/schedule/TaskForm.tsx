@@ -13,6 +13,7 @@ import {
   type DeniedAction,
   type IsoWeekday,
   type LlmModelInfo,
+  type McpServerStatus,
   type Schedule,
   type ScheduledPermissions,
   type ScheduledTask,
@@ -20,15 +21,16 @@ import {
 } from '@atelier/shared';
 import { Button } from '@renderer/components/ui/button';
 import { Alert, Hint, Input, Label, Select } from '@renderer/components/ui/primitives';
-import { call, toSerializedError } from '@renderer/lib/api';
+import { atelier, call, toSerializedError } from '@renderer/lib/api';
 import { errorMessage } from '@renderer/lib/error-messages';
 import { chatModels } from '@renderer/lib/models';
 import {
-  checkMcpTools,
   formatUpcoming,
+  mcpToolChoices,
   parseList,
   permissionsAfterDenied,
   upcomingRuns,
+  type UnavailableReason,
 } from '@renderer/lib/schedule';
 import { useApp } from '@renderer/state/app-state';
 
@@ -167,8 +169,6 @@ export function TaskForm({
     preview: `${id}-preview`,
     domains: `${id}-domains`,
     domainsHint: `${id}-domains-hint`,
-    mcp: `${id}-mcp`,
-    mcpHint: `${id}-mcp-hint`,
     duration: `${id}-duration`,
   };
   const granted = useMemo(
@@ -193,26 +193,32 @@ export function TaskForm({
   const [domains, setDomains] = useState(
     initial.webDomains === '*' ? '' : initial.webDomains.join('\n'),
   );
-  const [mcpTools, setMcpTools] = useState(initial.mcpTools.join('\n'));
+  const [mcpTools, setMcpTools] = useState<string[]>(initial.mcpTools);
   const [duration, setDuration] = useState(
     String(task?.maxDurationMinutes ?? DEFAULT_MAX_DURATION_MINUTES),
   );
   const [models, setModels] = useState<LlmModelInfo[] | undefined>();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<{ field?: string; message: string } | undefined>();
-  // Serveurs MCP connus : un outil d'un serveur absent est signalé (saisie libre, D4).
-  const [mcpServers, setMcpServers] = useState<string[] | undefined>();
+  // Connecteurs et leurs outils : relus quand un serveur se connecte ou change d'outils.
+  const [mcpServers, setMcpServers] = useState<McpServerStatus[] | undefined>();
 
   useEffect(() => {
     let cancelled = false;
     call('mcp:status').then(
       (status) => {
-        if (!cancelled) setMcpServers(status.servers.map((server) => server.name));
+        if (!cancelled) setMcpServers(status.servers);
       },
-      () => undefined,
+      () => {
+        if (!cancelled) setMcpServers([]);
+      },
     );
+    const off = atelier().on('mcp:status', (status) => {
+      setMcpServers(status.servers);
+    });
     return () => {
       cancelled = true;
+      off();
     };
   }, []);
 
@@ -234,7 +240,12 @@ export function TaskForm({
   const schedule = scheduleFrom(fields);
   const scheduleProblem = validateSchedule(schedule);
   const upcoming = scheduleProblem === undefined ? upcomingRuns(schedule, new Date()) : [];
-  const mcpCheck = checkMcpTools(parseList(mcpTools), mcpServers);
+  const mcpChoices = mcpServers ? mcpToolChoices(mcpServers, mcpTools) : undefined;
+  const toggleMcp = (name: string, checked: boolean): void => {
+    setMcpTools((current) =>
+      checked ? [...new Set([...current, name])] : current.filter((t) => t !== name),
+    );
+  };
   const durationValue = Number(duration);
   const durationInvalid =
     !Number.isInteger(durationValue) ||
@@ -266,7 +277,7 @@ export function TaskForm({
         fileWrite,
         commands,
         webDomains: webMode === 'all' ? '*' : webMode === 'list' ? parseList(domains) : [],
-        mcpTools: parseList(mcpTools),
+        mcpTools,
       },
       maxDurationMinutes: durationValue,
       enabled: task?.enabled ?? true,
@@ -604,38 +615,7 @@ export function TaskForm({
             <Hint>Internet est aussi ouvert à la machine isolée pendant l’exécution.</Hint>
           ) : null}
         </fieldset>
-        <div className="space-y-1">
-          <Label htmlFor={ids.mcp} className="text-sm font-normal">
-            Connecteurs en écriture autorisés
-          </Label>
-          <textarea
-            id={ids.mcp}
-            value={mcpTools}
-            rows={2}
-            placeholder="mcp__github__create_issue"
-            aria-describedby={ids.mcpHint}
-            aria-invalid={mcpCheck.invalid.length > 0 ? true : undefined}
-            onChange={(e) => {
-              setMcpTools(e.target.value);
-            }}
-            className="block w-full max-w-md rounded-md border bg-background px-3 py-2 font-mono text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          />
-          <Hint id={ids.mcpHint}>
-            Un outil par ligne, sous la forme mcp__serveur__outil. Laissez vide pour n’en autoriser
-            aucun.
-          </Hint>
-          {mcpCheck.invalid.length > 0 ? (
-            <Hint className="text-destructive">
-              Format attendu mcp__serveur__outil : {mcpCheck.invalid.join(', ')}.
-            </Hint>
-          ) : null}
-          {mcpCheck.unknownServers.length > 0 ? (
-            <Hint className="text-warning-text">
-              Connecteur absent de Réglages › Connecteurs : {mcpCheck.unknownServers.join(', ')}.
-              L’outil sera refusé tant qu’il n’est pas configuré.
-            </Hint>
-          ) : null}
-        </div>
+        <McpToolsField choices={mcpChoices} selected={mcpTools} onToggle={toggleMcp} />
         <p className="text-sm text-muted-foreground">
           Jamais sans vous : supprimer des fichiers, et toute action d’un type inconnu.
         </p>
@@ -661,15 +641,7 @@ export function TaskForm({
       {error && error.field === undefined ? <Alert tone="error">{error.message}</Alert> : null}
 
       <div className="flex items-center gap-2">
-        <Button
-          type="submit"
-          disabled={
-            saving ||
-            scheduleProblem !== undefined ||
-            durationInvalid ||
-            mcpCheck.invalid.length > 0
-          }
-        >
+        <Button type="submit" disabled={saving || scheduleProblem !== undefined || durationInvalid}>
           {saving ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
           Enregistrer
         </Button>
@@ -712,5 +684,79 @@ function Checkbox({
         {hint ? <Hint id={`${id}-hint`}>{hint}</Hint> : null}
       </div>
     </div>
+  );
+}
+
+const UNAVAILABLE_REASONS: Record<UnavailableReason, string> = {
+  missing_server: 'connecteur absent de Réglages › Connecteurs',
+  disconnected: 'connecteur non connecté pour le moment',
+  missing_tool: 'outil que le connecteur ne propose plus',
+};
+
+/** Connecteurs en écriture, outil par outil (D4) ; les outils en lecture ne demandent rien. */
+function McpToolsField({
+  choices,
+  selected,
+  onToggle,
+}: {
+  choices: ReturnType<typeof mcpToolChoices> | undefined;
+  selected: readonly string[];
+  onToggle: (name: string, checked: boolean) => void;
+}) {
+  return (
+    <fieldset className="space-y-2">
+      <legend className="text-sm">Connecteurs en écriture</legend>
+      {!choices ? (
+        <Hint>Lecture des connecteurs…</Hint>
+      ) : choices.groups.length === 0 && choices.unavailable.length === 0 ? (
+        <Hint>Aucun connecteur configuré (Réglages › Connecteurs).</Hint>
+      ) : (
+        <>
+          {choices.groups.map((group) => (
+            <fieldset key={group.server} className="space-y-1.5 pl-1">
+              <legend className="text-xs font-medium text-muted-foreground">{group.server}</legend>
+              {!group.connected ? (
+                <Hint>Non connecté : ses outils apparaîtront une fois le connecteur prêt.</Hint>
+              ) : group.tools.length === 0 ? (
+                <Hint>Aucun outil en écriture : rien à autoriser.</Hint>
+              ) : (
+                group.tools.map((tool) => (
+                  <Checkbox
+                    key={tool.name}
+                    checked={selected.includes(tool.name)}
+                    onChange={(checked) => {
+                      onToggle(tool.name, checked);
+                    }}
+                    label={tool.label}
+                    hint={tool.name}
+                  />
+                ))
+              )}
+            </fieldset>
+          ))}
+          {choices.unavailable.length > 0 ? (
+            <fieldset className="space-y-1.5 pl-1">
+              <legend className="text-xs font-medium text-warning-text">
+                Autorisés mais indisponibles (refusés tant qu’ils ne reviennent pas)
+              </legend>
+              {choices.unavailable.map((tool) => (
+                <Checkbox
+                  key={tool.name}
+                  checked
+                  onChange={(checked) => {
+                    onToggle(tool.name, checked);
+                  }}
+                  label={tool.name}
+                  hint={UNAVAILABLE_REASONS[tool.reason]}
+                />
+              ))}
+            </fieldset>
+          ) : null}
+        </>
+      )}
+      <Hint>
+        Seuls les outils qui modifient quelque chose sont listés : la lecture est toujours permise.
+      </Hint>
+    </fieldset>
   );
 }
