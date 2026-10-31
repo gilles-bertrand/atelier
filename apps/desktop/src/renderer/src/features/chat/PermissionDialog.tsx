@@ -38,7 +38,9 @@ export const PERMISSION_KINDS: Record<
   command: { icon: SquareTerminal, heading: 'Exécuter une commande', risk: 'medium' },
   network: { icon: Globe, heading: 'Accéder à internet', risk: 'medium' },
   mcp_write: { icon: Plug, heading: 'Utiliser un connecteur', risk: 'medium' },
-  memory_write: { icon: Brain, heading: 'Retenir dans la mémoire du projet', risk: 'low' },
+  // Risque moyen : la mémoire revient dans chaque conversation du projet, une
+  // injection lue dans un fichier ou sur le web y persisterait (ADR-003 D4).
+  memory_write: { icon: Brain, heading: 'Retenir dans la mémoire du projet', risk: 'medium' },
   other: { icon: ShieldAlert, heading: 'Autoriser une action', risk: 'medium' },
 };
 
