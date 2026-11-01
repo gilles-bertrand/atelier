@@ -130,6 +130,13 @@ _Dernière mise à jour : 2026-10-29, Lead._
 
 _Format : date, agent, type proposé, raison, packages impactés._
 
+- **À livrer par le Lead après le spike S1 (#25) : L0 (#26, PR `feat/lead-shared-voice`), puis L6 (#34) pour la phase 2.** **2026-11-01, architect (voix locale, [ADR-004](adr/ADR-004-voix.md) §5, ticket #23, décisions validées par Gilles le 2026-11-01)** (impact : `shared`, nouveau package `voice`, main, renderer, `qa/` ; `agent-core` en phase 2). Raison : dictée locale dans le Composer (phase 1), puis mode conversation (phase 2), avec sherpa-onnx et Parakeet TDT 0.6B v3 dans un `utilityProcess` ; l'audio ne quitte jamais le Mac. Tout est nouveau ou optionnel, aucun `AgentEvent` ajouté. Demandes, phase 1 :
+  - Nouveau module `voice.ts` : `VoiceModelRole`, `VoiceModelState`, `VoiceModelInfo`, `MicAccess`, `VoiceEngineState`, `VoiceStatus`, `VoiceMode`, `VoiceSessionState`, `TranscriptSegment`, `VoiceSettings`.
+  - `AppSettings.voice?: VoiceSettings`, avec la validation de `modelSourceUrl` (règle de `checkServerUrl`).
+  - Canaux `voice:status|request-mic|open-mic-settings|install-model|cancel-install|remove-model|import-model|start|stop|cancel|audio` ; événements `voice:status|model|transcript|state`. Les trames du micro passent par `voice:audio` (`{ voiceSessionId, seq, pcm: Float32Array }`), relayées par le main : `contextBridge` ne transmet pas de `MessagePort`, et le preload reste inchangé.
+  - Codes `voice/mic_denied`, `voice/no_input`, `voice/model_missing`, `voice/model_invalid`, `voice/download_failed`, `voice/engine_failed` et `voice/busy`.
+  - Phase 2 (L6) : `VoiceMode` `'conversation'` et ses états, réglages de la synthèse, `agent:send.inputMode?`, `ChatMessage.inputMode?` et l'événement `voice:audio-out`.
+
 - ✅ **Livrée (PR `feat/lead-shared-tool-precheck`). À brancher par L6 (`feat/core-tool-precheck`) : `executeTool`, puis les outils d'écriture et de mémoire d'agent-core.** **2026-10-31, architect (vérification préalable, [ADR-003](adr/ADR-003-projets.md) D9, ticket #22)** (impact : `shared`, `agent-core`, `qa/`). Raison : une action vouée à l'échec (dossier en lecture seule, chemin hors des dossiers, passage introuvable) ouvrait d'abord la modale de permission. Optionnel, aucun `switch` exhaustif à compléter. Demandes :
   - `ToolDefinition.precheck?(input, context)`, appelée par agent-core avant la demande de permission des outils `always`. Elle est indicative : `execute` refait ses contrôles.
   - Type `ToolPrecheckFailure` (`ok: false`, `content`).
