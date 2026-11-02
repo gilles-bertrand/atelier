@@ -3,7 +3,7 @@
  * Les secrets n'y figurent jamais (voir `secrets-store.ts`).
  */
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
-import { dirname, isAbsolute, join } from 'node:path';
+import { dirname, isAbsolute } from 'node:path';
 import {
   AtelierError,
   checkServerUrl,
@@ -12,6 +12,7 @@ import {
   type AppSettingsPatch,
   type SearchProviderId,
 } from '@atelier/shared';
+import { defaultMcpConfigPath, defaultSkillsDir } from '../app-folders.js';
 
 /** Réglages par défaut (premier lancement). */
 export function defaultSettings(home: string): AppSettings {
@@ -19,8 +20,8 @@ export function defaultSettings(home: string): AppSettings {
     llm: { baseUrl: '', model: DEFAULT_MODEL, thinking: true },
     sandbox: { cpus: 4, memoryGiB: 4, diskGiB: 30, networkEnabledByDefault: false },
     search: { provider: 'searxng' },
-    skillsDir: join(home, 'Atelier', 'skills'),
-    mcpConfigPath: join(home, 'Atelier', 'mcp.json'),
+    skillsDir: defaultSkillsDir(home),
+    mcpConfigPath: defaultMcpConfigPath(home),
     onboardingCompleted: false,
   };
 }
@@ -32,7 +33,7 @@ const SEARCH_PROVIDERS: readonly SearchProviderId[] = ['searxng', 'ollama', 'bra
  * Lève `AtelierError` si une valeur est invalide : rien n'est enregistré.
  */
 export function applySettingsPatch(current: AppSettings, patch: AppSettingsPatch): AppSettings {
-  // `projectsDir: ''` revient au dossier par défaut (~/Atelier/Projets) : un patch
+  // `projectsDir: ''` revient au dossier par défaut (~/Documents/YodAI/Projets) : un patch
   // ne peut pas transporter `undefined`.
   const { projectsDir: _currentProjectsDir, ...base } = current;
   const projectsDir =

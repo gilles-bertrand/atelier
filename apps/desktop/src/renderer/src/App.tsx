@@ -19,7 +19,7 @@ function Root() {
   if (status.status === 'error') {
     return (
       <div className="mx-auto flex h-full max-w-md flex-col justify-center gap-4 px-6">
-        <Alert tone="error" title="Atelier n’a pas pu démarrer">
+        <Alert tone="error" title="YodAI n’a pas pu démarrer">
           {errorMessage(status.error)}
         </Alert>
         <Button variant="outline" onClick={status.retry} className="self-start">

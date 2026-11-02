@@ -44,7 +44,7 @@ limactl shell --workdir /workspace atelier -- sudo -u agent -H -- [env K=V…] a
 ## Montages
 
 - `/workspace` : dossier de travail, en écriture (virtiofs). Les fichiers créés par `agent` appartiennent à l'utilisateur macOS côté hôte.
-- `/skills` : `~/Atelier/skills`, en **lecture seule** (partage virtiofs read-only : garanti par l'hyperviseur).
+- `/skills` : `~/Documents/YodAI/skills` (anciennement `~/Atelier/skills`, migré au premier lancement), en **lecture seule** (partage virtiofs read-only : garanti par l'hyperviseur).
 - Aucun autre montage (le montage par défaut de `~` par Lima est désactivé : `mounts: []`).
 
 ## Mises à jour des versions épinglées

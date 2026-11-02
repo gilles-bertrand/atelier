@@ -190,7 +190,7 @@ describe('nouveau projet', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Créer le projet' }));
     expect(within(dialog).getByText('Donnez un nom au projet.')).toBeInTheDocument();
     await user.type(within(dialog).getByLabelText('Nom'), 'Clients');
-    expect(within(dialog).getByText('~/Atelier/Projets/Clients')).toBeInTheDocument();
+    expect(within(dialog).getByText('~/Documents/YodAI/Projets/Clients')).toBeInTheDocument();
     await user.click(within(dialog).getByRole('button', { name: 'Ajouter un dossier' }));
     await user.selectOptions(
       within(dialog).getByLabelText('Accès au dossier Clients'),

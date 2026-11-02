@@ -17,10 +17,10 @@ describe('réglages', () => {
   it('applique un patch profond au premier niveau', () => {
     const next = applySettingsPatch(defaultSettings('/Users/a'), { llm: { model: 'qwen3.5:9b' } });
     expect(next.llm).toMatchObject({ model: 'qwen3.5:9b', thinking: true });
-    expect(next.skillsDir).toBe('/Users/a/Atelier/skills');
+    expect(next.skillsDir).toBe('/Users/a/Documents/YodAI/skills');
   });
 
-  it('« Ouvrir Atelier à la connexion » : enregistré et relu (absent = non)', () => {
+  it('« Ouvrir YodAI à la connexion » : enregistré et relu (absent = non)', () => {
     const base = defaultSettings('/h');
     expect(base.openAtLogin).toBeUndefined();
     const on = applySettingsPatch(base, { openAtLogin: true });

@@ -13,7 +13,7 @@ const MESSAGES: Record<AtelierErrorCode, string> = {
   'llm/timeout': 'Le serveur met trop de temps à répondre.',
   'llm/bad_response': 'Le serveur a répondu de façon inattendue. Est-ce bien un serveur Ollama ?',
   'llm/model_unsupported':
-    'Ce modèle ne sait pas utiliser les outils d’Atelier (lecture de fichiers, commandes). Choisissez-en un autre.',
+    'Ce modèle ne sait pas utiliser les outils de YodAI (lecture de fichiers, commandes). Choisissez-en un autre.',
   'agent/aborted': 'Arrêté.',
   'agent/max_steps':
     'L’assistant s’est arrêté après trop d’étapes. Reformulez ou découpez la demande.',
@@ -29,7 +29,7 @@ const MESSAGES: Record<AtelierErrorCode, string> = {
     'La mémoire du projet a changé entre-temps (l’assistant y a peut-être écrit). Rechargez-la avant d’enregistrer.',
   'artifact/not_found': 'Cet artefact n’existe plus.',
   'voice/mic_denied':
-    'Atelier n’a pas accès au micro. Autorisez-le dans Réglages Système › Confidentialité et sécurité › Micro.',
+    'YodAI n’a pas accès au micro. Autorisez-le dans Réglages Système › Confidentialité et sécurité › Micro.',
   'voice/no_input':
     'Aucun son ne parvient du micro. Vérifiez qu’il est branché et qu’il n’est pas coupé.',
   'voice/model_missing':
@@ -67,7 +67,7 @@ const MESSAGES: Record<AtelierErrorCode, string> = {
 /** Messages propres à un cas précis (`details.kind`), prioritaires sur le code. */
 const KIND_MESSAGES: Record<string, string> = {
   blocked_open:
-    'Par sécurité, Atelier n’ouvre directement que les documents (PDF, images, textes, tableurs…). Utilisez « Afficher dans le Finder ».',
+    'Par sécurité, YodAI n’ouvre directement que les documents (PDF, images, textes, tableurs…). Utilisez « Afficher dans le Finder ».',
 };
 
 /** Messages propres à une cause précise (`details.reason`), prioritaires sur le code. */

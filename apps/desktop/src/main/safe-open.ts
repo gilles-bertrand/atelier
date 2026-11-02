@@ -60,7 +60,7 @@ export const OPENABLE_EXTENSIONS: ReadonlySet<string> = new Set([
 
 /** Message commun : l'utilisateur peut toujours passer par le Finder. */
 const USE_FINDER =
-  'Par sécurité, Atelier n’ouvre directement que les documents (PDF, images, textes, tableurs…) : utilisez « Afficher dans le Finder ».';
+  'Par sécurité, YodAI n’ouvre directement que les documents (PDF, images, textes, tableurs…) : utilisez « Afficher dans le Finder ».';
 
 export type OpenMode = 'open' | 'reveal';
 

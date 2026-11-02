@@ -100,7 +100,7 @@ describe('fetchPage', () => {
 
   it('envoie un User-Agent explicite', async () => {
     const page = await fetchPage('https://journal.example/ua', options);
-    expect(page.markdown).toMatch(/Atelier\//);
+    expect(page.markdown).toMatch(/YodAI\//);
   });
 
   it('suit les redirections publiques', async () => {

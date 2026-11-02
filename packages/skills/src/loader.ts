@@ -20,7 +20,7 @@ export const MAX_DESCRIPTION_LENGTH = 1024;
 
 /** Dossier des skills par défaut (brief §5). */
 export function defaultSkillsDir(home: string = homedir()): string {
-  return join(home, 'Atelier', 'skills');
+  return join(home, 'Documents', 'YodAI', 'skills');
 }
 
 /** Problème rencontré sur un skill (ignoré ou corrigé). */

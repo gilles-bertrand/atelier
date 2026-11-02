@@ -1,6 +1,6 @@
 # {Titre explicite du rapport}
 
-_{Date du jour} · Préparé par Atelier pour {destinataire}_
+_{Date du jour} · Préparé par YodAI pour {destinataire}_
 
 ## Résumé exécutif
 

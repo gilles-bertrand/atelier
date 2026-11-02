@@ -40,7 +40,7 @@ const FORMATS = {
 const CHART_TYPES = ['column', 'bar', 'line', 'pie'];
 
 const EXAMPLE = {
-  properties: { title: 'Récapitulatif des ventes', creator: 'Atelier' },
+  properties: { title: 'Récapitulatif des ventes', creator: 'YodAI' },
   sheets: [
     {
       name: 'Ventes',
@@ -87,7 +87,7 @@ function load(name) {
     const base = path.dirname(require.resolve('exceljs'));
     return require(require.resolve(name, { paths: [base] }));
   } catch {
-    return fail(`module « ${name} » introuvable (dans la VM Atelier il est installé globalement).`);
+    return fail(`module « ${name} » introuvable (dans la VM YodAI il est installé globalement).`);
   }
 }
 
@@ -718,7 +718,7 @@ async function build(spec, output) {
   validateSpec(spec);
   const ExcelJS = load('exceljs');
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = spec.properties?.creator ?? 'Atelier';
+  workbook.creator = spec.properties?.creator ?? 'YodAI';
   if (spec.properties?.title) workbook.title = spec.properties.title;
   workbook.created = new Date();
   // Formules sans valeur en cache : Excel les recalcule à l'ouverture.

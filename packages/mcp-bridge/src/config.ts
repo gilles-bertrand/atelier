@@ -1,5 +1,5 @@
 /**
- * Lecture de `~/Atelier/mcp.json`, au format de Claude Desktop :
+ * Lecture de `~/Documents/YodAI/mcp.json`, au format de Claude Desktop :
  *
  * ```json
  * {
@@ -53,9 +53,9 @@ export interface McpConfig {
   issues: McpConfigIssue[];
 }
 
-/** Chemin par défaut : `~/Atelier/mcp.json`. */
+/** Chemin par défaut : `~/Documents/YodAI/mcp.json`. */
 export function defaultMcpConfigPath(home: string = homedir()): string {
-  return join(home, 'Atelier', 'mcp.json');
+  return join(home, 'Documents', 'YodAI', 'mcp.json');
 }
 
 /** Nom de serveur accepté (il finit dans `mcp__<serveur>__<outil>`). */

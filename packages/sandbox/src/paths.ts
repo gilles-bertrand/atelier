@@ -66,7 +66,7 @@ export function chooseLimaHome(
 
 /** Dossier des skills par défaut (brief §5). */
 export function defaultSkillsDir(home: string = homedir()): string {
-  return join(home, 'Atelier', 'skills');
+  return join(home, 'Documents', 'YodAI', 'skills');
 }
 
 /** Un dossier partagé avec la VM. */

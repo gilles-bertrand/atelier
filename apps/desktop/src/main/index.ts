@@ -35,6 +35,7 @@ import { createHandlers } from './handlers.js';
 import { registerIpcHandlers } from './ipc.js';
 import { ModelCatalog, serverModelSource } from './llm/model-catalog.js';
 import { ServerMonitor } from './llm/server-monitor.js';
+import { APP_NAME, defaultProjectsDir, migrateLegacyFolders } from './app-folders.js';
 import { limaPreflight, resolveAppPaths } from './paths.js';
 import { AgentRuntimeHost } from './runtime/agent-runtime.js';
 import { ChatManager } from './runtime/chat-manager.js';
@@ -179,7 +180,7 @@ function createMainWindow(): BrowserWindow {
     minWidth: 900,
     minHeight: 600,
     show: false,
-    title: 'Atelier',
+    title: APP_NAME,
     titleBarStyle: 'hiddenInset',
     // Fond du thème courant (jeton --background du renderer) : pas de flash blanc en mode sombre.
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#0a0a0a' : '#ffffff',
@@ -274,6 +275,16 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
   });
 
   const settings = await SettingsStore.load(join(paths.userData, 'settings.json'), home);
+  // Renommage en YodAI : skills et mcp.json passent de ~/Atelier à ~/Documents/YodAI.
+  try {
+    const migration = await migrateLegacyFolders(settings.get(), home);
+    if (Object.keys(migration.patch).length > 0) await settings.update(migration.patch);
+    if (migration.moved.length > 0 || migration.kept.length > 0) {
+      log('dossiers migrés vers ~/Documents/YodAI', migration);
+    }
+  } catch (error) {
+    log('migration de ~/Atelier impossible', error);
+  }
   const secrets = await SecretsStore.load(join(paths.userData, 'secrets.json'), safeStorage);
 
   // Skills d'exemple : copiés une fois, jamais écrasés.
@@ -413,7 +424,7 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
     store: projectStore,
     artifacts: artifactStore,
     sessions: store,
-    projectsDir: () => settings.get().projectsDir ?? join(home, 'Atelier', 'Projets'),
+    projectsDir: () => settings.get().projectsDir ?? defaultProjectsDir(home),
     home,
     // Jamais un dossier qui contient (ou est dans) les données de la VM, de l'app ou les skills.
     forbiddenRoots: () => [
@@ -621,6 +632,10 @@ let quitting = false;
 // Une seule instance par dossier de données : une deuxième partagerait la VM
 // et l'arrêterait en quittant (`limactl stop`), en pleine session de la
 // première. Elle s'efface au profit de la fenêtre existante.
+// Renommage en YodAI : l'app packagée garde son dossier de données d'origine
+// (historique, VM, réglages), qui suivrait sinon le nouveau nom du produit.
+// Avant le verrou d'instance unique, qui vit dans ce dossier.
+if (app.isPackaged) app.setPath('userData', join(app.getPath('appData'), 'Atelier'));
 const primaryInstance = app.requestSingleInstanceLock();
 if (!primaryInstance) app.exit(0);
 
@@ -634,7 +649,7 @@ app.on('second-instance', () => {
 
 void app.whenReady().then(async () => {
   if (!primaryInstance) return;
-  app.setName('Atelier');
+  app.setName(APP_NAME);
   installContentSecurityPolicy();
   ({ shutdown } = await bootstrap());
   // Ouverte à la connexion (tâches planifiées) : l'app tourne sans fenêtre ;

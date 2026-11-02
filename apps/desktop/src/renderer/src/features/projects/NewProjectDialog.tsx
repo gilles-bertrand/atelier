@@ -1,6 +1,6 @@
 /**
  * Modale « Nouveau projet » (ADR-003 D7) : nom, description, dossier principal
- * (créé dans ~/Atelier/Projets, ou un dossier existant) et dossiers rattachés
+ * (créé dans ~/Documents/YodAI/Projets, ou un dossier existant) et dossiers rattachés
  * facultatifs, en lecture seule ou en lecture et écriture.
  */
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type SyntheticEvent } from 'react';
@@ -18,8 +18,8 @@ import { call, toSerializedError } from '@renderer/lib/api';
 import { errorMessage } from '@renderer/lib/error-messages';
 import { useApp } from '@renderer/state/app-state';
 
-/** Racine affichée quand le réglage n'est pas défini (le main crée `~/Atelier/Projets`). */
-export const DEFAULT_PROJECTS_ROOT = '~/Atelier/Projets';
+/** Racine affichée quand le réglage n'est pas défini (le main crée `~/Documents/YodAI/Projets`). */
+export const DEFAULT_PROJECTS_ROOT = '~/Documents/YodAI/Projets';
 
 export function NewProjectDialog({
   onCreated,

@@ -139,7 +139,7 @@ export class ModelCatalog {
     if (capabilities !== undefined && !capabilities.includes('tools')) {
       throw new AtelierError(
         'llm/model_unsupported',
-        `Le modèle « ${model} » ne sait pas utiliser les outils d’Atelier.`,
+        `Le modèle « ${model} » ne sait pas utiliser les outils de YodAI.`,
         { details: { model, missing: 'tools' } },
       );
     }

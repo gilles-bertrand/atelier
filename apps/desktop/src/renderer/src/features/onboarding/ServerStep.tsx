@@ -74,7 +74,7 @@ export function ServerStep({ onDone }: { onDone: (result: ConnectionTestResult) 
   return (
     <StepCard
       title="Connexion au serveur"
-      description="Atelier utilise un modèle d’IA installé sur un serveur de votre organisation. Ces informations vous sont données par votre administrateur."
+      description="YodAI utilise un modèle d’IA installé sur un serveur de votre organisation. Ces informations vous sont données par votre administrateur."
       footer={
         <>
           <span />

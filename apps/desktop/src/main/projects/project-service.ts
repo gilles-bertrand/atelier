@@ -414,7 +414,7 @@ export class ProjectService implements ProjectMemoryWriter, ArtifactPublisher {
           throw invalid({
             field: 'folders',
             index,
-            message: `Le dossier ${dir} contient des données internes d’Atelier (machine isolée, skills) : choisissez-en un autre.`,
+            message: `Le dossier ${dir} contient des données internes de YodAI (machine isolée, skills) : choisissez-en un autre.`,
           });
         }
       }

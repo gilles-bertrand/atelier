@@ -240,7 +240,7 @@ export function ProjectView({
           {confirmDelete ? (
             <Alert tone="warning" title="Supprimer ce projet ?">
               Le projet, ses conversations, ses tâches, sa mémoire et l’historique de ses artefacts
-              seront retirés d’Atelier. Aucun fichier n’est supprimé de votre disque.
+              seront retirés de YodAI. Aucun fichier n’est supprimé de votre disque.
               <span className="mt-2 flex gap-2">
                 <Button
                   size="sm"
