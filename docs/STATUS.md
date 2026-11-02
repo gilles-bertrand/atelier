@@ -126,6 +126,14 @@ _Dernière mise à jour : 2026-10-29, Lead._
 | #79   | Le tour s'arrête sur un texte qui annonce la suite, sans appel d'outil                 | Core                | ✅ corrigé (#81) ; critère 2                       |
 | #85   | `limactl shell` sort en 255 sur une erreur de multiplexage SSH (`mm_send_fd`)          | Core                | ✅ corrigé (#88, relance unique) ; critère 2       |
 
+## Voix locale (fullstack, [ADR-004](adr/ADR-004-voix.md))
+
+- **L1 (#27, `feat/voice-models`) : `packages/voice`, catalogue et `VoiceModelManager`** (détails : `packages/voice/README.md`).
+  - Catalogue épinglé : Silero VAD (embarqué, 643 854 octets) et Parakeet TDT 0.6B v3 int8 (`sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8.tar.bz2`, 487 170 055 octets, SHA-256 `5793d0fd…16bf`, recalculé sur l'archive téléchargée le 02/11 et identique au digest de la release ; 8 fichiers, 671 Mo installés).
+  - Installation atomique dans `<userData>/models/voice/<id>@<version>/` : place disque, `.partial` avec reprise (`Range`), SHA-256, liste `tar -tf` contrôlée, extraction par `tar` sans shell, contrôle de l'arbre extrait (fichiers ordinaires, tailles exactes), renommage, puis `manifest.json`. Miroir (`modelSourceUrl`, règle de `checkServerUrl`) et import hors ligne contrôlés par la même empreinte. Mises à jour signalées par `pendingUpdates()`, jamais appliquées seules ; l'ancienne version est supprimée après la bascule.
+  - Erreurs : empreinte, contenu ou taille → `voice/model_invalid` (`details.reason`) ; réseau → `voice/download_failed` (`retryable`) ; **place disque insuffisante → `voice/download_failed` avec `details.reason: 'disk_full'`** (pas de code dédié dans le contrat L0 ; à promouvoir en code si l'UI en a besoin) ; annulation → `voice/download_failed`, `details.reason: 'cancelled'`.
+  - Pour **L3** : copier `silero_vad.onnx` (URL et empreinte dans `SILERO_VAD.source`) dans `Contents/Resources/voice/` ; créer le gestionnaire avec `rootDir: voiceModelsDir(app.getPath('userData'))`, appeler `init()` au démarrage, relayer `onModelChange` en événement `voice:model`. `voiceModelLicenses()` alimente « À propos › Licences » (attribution CC-BY de Parakeet).
+
 ## Demandes d'évolution de `packages/shared`
 
 _Format : date, agent, type proposé, raison, packages impactés._
