@@ -46,6 +46,7 @@ Sur un Mac Apple Silicon neuf : installer le `.dmg`, lancer Atelier, puis suivre
   1. ouvrir Atelier : macOS refuse (« Apple n'a pas pu vérifier… ») ; cliquer sur « OK » ;
   2. Réglages Système › Confidentialité et sécurité, en bas : « Atelier a été bloqué… » › **Ouvrir quand même**, puis confirmer avec le mot de passe ;
   3. relancer Atelier, puis l'onboarding.
+- **Micro (dictée)** : la signature ad hoc change à chaque build, et macOS redemande donc l'accès au micro après chaque réinstallation (Réglages Système › Confidentialité et sécurité › Micro). Cette demande disparaît avec la signature Developer ID.
 - Copier le `.dmg` depuis une clé USB évite la mise en quarantaine, donc les étapes 1 et 2. Un téléchargement ou un AirDrop la déclenche. À annoncer dans la démo : avec un certificat « Developer ID Application » et la notarisation (`pnpm dist:mac`), ces étapes disparaissent.
 
 ### 2. Excel récapitulatif et résumé

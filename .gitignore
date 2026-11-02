@@ -17,6 +17,7 @@ coverage/
 
 # Ressources téléchargées (Lima embarqué, cf. scripts/fetch-lima.ts)
 apps/desktop/resources/lima/
+apps/desktop/resources/voice/
 
 # Secrets et environnement
 .env

@@ -6,7 +6,8 @@
     "vitest.config.ts",
     "src/main/**/*.ts",
     "src/preload/**/*.ts",
-    "../../packages/web/src/types/*.d.ts"
+    "../../packages/web/src/types/*.d.ts",
+    "../../packages/voice/src/types/*.d.ts"
   ],
   "compilerOptions": {
     "types": ["node", "electron-vite/node"]

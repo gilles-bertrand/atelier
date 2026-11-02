@@ -2,7 +2,7 @@ import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { isAtelierError } from '@atelier/shared';
+import { DEFAULT_VOICE_SETTINGS, isAtelierError } from '@atelier/shared';
 import { SecretsStore, type SecretCipher } from './secrets-store.js';
 import {
   applySettingsPatch,
@@ -112,5 +112,71 @@ describe('secrets', () => {
     const store = await SecretsStore.load(file, fakeCipher(false));
     expect(store.presence().llm_token).toBe(false);
     await expect(store.set('llm_token', 'x')).rejects.toThrow(/trousseau/);
+  });
+});
+
+describe('réglages de la voix (ADR-004 D10)', () => {
+  it('absents par défaut, puis enregistrés et relus', () => {
+    const base = defaultSettings('/h');
+    expect(base.voice).toBeUndefined();
+    const on = applySettingsPatch(base, { voice: { ...DEFAULT_VOICE_SETTINGS, enabled: true } });
+    expect(on.voice).toEqual({
+      enabled: true,
+      sttModel: 'parakeet-tdt-0.6b-v3-int8',
+      idleUnloadMinutes: 10,
+    });
+    expect(mergeWithDefaults(base, JSON.parse(JSON.stringify(on)) as unknown).voice).toEqual(
+      on.voice,
+    );
+    // Un autre patch garde la voix.
+    expect(applySettingsPatch(on, { openAtLogin: true }).voice).toEqual(on.voice);
+  });
+
+  it('miroir : règle de checkServerUrl ; chaîne vide = source officielle', () => {
+    const base = defaultSettings('/h');
+    expect(() =>
+      applySettingsPatch(base, {
+        voice: { ...DEFAULT_VOICE_SETTINGS, modelSourceUrl: 'http://mirror.example.be' },
+      }),
+    ).toThrow(/https/);
+    const mirror = applySettingsPatch(base, {
+      voice: { ...DEFAULT_VOICE_SETTINGS, modelSourceUrl: ' https://m.example.be ' },
+    });
+    expect(mirror.voice?.modelSourceUrl).toBe('https://m.example.be');
+    expect(
+      applySettingsPatch(mirror, { voice: { ...DEFAULT_VOICE_SETTINGS, modelSourceUrl: '' } }).voice
+        ?.modelSourceUrl,
+    ).toBeUndefined();
+  });
+
+  it('refuse un délai de déchargement hors bornes (settings/invalid, champ indiqué)', () => {
+    let error: unknown;
+    try {
+      applySettingsPatch(defaultSettings('/h'), {
+        voice: { ...DEFAULT_VOICE_SETTINGS, idleUnloadMinutes: -1 },
+      });
+    } catch (e) {
+      error = e;
+    }
+    expect(isAtelierError(error) && error.code).toBe('settings/invalid');
+    expect(isAtelierError(error) && error.details?.['field']).toBe('voice.idleUnloadMinutes');
+  });
+
+  it('une voix illisible sur le disque revient aux défauts sans toucher au reste', () => {
+    const base = defaultSettings('/h');
+    const raw = {
+      ...base,
+      openAtLogin: true,
+      voice: { enabled: true, glossary: 'Ollama', idleUnloadMinutes: 'dix' },
+    };
+    const merged = mergeWithDefaults(base, raw);
+    expect(merged.openAtLogin).toBe(true);
+    expect(merged.voice).toEqual({
+      enabled: true,
+      sttModel: 'parakeet-tdt-0.6b-v3-int8',
+      idleUnloadMinutes: 10,
+    });
+    const invalidVoice = mergeWithDefaults(base, { ...base, voice: { idleUnloadMinutes: 99_999 } });
+    expect(invalidVoice.voice).toBeUndefined();
   });
 });

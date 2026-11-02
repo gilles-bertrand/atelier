@@ -8,9 +8,12 @@ import {
   AtelierError,
   checkServerUrl,
   DEFAULT_MODEL,
+  DEFAULT_VOICE_SETTINGS,
+  validateVoiceSettings,
   type AppSettings,
   type AppSettingsPatch,
   type SearchProviderId,
+  type VoiceSettings,
 } from '@atelier/shared';
 import { defaultMcpConfigPath, defaultSkillsDir } from '../app-folders.js';
 
@@ -53,9 +56,43 @@ export function applySettingsPatch(current: AppSettings, patch: AppSettingsPatch
     llm: clearOptionalLlm({ ...current.llm, ...stripUndefined(patch.llm) }),
     sandbox: { ...current.sandbox, ...stripUndefined(patch.sandbox) },
     search: { ...current.search, ...stripUndefined(patch.search) },
+    ...(patch.voice !== undefined
+      ? { voice: applyVoicePatch(current.voice, patch.voice) }
+      : current.voice !== undefined
+        ? { voice: current.voice }
+        : {}),
   };
   validateSettings(next);
   return next;
+}
+
+/**
+ * Réglages de la voix (ADR-004 D10), fusionnés avec les défauts. Dans un patch,
+ * `modelSourceUrl: ''` revient à la source officielle et `inputDeviceId: ''` au
+ * micro par défaut (un patch ne peut pas transporter `undefined`).
+ */
+export function applyVoicePatch(
+  current: VoiceSettings | undefined,
+  patch: Partial<VoiceSettings>,
+): VoiceSettings {
+  const merged: VoiceSettings = {
+    ...DEFAULT_VOICE_SETTINGS,
+    ...current,
+    ...stripUndefined(patch),
+  };
+  const { modelSourceUrl, inputDeviceId, ...rest } = merged;
+  return {
+    ...rest,
+    ...(modelSourceUrl !== undefined && modelSourceUrl.trim() !== ''
+      ? { modelSourceUrl: modelSourceUrl.trim() }
+      : {}),
+    ...(inputDeviceId !== undefined && inputDeviceId !== '' ? { inputDeviceId } : {}),
+  };
+}
+
+/** Réglages de la voix effectifs (absents : {@link DEFAULT_VOICE_SETTINGS}). */
+export function voiceSettingsOf(settings: AppSettings): VoiceSettings {
+  return settings.voice ?? { ...DEFAULT_VOICE_SETTINGS };
 }
 
 /** Vérifie la cohérence des réglages ; lève une `AtelierError` explicite. */
@@ -88,6 +125,14 @@ export function validateSettings(settings: AppSettings): void {
   }
   if (settings.projectsDir !== undefined && !isAbsolute(settings.projectsDir)) {
     throw invalid('Le dossier des projets doit être un chemin absolu.');
+  }
+  if (settings.voice !== undefined) {
+    const issue = validateVoiceSettings(settings.voice);
+    if (issue) {
+      throw new AtelierError('settings/invalid', issue.message, {
+        details: { field: `voice.${issue.field}` },
+      });
+    }
   }
 }
 
@@ -136,6 +181,11 @@ export function mergeWithDefaults(defaults: AppSettings, raw: unknown): AppSetti
       ? { projectsDir: raw['projectsDir'] }
       : {}),
   };
+  // Voix illisible ou invalide : seule la voix revient aux défauts.
+  if (isRecord(raw['voice'])) {
+    const voice = applyVoicePatch(undefined, pickVoiceFields(raw['voice']));
+    if (validateVoiceSettings(voice) === undefined) merged.voice = voice;
+  }
   try {
     validateSettings(merged);
     return merged;
@@ -143,6 +193,22 @@ export function mergeWithDefaults(defaults: AppSettings, raw: unknown): AppSetti
     // Fichier corrompu ou édité à la main : on repart des défauts plutôt que de bloquer l'app.
     return defaults;
   }
+}
+
+/** Champs de la voix lus sur le disque, au bon type seulement (fichier édité à la main). */
+function pickVoiceFields(raw: Record<string, unknown>): Partial<VoiceSettings> {
+  const voice: Partial<VoiceSettings> = {};
+  if (typeof raw['enabled'] === 'boolean') voice.enabled = raw['enabled'];
+  if (typeof raw['sttModel'] === 'string') voice.sttModel = raw['sttModel'];
+  if (typeof raw['idleUnloadMinutes'] === 'number')
+    voice.idleUnloadMinutes = raw['idleUnloadMinutes'];
+  if (typeof raw['modelSourceUrl'] === 'string') voice.modelSourceUrl = raw['modelSourceUrl'];
+  if (typeof raw['inputDeviceId'] === 'string') voice.inputDeviceId = raw['inputDeviceId'];
+  const glossary = raw['glossary'];
+  if (Array.isArray(glossary) && glossary.every((t) => typeof t === 'string')) {
+    voice.glossary = glossary;
+  }
+  return voice;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

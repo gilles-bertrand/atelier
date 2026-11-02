@@ -62,6 +62,9 @@ importers:
       '@atelier/skills':
         specifier: workspace:*
         version: link:../../packages/skills
+      '@atelier/voice':
+        specifier: workspace:*
+        version: link:../../packages/voice
       '@atelier/web':
         specifier: workspace:*
         version: link:../../packages/web
@@ -104,6 +107,12 @@ importers:
       sharp:
         specifier: ^0.35.5
         version: 0.35.5(@types/node@24.19.2)
+      sherpa-onnx-darwin-arm64:
+        specifier: 2.0.1
+        version: 2.0.1
+      sherpa-onnx-node:
+        specifier: 2.0.1
+        version: 2.0.1
       turndown:
         specifier: ^7.2.4
         version: 7.2.4
@@ -8545,8 +8554,7 @@ snapshots:
 
   shebang-regex@3.0.0: {}
 
-  sherpa-onnx-darwin-arm64@2.0.1:
-    optional: true
+  sherpa-onnx-darwin-arm64@2.0.1: {}
 
   sherpa-onnx-darwin-x64@2.0.1:
     optional: true
