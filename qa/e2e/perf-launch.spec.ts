@@ -31,7 +31,7 @@ test('temps de lancement de l’app (premier lancement et suivants)', async ({},
   const first: number[] = [];
   const next: number[] = [];
   for (let i = 0; i < RUNS; i++) {
-    first.push(await measure(true, 'Bienvenue dans Atelier'));
+    first.push(await measure(true, 'Bienvenue dans YodAI'));
     next.push(await measure(false, 'Sur quoi travaille-t-on ?'));
   }
   const median = (xs: number[]): number =>

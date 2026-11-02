@@ -125,7 +125,7 @@ export function SearchSettings() {
         <Alert tone="warning">Ce fournisseur a besoin d’une clé : renseignez-la ci-dessous.</Alert>
       ) : null}
       <Hint>
-        Si le fournisseur choisi est indisponible, Atelier essaie automatiquement les autres
+        Si le fournisseur choisi est indisponible, YodAI essaie automatiquement les autres
         fournisseurs dont la clé est configurée.
       </Hint>
       <KeyField id="brave_search_key" label="Clé Brave Search" />

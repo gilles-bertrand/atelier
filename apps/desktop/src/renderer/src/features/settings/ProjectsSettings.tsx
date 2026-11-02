@@ -15,7 +15,7 @@ export function ProjectsSettings() {
   return (
     <SettingsSection
       title="Projets"
-      description="Dossier où Atelier crée le dossier d’un nouveau projet (livrables, artefacts)."
+      description="Dossier où YodAI crée le dossier d’un nouveau projet (livrables, artefacts)."
     >
       <div className="flex flex-wrap items-center gap-3">
         <p className="flex min-w-0 flex-1 items-center gap-2 text-sm" title={dir}>

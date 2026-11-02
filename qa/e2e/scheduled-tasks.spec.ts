@@ -102,7 +102,7 @@ test('tâche toutes les 15 minutes, « Exécuter maintenant » : run réussi, 1 
   await createTask(page, { name: 'Note des ventes', fileWrite: true });
 
   // Proposée dès la première tâche (D1).
-  await expect(page.getByText('Les tâches ne tournent que si Atelier est ouvert')).toBeVisible();
+  await expect(page.getByText('Les tâches ne tournent que si YodAI est ouvert')).toBeVisible();
   await page.getByRole('button', { name: 'Plus tard' }).click();
 
   const dialogs = await watchDialogs(page);

@@ -32,7 +32,7 @@ export function Onboarding() {
       <div className="w-full max-w-xl space-y-6">
         <header className="flex flex-col items-center gap-1 text-center">
           <AtelierMark className="mb-3 size-14" />
-          <h1 className="text-2xl font-semibold tracking-tight">Bienvenue dans Atelier</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Bienvenue dans YodAI</h1>
           <p className="text-sm text-muted-foreground">
             Quelques réglages et votre assistant est prêt.
           </p>

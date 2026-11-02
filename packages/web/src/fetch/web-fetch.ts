@@ -36,7 +36,7 @@ export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
 /** User-Agent envoyé par défaut. */
 export const DEFAULT_USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) ' +
-  'Atelier/0.1 (+https://github.com/gilles-bertrand/atelier)';
+  'YodAI/0.1 (+https://github.com/gilles-bertrand/atelier)';
 /** Délai par défaut d'un téléchargement complet (redirections comprises). */
 export const DEFAULT_FETCH_TIMEOUT_MS = 20_000;
 /** Taille maximale téléchargée (le texte rendu au modèle est ensuite tronqué à 20 ko). */

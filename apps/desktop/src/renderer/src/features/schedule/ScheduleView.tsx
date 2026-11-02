@@ -555,9 +555,9 @@ export function ScheduleView({
       <main className="flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-5xl space-y-6 px-6 py-6">
           {proposeLogin && state.settings.openAtLogin !== true ? (
-            <Alert tone="info" title="Les tâches ne tournent que si Atelier est ouvert">
+            <Alert tone="info" title="Les tâches ne tournent que si YodAI est ouvert">
               <p>
-                Ouvrir Atelier à la connexion, fenêtre masquée, pour que vos tâches s’exécutent même
+                Ouvrir YodAI à la connexion, fenêtre masquée, pour que vos tâches s’exécutent même
                 si vous n’avez pas lancé l’app.
               </p>
               <div className="mt-2 flex gap-2">

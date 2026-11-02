@@ -285,9 +285,9 @@ describe('formulaire de tâche', () => {
         },
       },
     ]);
-    // Première tâche : proposition d'ouvrir Atelier à la connexion.
+    // Première tâche : proposition d'ouvrir YodAI à la connexion.
     expect(
-      await screen.findByText('Les tâches ne tournent que si Atelier est ouvert'),
+      await screen.findByText('Les tâches ne tournent que si YodAI est ouvert'),
     ).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Ouvrir à la connexion' }));
     expect(api.callsTo('settings:update')).toContainEqual({ openAtLogin: true });
@@ -380,14 +380,14 @@ describe('machine isolée occupée', () => {
 });
 
 describe('Réglages › Tâches planifiées', () => {
-  it('« Ouvrir Atelier à la connexion »', async () => {
+  it('« Ouvrir YodAI à la connexion »', async () => {
     const api = setup();
     const user = userEvent.setup();
     render(<App />);
     await user.click(await screen.findByRole('button', { name: 'Réglages' }));
     const sections = screen.getByRole('navigation', { name: 'Rubriques des réglages' });
     await user.click(within(sections).getByRole('button', { name: 'Tâches planifiées' }));
-    const toggle = screen.getByRole('switch', { name: 'Ouvrir Atelier à la connexion' });
+    const toggle = screen.getByRole('switch', { name: 'Ouvrir YodAI à la connexion' });
     expect(toggle).toHaveAttribute('aria-checked', 'false');
     await user.click(toggle);
     expect(api.callsTo('settings:update')).toContainEqual({ openAtLogin: true });

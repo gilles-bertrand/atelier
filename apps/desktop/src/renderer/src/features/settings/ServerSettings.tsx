@@ -229,7 +229,7 @@ function ModelSettings() {
         <Hint id={ids.ctxHint} className={ctxInvalid ? 'text-destructive' : undefined}>
           {ctxInvalid
             ? 'Indiquez au moins 2048, ou laissez vide.'
-            : 'Laissez vide : Atelier lit la valeur configurée sur le serveur.'}
+            : 'Laissez vide : YodAI lit la valeur configurée sur le serveur.'}
         </Hint>
       </div>
 

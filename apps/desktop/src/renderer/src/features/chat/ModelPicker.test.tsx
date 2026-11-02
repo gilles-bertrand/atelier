@@ -245,7 +245,7 @@ describe('sélecteur de modèle', () => {
     await openList(user);
     await user.keyboard('{End}{Enter}');
     expect(
-      await screen.findByText(/Ce modèle ne sait pas utiliser les outils d’Atelier/),
+      await screen.findByText(/Ce modèle ne sait pas utiliser les outils de YodAI/),
     ).toBeInTheDocument();
     expect(picker()).toHaveAccessibleName('Modèle : qwen3.5:35b');
   });

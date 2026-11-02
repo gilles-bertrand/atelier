@@ -80,7 +80,7 @@ export interface LimaSandboxOptions {
    * `~/.atelier-lima` si le socket de Lima y serait trop long ; voir `chooseLimaHome`).
    */
   limaHome?: string;
-  /** Dossier des skills monté sur `/skills` (défaut : `~/Atelier/skills`). */
+  /** Dossier des skills monté sur `/skills` (défaut : `~/Documents/YodAI/skills`). */
   skillsDir?: string;
   /** Nom de l'instance (défaut : `atelier`). */
   instanceName?: string;
@@ -105,7 +105,7 @@ async function defaultFreeDiskBytes(path: string): Promise<number> {
   return stats.bavail * stats.bsize;
 }
 
-/** Sandbox Lima d'Atelier. */
+/** Sandbox Lima de YodAI. */
 export class LimaSandbox implements Sandbox {
   private readonly limactl: Limactl;
   private readonly runner: CommandRunner;
@@ -481,7 +481,7 @@ export class LimaSandbox implements Sandbox {
     if (this.platform.os !== 'darwin' || this.platform.arch !== 'arm64') {
       throw new AtelierError(
         'sandbox/virtualization_unavailable',
-        'La VM Atelier nécessite un Mac Apple Silicon (macOS 14 ou plus).',
+        'La VM YodAI nécessite un Mac Apple Silicon (macOS 14 ou plus).',
         { details: this.platform },
       );
     }
@@ -489,7 +489,7 @@ export class LimaSandbox implements Sandbox {
     if (hv.exitCode !== 0 || hv.stdout.render().text.trim() !== '1') {
       throw new AtelierError(
         'sandbox/virtualization_unavailable',
-        "La virtualisation n'est pas disponible sur ce Mac (kern.hv_support = 0). Atelier ne peut pas tourner dans une VM sans virtualisation imbriquée.",
+        "La virtualisation n'est pas disponible sur ce Mac (kern.hv_support = 0). YodAI ne peut pas tourner dans une VM sans virtualisation imbriquée.",
       );
     }
     try {

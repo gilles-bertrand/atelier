@@ -1,12 +1,12 @@
 ---
 name: artefact-html
-description: Créer ou mettre à jour un artefact, c'est-à-dire une page HTML autonome publiée dans l'app (tableau de bord, page de suivi, rapport visuel avec graphiques et tableaux), qui évolue de version en version à chaque mise à jour ou exécution planifiée. À utiliser pour tout tableau de bord ou toute page à consulter dans Atelier.
+description: Créer ou mettre à jour un artefact, c'est-à-dire une page HTML autonome publiée dans l'app (tableau de bord, page de suivi, rapport visuel avec graphiques et tableaux), qui évolue de version en version à chaque mise à jour ou exécution planifiée. À utiliser pour tout tableau de bord ou toute page à consulter dans YodAI.
 triggers: [tableau de bord, artefact, page html]
 ---
 
 # Skill artefact-html : une page publiée qui évolue
 
-Un artefact est une page HTML que l'utilisateur ouvre dans Atelier, avec l'historique de ses
+Un artefact est une page HTML que l'utilisateur ouvre dans YodAI, avec l'historique de ses
 versions. Republier le même fichier crée une nouvelle version de la même page : c'est ainsi
 qu'un tableau de bord suit les exécutions d'une tâche planifiée.
 

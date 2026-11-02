@@ -50,7 +50,7 @@ export async function limaPreflight(
     return undefined;
   } catch {
     return isPackaged
-      ? 'Le moteur de la VM est absent de l’application. Réinstallez Atelier.'
+      ? 'Le moteur de la VM est absent de l’application. Réinstallez YodAI.'
       : 'Moteur de VM absent : lancez « pnpm fetch:lima » puis relancez l’app.';
   }
 }

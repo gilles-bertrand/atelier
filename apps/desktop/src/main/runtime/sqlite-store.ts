@@ -207,7 +207,7 @@ export function migrate(db: DatabaseSync): void {
   const current = row?.user_version ?? 0;
   if (current > SCHEMA_VERSION) {
     throw new Error(
-      `Base d'historique plus récente que l'application (schéma ${String(current)}) : mettez Atelier à jour.`,
+      `Base d'historique plus récente que l'application (schéma ${String(current)}) : mettez YodAI à jour.`,
     );
   }
   for (let version = current; version < SCHEMA_VERSION; version += 1) {

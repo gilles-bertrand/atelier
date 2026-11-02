@@ -5,7 +5,7 @@
 #   ou APPLE_ID + APPLE_APP_SPECIFIC_PASSWORD + APPLE_TEAM_ID.
 # Sans ces variables, le build reste non signé (usage local).
 appId: eu.triptyk.atelier
-productName: Atelier
+productName: YodAI
 directories:
   output: dist
   buildResources: build
@@ -20,7 +20,7 @@ extraResources:
   - from: ../../lima
     to: lima-templates
     filter: ['*.yaml', 'provision/**']
-  # Skills d'exemple copiés au premier lancement dans ~/Atelier/skills (installExampleSkills).
+  # Skills d'exemple copiés au premier lancement dans ~/Documents/YodAI/skills (installExampleSkills).
   - from: ../../packages/skills/examples
     to: skills-examples
     filter: ['**/*']
