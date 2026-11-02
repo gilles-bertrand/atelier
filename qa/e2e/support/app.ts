@@ -84,7 +84,7 @@ export async function launchAtelier(options: LaunchOptions): Promise<AtelierApp>
           search: { provider: 'searxng' },
           skillsDir,
           mcpConfigPath: join(root, 'mcp.json'),
-          // Dossiers créés pour les projets (ADR-003) : jamais dans le vrai ~/Documents/YodAI/Projets.
+          // Dossiers créés pour les projets (ADR-003) : jamais dans le vrai ~/YodAI/Projets.
           projectsDir: join(root, 'Projets'),
           onboardingCompleted: true,
           privacyAcceptedAt: new Date().toISOString(),

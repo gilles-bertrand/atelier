@@ -112,13 +112,13 @@ lima/                  # template atelier.yaml + scripts de provisioning
 - Prompt système : "Pour toute question factuelle récente, fais `web_search` puis `web_fetch` sur 2-3 sources ; cite les URLs en fin de réponse."
 
 ### 5. Skills (`skills`)
-- Dossier `~/Documents/YodAI/skills/<nom>/SKILL.md` avec frontmatter YAML (`name`, `description`)
+- Dossier `~/YodAI/skills/<nom>/SKILL.md` avec frontmatter YAML (`name`, `description`)
 - Seules les descriptions vont dans le prompt système ; le modèle lit le SKILL.md complet via `read_file` quand c'est pertinent
 - Exposés dans la VM en lecture seule sur `/skills`
 - 2 skills d'exemple : `xlsx` (création d'Excel avec exceljs, script prêt à l'emploi) et `rapport-markdown`
 
 ### 6. Connecteurs MCP (`mcp-bridge`)
-- Config `~/Documents/YodAI/mcp.json` (format Claude Desktop : `mcpServers`)
+- Config `~/YodAI/mcp.json` (format Claude Desktop : `mcpServers`)
 - Serveurs stdio lancés côté hôte ; outils convertis en outils AI SDK (`dynamicTool` / `jsonSchema`), nommés `mcp__<serveur>__<outil>`
 - Chargement paresseux : le modèle découvre et active les outils MCP via un outil `tool_search`
 - Toute action d'écriture MCP demande une permission

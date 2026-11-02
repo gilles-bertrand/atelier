@@ -33,7 +33,7 @@ const SEARCH_PROVIDERS: readonly SearchProviderId[] = ['searxng', 'ollama', 'bra
  * Lève `AtelierError` si une valeur est invalide : rien n'est enregistré.
  */
 export function applySettingsPatch(current: AppSettings, patch: AppSettingsPatch): AppSettings {
-  // `projectsDir: ''` revient au dossier par défaut (~/Documents/YodAI/Projets) : un patch
+  // `projectsDir: ''` revient au dossier par défaut (~/YodAI/Projets) : un patch
   // ne peut pas transporter `undefined`.
   const { projectsDir: _currentProjectsDir, ...base } = current;
   const projectsDir =

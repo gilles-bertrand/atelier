@@ -20,7 +20,7 @@ extraResources:
   - from: ../../lima
     to: lima-templates
     filter: ['*.yaml', 'provision/**']
-  # Skills d'exemple copiés au premier lancement dans ~/Documents/YodAI/skills (installExampleSkills).
+  # Skills d'exemple copiés au premier lancement dans ~/YodAI/skills (installExampleSkills).
   - from: ../../packages/skills/examples
     to: skills-examples
     filter: ['**/*']

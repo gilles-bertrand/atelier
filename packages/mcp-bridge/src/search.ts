@@ -212,7 +212,7 @@ export function toolSearchTool(options: ToolSearchOptions): ToolDefinition<ToolS
           ok: false,
           content:
             "Aucun connecteur MCP n'est configuré. L'utilisateur peut en ajouter dans les Réglages " +
-            'de YodAI (fichier ~/Documents/YodAI/mcp.json).',
+            'de YodAI (fichier ~/YodAI/mcp.json).',
         });
       }
       const hits = searchCatalog(options.source.catalog(), query, limit);

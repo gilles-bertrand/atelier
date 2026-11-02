@@ -275,15 +275,15 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
   });
 
   const settings = await SettingsStore.load(join(paths.userData, 'settings.json'), home);
-  // Renommage en YodAI : skills et mcp.json passent de ~/Atelier à ~/Documents/YodAI.
+  // Renommage en YodAI : skills et mcp.json passent de ~/Atelier (ou ~/Documents/YodAI) à ~/YodAI.
   try {
     const migration = await migrateLegacyFolders(settings.get(), home);
     if (Object.keys(migration.patch).length > 0) await settings.update(migration.patch);
     if (migration.moved.length > 0 || migration.kept.length > 0) {
-      log('dossiers migrés vers ~/Documents/YodAI', migration);
+      log('dossiers migrés vers ~/YodAI', migration);
     }
   } catch (error) {
-    log('migration de ~/Atelier impossible', error);
+    log('migration des anciens dossiers impossible', error);
   }
   const secrets = await SecretsStore.load(join(paths.userData, 'secrets.json'), safeStorage);
 

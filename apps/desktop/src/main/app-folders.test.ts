@@ -6,9 +6,11 @@ import {
   appFolder,
   defaultMcpConfigPath,
   defaultSkillsDir,
-  legacyAppFolder,
+  legacyAppFolders,
   migrateLegacyFolders,
 } from './app-folders.js';
+
+const legacyAppFolder = (home: string): string => legacyAppFolders(home)[0] ?? '';
 
 const exists = (path: string) =>
   stat(path).then(
@@ -30,10 +32,10 @@ const legacySettings = (home: string) => ({
 });
 
 describe('dossier de l’app', () => {
-  it('vit dans ~/Documents/YodAI', () => {
-    expect(appFolder('/Users/a')).toBe('/Users/a/Documents/YodAI');
-    expect(defaultSkillsDir('/Users/a')).toBe('/Users/a/Documents/YodAI/skills');
-    expect(defaultMcpConfigPath('/Users/a')).toBe('/Users/a/Documents/YodAI/mcp.json');
+  it('vit dans ~/YodAI, hors de ~/Documents (iCloud)', () => {
+    expect(appFolder('/Users/a')).toBe('/Users/a/YodAI');
+    expect(defaultSkillsDir('/Users/a')).toBe('/Users/a/YodAI/skills');
+    expect(defaultMcpConfigPath('/Users/a')).toBe('/Users/a/YodAI/mcp.json');
   });
 });
 
@@ -86,5 +88,37 @@ describe('migrateLegacyFolders', () => {
       skillsDir: defaultSkillsDir(home),
       mcpConfigPath: defaultMcpConfigPath(home),
     });
+  });
+
+  it('déplace aussi skills et mcp.json de ~/Documents/YodAI et supprime ce dossier vide', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'yodai-home-'));
+    const documents = join(home, 'Documents', 'YodAI');
+    await mkdir(join(documents, 'skills', 'xlsx'), { recursive: true });
+    await writeFile(join(documents, 'skills', 'xlsx', 'SKILL.md'), '# xlsx');
+    await writeFile(join(documents, 'mcp.json'), '{"mcpServers":{}}');
+    await mkdir(join(documents, 'Projets'));
+    const result = await migrateLegacyFolders(
+      { skillsDir: join(documents, 'skills'), mcpConfigPath: join(documents, 'mcp.json') },
+      home,
+    );
+
+    expect(result.patch).toEqual({
+      skillsDir: defaultSkillsDir(home),
+      mcpConfigPath: defaultMcpConfigPath(home),
+    });
+    expect(await readFile(join(defaultSkillsDir(home), 'xlsx', 'SKILL.md'), 'utf8')).toBe('# xlsx');
+    expect(await exists(documents)).toBe(false);
+    expect(await exists(join(home, 'Documents'))).toBe(true);
+  });
+
+  it('garde ~/Documents/YodAI s’il contient des projets', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'yodai-home-'));
+    const projets = join(home, 'Documents', 'YodAI', 'Projets');
+    await mkdir(join(projets, 'Ventes'), { recursive: true });
+    await migrateLegacyFolders(
+      { skillsDir: '/Volumes/X/skills', mcpConfigPath: '/Volumes/X/mcp.json' },
+      home,
+    );
+    expect(await readdir(projets)).toEqual(['Ventes']);
   });
 });
