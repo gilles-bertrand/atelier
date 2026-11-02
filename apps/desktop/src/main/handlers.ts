@@ -109,10 +109,13 @@ export { assertWorkspace } from './workspace-rules.js';
 export function createHandlers(s: HandlerServices): IpcHandlers {
   const home = s.home ?? homedir();
 
-  /** Dossiers des conversations connues et des projets (seuls lieux ouvrables). */
+  /**
+   * Dossiers des conversations connues (runs planifiés compris : leurs artefacts
+   * doivent pouvoir s'afficher dans le Finder) et des projets : seuls lieux ouvrables.
+   */
   const workspaces = (): string[] => [
     ...new Set([
-      ...s.chats.list(1000).map((c) => c.workspace),
+      ...s.chats.list(1000, { includeScheduled: true }).map((c) => c.workspace),
       ...(s.projects?.openableRoots() ?? []),
     ]),
   ];
