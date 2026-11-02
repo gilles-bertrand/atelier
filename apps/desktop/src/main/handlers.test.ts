@@ -252,3 +252,28 @@ describe('prompts planifiés (ADR-002)', () => {
     await expect(handlers['schedule:stop-run']?.({ runId: 'r1' })).resolves.toBeUndefined();
   });
 });
+
+describe('file:reveal : dossiers des runs planifiés', () => {
+  it('affiche un fichier créé par une tâche planifiée (conversation hors « Récentes »)', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'atelier-planif-'));
+    const file = join(workspace, 'rapport.html');
+    await writeFile(file, '<p>ok</p>');
+    const revealed: string[] = [];
+    const s = {
+      chats: {
+        // Comme le vrai store : les conversations planifiées n'apparaissent qu'avec includeScheduled.
+        list: (_limit?: number, options?: { includeScheduled?: boolean }) =>
+          options?.includeScheduled === true ? [{ workspace }] : [],
+      },
+      shell: {
+        openPath: () => Promise.resolve(''),
+        showItemInFolder: (path: string) => {
+          revealed.push(path);
+        },
+      },
+    } as unknown as HandlerServices;
+    await createHandlers(s)['file:reveal']?.({ absolutePath: file });
+    expect(revealed).toHaveLength(1);
+    expect(revealed[0]).toMatch(/rapport\.html$/);
+  });
+});
