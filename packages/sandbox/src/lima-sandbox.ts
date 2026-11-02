@@ -80,7 +80,7 @@ export interface LimaSandboxOptions {
    * `~/.atelier-lima` si le socket de Lima y serait trop long ; voir `chooseLimaHome`).
    */
   limaHome?: string;
-  /** Dossier des skills monté sur `/skills` (défaut : `~/Documents/YodAI/skills`). */
+  /** Dossier des skills monté sur `/skills` (défaut : `~/YodAI/skills`). */
   skillsDir?: string;
   /** Nom de l'instance (défaut : `atelier`). */
   instanceName?: string;

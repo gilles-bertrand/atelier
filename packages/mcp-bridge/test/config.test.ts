@@ -119,7 +119,7 @@ describe('parseMcpConfigText / loadMcpConfig', () => {
     expect((await loadMcpConfig(path)).servers).toHaveLength(1);
   });
 
-  it('chemin par défaut : ~/Documents/YodAI/mcp.json', () => {
-    expect(defaultMcpConfigPath('/Users/alice')).toBe('/Users/alice/Documents/YodAI/mcp.json');
+  it('chemin par défaut : ~/YodAI/mcp.json', () => {
+    expect(defaultMcpConfigPath('/Users/alice')).toBe('/Users/alice/YodAI/mcp.json');
   });
 });
