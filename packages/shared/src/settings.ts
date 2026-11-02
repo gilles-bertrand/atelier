@@ -47,10 +47,13 @@ export interface AppSettings {
   voice?: VoiceSettings;
 }
 
-/** Modification partielle (profonde au premier niveau) des réglages. */
+/**
+ * Modification partielle (profonde au premier niveau) des réglages. Une section
+ * optionnelle (`voice?`) accepte elle aussi un objet partiel.
+ */
 export type AppSettingsPatch = {
-  [K in keyof AppSettings]?: AppSettings[K] extends object
-    ? Partial<AppSettings[K]>
+  [K in keyof AppSettings]?: NonNullable<AppSettings[K]> extends object
+    ? Partial<NonNullable<AppSettings[K]>>
     : AppSettings[K];
 };
 
