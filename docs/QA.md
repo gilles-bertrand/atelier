@@ -242,17 +242,56 @@ Suite e2e mock complète : 18 réussis, 3 ignorés (mode réel).
 
 Compromis accepté par le Lead (31/10) : un artefact qui tente de rediriger son cadre vers le web perd son affichage, car Chromium y montre sa page d'erreur. Aucune requête ne sort, et la page reste lisible depuis le fichier source.
 
-### Réel : « tableau de bord hebdo » (à jouer au signal de Gilles)
+### Réel : « tableau de bord hebdo » (02/11/2026, `main` 391c460)
 
-Pas encore joué. L'Ollama local est partagé avec les autres campagnes, et Gilles a demandé d'attendre son signal (31/10).
+Ollama **local**, modèle `atelier` (Qwen 3.5 35B MoE, MLX), VM Lima partagée, app construite depuis un worktree propre d'`origin/main`. Run complet en 11 min 30 s.
 
-Le scénario est automatisé dans `qa/e2e/projects.real.spec.ts`, ignoré hors mode réel. À son signal, avec l'app Atelier fermée :
+- **Contrôles stricts : 4/4.**
+- **Contrôles souples : 9/10.** Le dixième, le nombre de versions dans l'onglet Artefacts, n'a pas été relevé à cause d'une course dans la spec (corrigée, voir plus bas). Il a été vérifié autrement : 3 versions en base, vignette présente sur la capture finale.
+
+| Étape                                                                                                                   | Résultat |
+| ----------------------------------------------------------------------------------------------------------------------- | -------- |
+| Projet « Ventes » : dossier de travail en principal, « Archives » en lecture seule                                      | ✅       |
+| Ajout de `Archives/2024` refusé : « Le dossier « 2024 » est déjà inclus dans « Archives ». »                            | ✅       |
+| Conversation en 2 min 57 s, skill `artefact-html` chargé seul (déclencheur « tableau de bord »)                         | ✅       |
+| `Artefacts/tableau-ventes-magasins.html` écrit puis publié, carte « Artefact · v1 » dans le chat                        | ✅       |
+| Page autonome : aucune URL `https://`, Chart.js servi par `atelier-artifact://lib/`                                     | ✅       |
+| Totaux justes au centime : Bruxelles 40 337,50 €, Liège 28 277,10 €, Namur 20 622,50 € (89 237,10 €)                    | ✅       |
+| Modale « Retenir dans la mémoire du projet : « Le client souhaite recevoir une synthèse mensuelle des ventes. » »       | ✅       |
+| La note apparaît dans « Mémoire et consignes »                                                                          | ✅       |
+| Tâche « Tableau hebdo », 1er run : « Réussi » en 3 min 32 s (223,9 k tokens), 0 refus, page republiée telle quelle (v2) | ✅       |
+| 2e run : « Réussi » en 4 min 50 s (360,4 k tokens), 0 refus, même page réécrite puis republiée (v3)                     | ✅       |
+| Aucun nouveau fichier dans `Artefacts/` après les deux runs                                                             | ✅       |
+| Dans la VM : `touch /dossiers/Archives/essai` refusé (« Read-only file system »), `touch /workspace/essai-vm` réussi    | ✅       |
+| Onglet Artefacts : vignette et 3 versions dans le sélecteur                                                             | ⚠️ spec  |
+
+Dans la conversation, chaque action sensible est passée par une modale : 5 « Exécuter une commande », l'écriture de la page, puis la mémoire. Aucune modale pendant les runs planifiés. Bascule de la VM sur les dossiers du projet : 7,5 s.
+
+Comportement du modèle :
+
+- Il calcule en Python dans la VM, mais n'y arrive qu'au 4e essai : deux fois la même `KeyError: 'Bruxelles.csv'` (clé du dictionnaire tirée du nom de fichier), puis une `IndentationError` dans le heredoc. Il passe ensuite par un script écrit dans `/tmp`. Même schéma lors des essais du 31/10 et du 02/11 à 10:46 : un premier script en échec (`avec open(…)` au lieu de `with open(…)`), corrigé au second essai.
+- Un CSV lu en deux fois : `read_file` tronqué à 16 384 caractères (`tool-output:truncated`), puis relu avec `offset` et `limit`.
+- Au 1er run, il juge la page à jour et la republie sans la réécrire : v2 est identique à v1 (7 749 octets). Au 2e run, il la réécrit (v3, 6 103 octets).
+- Une relance `empty-final` dans le journal, sans effet visible.
+
+**Correctif de la spec, dans la même PR.** L'étape 5 comptait les vignettes avec `count()` juste après le clic sur l'onglet, sans attendre que la liste soit chargée : 0 vignette comptée, et versions non relevées. Elle attend désormais la première vignette, puis la première option du sélecteur, 15 s au plus, sans faire échouer l'étape. Vérifié par typecheck et lint. Le prochain run réel le confirmera.
+
+Conditions pour rejouer ce scénario :
+
+- **Aucune autre instance d'Atelier pendant le run**, y compris une app lancée avec `--user-data-dir` (spike, bench) : toutes partagent la VM `atelier`.
+  - Le 02/11 à 10:46, une instance de dictée du spike voix (#25) a démarré la VM depuis l'onboarding et l'a remontée avec ses propres dossiers. Elle l'a ensuite arrêtée en quittant proprement (`limactl stop`).
+  - Le 2e run et les contrôles dans la VM n'ont donc pas pu se faire. Le spike remplace désormais la VM par un bouchon.
+- **Quitter Atelier par Cmd+Q.** Sur macOS, fermer la fenêtre laisse l'app tourner, et elle garde la VM.
+- **Lancer sous `caffeinate -ims`, Mac sur secteur.** Le 31/10, capot fermé, une « Maintenance Sleep » a coupé le tour au bout de 2 min : « Tour non terminé après 900000 ms », le délai étant mesuré à l'horloge murale.
+- **Construire depuis un worktree propre d'`origin/main`.** Le checkout partagé porte souvent le travail en cours d'un autre agent. Dans le worktree, relier `apps/desktop/resources/lima` et le binaire d'Electron au checkout principal.
 
 ```bash
 cd qa && pnpm --filter @atelier/desktop build && \
-  ATELIER_E2E_MODE=real ATELIER_E2E_MODEL=atelier pnpm exec playwright test e2e/projects.real.spec.ts
+  caffeinate -ims env ATELIER_E2E_MODE=real ATELIER_E2E_MODEL=atelier \
+  pnpm exec playwright test e2e/projects.real.spec.ts
 ```
 
+- `ATELIER_E2E_KEEP=1` garde le dossier temporaire du test (base des conversations, fichiers produits) pour l'analyse.
 - Les constats sont joints au rapport (`projets-reel`), même si une étape échoue, avec trois captures.
 - Contrôles stricts (ce que l'app garantit) : projet, imbrication refusée, deux runs réussis, et dossier en lecture seule dans la VM.
 - Contrôles souples (`expect.soft`, ce qui dépend du modèle) : skill, page autonome, totaux, modale de mémoire, même fichier republié.
