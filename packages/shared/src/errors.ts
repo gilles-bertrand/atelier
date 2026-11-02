@@ -68,6 +68,20 @@ export const ATELIER_ERROR_CODES = [
   // MCP
   'mcp/server_failed',
   'mcp/config_invalid',
+  // Voix (ADR-004)
+  /** Accès au micro refusé ou restreint dans les Réglages Système. */
+  'voice/mic_denied',
+  /** Aucun micro, ou entrée muette (trames nulles). */
+  'voice/no_input',
+  /** Modèle de reconnaissance absent : à télécharger ou importer. */
+  'voice/model_missing',
+  /** Modèle corrompu : SHA-256 différent du catalogue, archive ou fichiers inattendus. */
+  'voice/model_invalid',
+  'voice/download_failed',
+  /** Process de reconnaissance arrêté ou en erreur. */
+  'voice/engine_failed',
+  /** Une session vocale est déjà en cours. */
+  'voice/busy',
   // Divers
   'internal',
 ] as const;
