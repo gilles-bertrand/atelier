@@ -15,8 +15,8 @@ export function HistoryBanner() {
     >
       <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
       <p>
-        <strong className="font-medium">L’historique ne sera pas conservé.</strong> YodAI n’a pas
-        pu ouvrir sa base de conversations : celles d’aujourd’hui seront perdues à la fermeture de
+        <strong className="font-medium">L’historique ne sera pas conservé.</strong> YodAI n’a pas pu
+        ouvrir sa base de conversations : celles d’aujourd’hui seront perdues à la fermeture de
         l’application. Redémarrez YodAI ; si le problème persiste, contactez votre support.
       </p>
     </div>

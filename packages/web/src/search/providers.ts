@@ -43,7 +43,7 @@ export const MAX_RESULTS_LIMIT = 10;
 
 /** Message affiché au modèle quand aucun fournisseur n'est joignable. */
 export const SEARCH_UNAVAILABLE_HINT =
-  "Recherche indisponible, configure Brave ou Ollama dans les Réglages de YodAI (Recherche web).";
+  'Recherche indisponible, configure Brave ou Ollama dans les Réglages de YodAI (Recherche web).';
 
 function clampResults(n: number | undefined): number {
   if (n === undefined || !Number.isFinite(n)) return 5;
