@@ -1,7 +1,7 @@
 /**
  * Emplacements des ressources embarquées, en développement et une fois packagé.
  *
- * Packagé : `Contents/Resources/{lima,lima-templates,skills-examples}`
+ * Packagé : `Contents/Resources/{lima,lima-templates,skills-examples,voice}`
  * (voir `electron-builder.yml`). En dev : le dépôt.
  */
 import { access, constants } from 'node:fs/promises';
@@ -11,6 +11,8 @@ export interface AppPaths {
   limactl: string;
   limaTemplates: string;
   skillsExamples: string;
+  /** Modèles de voix embarqués (Silero, `pnpm fetch:voice`). */
+  voiceModels: string;
   userData: string;
 }
 
@@ -25,6 +27,7 @@ export function resolveAppPaths(options: {
       limactl: join(options.resourcesPath, 'lima', 'bin', 'limactl'),
       limaTemplates: join(options.resourcesPath, 'lima-templates'),
       skillsExamples: join(options.resourcesPath, 'skills-examples'),
+      voiceModels: join(options.resourcesPath, 'voice'),
       userData: options.userData,
     };
   }
@@ -33,6 +36,7 @@ export function resolveAppPaths(options: {
     limactl: join(options.appPath, 'resources', 'lima', 'bin', 'limactl'),
     limaTemplates: join(options.appPath, '..', '..', 'lima'),
     skillsExamples: join(options.appPath, '..', '..', 'packages', 'skills', 'examples'),
+    voiceModels: join(options.appPath, 'resources', 'voice'),
     userData: options.userData,
   };
 }

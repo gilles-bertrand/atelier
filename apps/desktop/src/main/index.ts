@@ -1,6 +1,6 @@
 import { mkdir } from 'node:fs/promises';
 import { createRequire } from 'node:module';
-import { homedir } from 'node:os';
+import { homedir, totalmem } from 'node:os';
 import { dirname, join } from 'node:path';
 import {
   app,
@@ -29,6 +29,7 @@ import {
 import { loadMcpConfig, McpManager } from '@atelier/mcp-bridge';
 import { defaultLimaHome, fallbackLimaHome, LimaSandbox } from '@atelier/sandbox';
 import { installExampleSkills } from '@atelier/skills';
+import { VoiceModelManager, voiceModelsDir } from '@atelier/voice';
 import { broadcast } from './broadcast.js';
 import { handlePreviewRequest, PREVIEW_SCHEME } from './file-preview.js';
 import { createHandlers } from './handlers.js';
@@ -70,7 +71,14 @@ import { ScheduledRunner } from './schedule/scheduled-runner.js';
 import { TaskScheduler } from './schedule/task-scheduler.js';
 import { WorkspaceLease } from './schedule/workspace-lease.js';
 import { SecretsStore } from './settings/secrets-store.js';
-import { SettingsStore } from './settings/settings-store.js';
+import { SettingsStore, voiceSettingsOf } from './settings/settings-store.js';
+import {
+  chooseModelArchive,
+  installPermissionHandlers,
+  macMicrophone,
+  spawnVoiceWorker,
+} from './voice/electron-voice.js';
+import { VoiceService } from './voice/voice-service.js';
 
 /** Politique de sécurité du contenu stricte (brief §8). */
 const CONTENT_SECURITY_POLICY = [
@@ -258,9 +266,18 @@ function installContentSecurityPolicy(): void {
       },
     });
   });
-  // Aucune permission web (caméra, notifications, géolocalisation…) pour le renderer.
-  session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) => {
-    callback(false);
+}
+
+/**
+ * Permissions web (ADR-004 D8) : seul le micro, pour le cadre principal de la
+ * fenêtre, à l'URL de l'app ; tout le reste refusé. En dev comme en production :
+ * hors de `installContentSecurityPolicy`, qui ne s'applique pas en dev.
+ */
+function installWebPermissions(): void {
+  const devUrl = process.env['ELECTRON_RENDERER_URL'];
+  installPermissionHandlers(session.defaultSession, {
+    rendererFile: join(import.meta.dirname, '../renderer/index.html'),
+    ...(isDev && devUrl ? { devUrl } : {}),
   });
 }
 
@@ -565,6 +582,50 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
     handleArtifactRequest(request.url, artifactStore, libraries),
   );
 
+  // Voix locale (ADR-004) : modèles dans <userData>/models/voice, moteur en utilityProcess.
+  const voiceRef: { voice?: VoiceService } = {};
+  const voiceModels = new VoiceModelManager({
+    rootDir: voiceModelsDir(paths.userData),
+    bundledDir: paths.voiceModels,
+    onModelChange: (info) => {
+      voiceRef.voice?.modelChanged(info);
+    },
+  });
+  const voice = new VoiceService({
+    models: voiceModels,
+    spawnWorker: spawnVoiceWorker,
+    settings: () => voiceSettingsOf(settings.get()),
+    mic: macMicrophone,
+    chooseArchive: chooseModelArchive,
+    emit: broadcast,
+    log: (message, data) => {
+      log(message, data);
+    },
+  });
+  voiceRef.voice = voice;
+  try {
+    await voiceModels.init();
+  } catch (error) {
+    log('dossier des modèles de voix inaccessible', error);
+  }
+  void voice.preload(totalmem());
+  settings.onChange((next, previous) => {
+    voice.settingsChanged(voiceSettingsOf(next), voiceSettingsOf(previous));
+  });
+  // Mise en veille : la dictée en cours est abandonnée.
+  powerMonitor.on('suspend', () => {
+    voice.suspend();
+  });
+  // Fenêtre fermée, rechargée ou renderer tombé : sa session vocale est abandonnée.
+  app.on('web-contents-created', (_event, contents) => {
+    const gone = (): void => {
+      voice.senderGone(contents.id);
+    };
+    contents.on('destroyed', gone);
+    contents.on('render-process-gone', gone);
+    contents.on('did-navigate', gone);
+  });
+
   registerIpcHandlers(
     createHandlers({
       settings,
@@ -579,6 +640,7 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
       sandbox,
       mcp,
       home,
+      voice,
       health: () => health,
       onSecretChanged: (id) => {
         if (id !== 'llm_token') return;
@@ -619,6 +681,7 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
     shutdown: async () => {
       monitor.stop();
       scheduler.stop();
+      voice.shutdown();
       await chats.stopAll();
       await Promise.allSettled([mcp.stop(), sandbox.stop()]);
       store.close?.();
@@ -651,6 +714,7 @@ void app.whenReady().then(async () => {
   if (!primaryInstance) return;
   app.setName(APP_NAME);
   installContentSecurityPolicy();
+  installWebPermissions();
   ({ shutdown } = await bootstrap());
   // Ouverte à la connexion (tâches planifiées) : l'app tourne sans fenêtre ;
   // l'icône du Dock (`activate`) ou une notification l'affichent.

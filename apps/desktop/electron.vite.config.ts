@@ -15,11 +15,21 @@ const bundledWorkspacePackages = [
   '@atelier/mcp-bridge',
   '@atelier/web',
   '@atelier/documents',
+  '@atelier/voice',
 ];
 
 export default defineConfig({
   main: {
-    build: { externalizeDeps: { exclude: bundledWorkspacePackages } },
+    build: {
+      externalizeDeps: { exclude: bundledWorkspacePackages },
+      rollupOptions: {
+        input: {
+          index: resolve(import.meta.dirname, 'src/main/index.ts'),
+          // utilityProcess de reconnaissance (ADR-004 D2) : sherpa-onnx reste externe.
+          'voice-worker': resolve(import.meta.dirname, 'src/main/voice-worker.ts'),
+        },
+      },
+    },
   },
   preload: {
     build: {

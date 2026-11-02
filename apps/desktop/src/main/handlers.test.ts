@@ -277,3 +277,49 @@ describe('file:reveal : dossiers des runs planifiés', () => {
     expect(revealed[0]).toMatch(/rapport\.html$/);
   });
 });
+
+describe('canaux voice:*', () => {
+  const setup = () => {
+    const calls: { method: string; args: unknown[] }[] = [];
+    const record =
+      (method: string, result?: unknown) =>
+      (...args: unknown[]) => {
+        calls.push({ method, args });
+        return result;
+      };
+    const voice = {
+      start: record('start', Promise.resolve({ voiceSessionId: 'v1' })),
+      stop: record('stop', Promise.resolve({ text: 'Bonjour.' })),
+      cancel: record('cancel'),
+      audio: record('audio'),
+    };
+    const handlers = createHandlers({ voice } as unknown as HandlerServices);
+    return { handlers, calls };
+  };
+
+  it("transmet l'appelant (fenêtre, cadre) au service", async () => {
+    const { handlers, calls } = setup();
+    const caller = { senderId: 7, fromMainFrame: true };
+    const pcm = new Float32Array(1600);
+    expect(await handlers['voice:start']?.({ mode: 'dictation' }, caller)).toEqual({
+      voiceSessionId: 'v1',
+    });
+    await handlers['voice:audio']?.({ voiceSessionId: 'v1', seq: 0, pcm }, caller);
+    expect(await handlers['voice:stop']?.({ voiceSessionId: 'v1' }, caller)).toEqual({
+      text: 'Bonjour.',
+    });
+    await handlers['voice:cancel']?.({ voiceSessionId: 'v1' }, caller);
+    expect(calls).toEqual([
+      { method: 'start', args: [caller] },
+      { method: 'audio', args: [caller, 'v1', 0, pcm] },
+      { method: 'stop', args: [caller, 'v1'] },
+      { method: 'cancel', args: [caller, 'v1'] },
+    ]);
+  });
+
+  it('sans appelant connu, rien n’est accordé (cadre principal refusé par défaut)', async () => {
+    const { handlers, calls } = setup();
+    await handlers['voice:start']?.({ mode: 'dictation' });
+    expect(calls[0]?.args[0]).toEqual({ senderId: -1, fromMainFrame: false });
+  });
+});

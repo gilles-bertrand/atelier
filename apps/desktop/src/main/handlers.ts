@@ -11,7 +11,7 @@ import { parseMcpConfigText, type McpManager } from '@atelier/mcp-bridge';
 import { testConnection, type FetchFunction } from '@atelier/agent-core';
 import { loadSkills } from '@atelier/skills';
 import { AtelierError, type AppHealth, type SecretId } from '@atelier/shared';
-import type { IpcHandlers } from './ipc.js';
+import type { IpcCallContext, IpcHandlers } from './ipc.js';
 import type { ModelCatalog } from './llm/model-catalog.js';
 import type { ServerMonitor } from './llm/server-monitor.js';
 import type { ChatManager } from './runtime/chat-manager.js';
@@ -23,6 +23,7 @@ import type { TaskScheduler } from './schedule/task-scheduler.js';
 import type { UsageStore } from './runtime/usage-store.js';
 import type { SecretsStore } from './settings/secrets-store.js';
 import type { SettingsStore } from './settings/settings-store.js';
+import type { VoiceService } from './voice/voice-service.js';
 
 /** Opérations Electron utilisées par les gestionnaires (injectées). */
 export interface DesktopShell {
@@ -65,6 +66,8 @@ export interface HandlerServices {
   health?: () => AppHealth;
   /** `fetch` des appels de diagnostic (tests). */
   fetch?: FetchFunction;
+  /** Voix locale (ADR-004) ; absente : canaux `voice:*` non implémentés. */
+  voice?: VoiceService;
 }
 
 /** Origine normalisée d'une URL (`https://hote:port`), ou `undefined` si invalide. */
@@ -201,6 +204,7 @@ export function createHandlers(s: HandlerServices): IpcHandlers {
 
     // --- Projets et artefacts (ADR-003)
     ...(s.projects ? projectHandlers(s.projects) : {}),
+    ...(s.voice ? voiceHandlers(s.voice) : {}),
 
     // --- Agent
     'agent:send': ({ sessionId, text, attachments }) => s.chats.send(sessionId, text, attachments),
@@ -329,6 +333,50 @@ function projectHandlers(projects: ProjectService): IpcHandlers {
     'artifact:versions': ({ id }) => projects.artifactVersions(id),
     'artifact:delete': ({ id }) => {
       projects.deleteArtifact(id);
+      return undefined;
+    },
+  };
+}
+
+/**
+ * Canaux de la voix (ADR-004 §5). L'appelant (`context`) permet de refuser un
+ * sous-cadre et une autre fenêtre que celle de la session.
+ */
+function voiceHandlers(voice: VoiceService): IpcHandlers {
+  // Sans appelant connu, rien n'est accordé : ni micro, ni trames.
+  const caller = (context: IpcCallContext | undefined): IpcCallContext =>
+    context ?? { senderId: -1, fromMainFrame: false };
+  return {
+    'voice:status': () => voice.status(),
+    'voice:request-mic': () => voice.requestMic(),
+    'voice:open-mic-settings': async () => {
+      await voice.openMicSettings();
+      return undefined;
+    },
+    'voice:install-model': async ({ id }) => {
+      await voice.installModel(id);
+      return undefined;
+    },
+    'voice:cancel-install': ({ id }) => {
+      voice.cancelInstall(id);
+      return undefined;
+    },
+    'voice:remove-model': async ({ id }) => {
+      await voice.removeModel(id);
+      return undefined;
+    },
+    'voice:import-model': async ({ id }) => {
+      await voice.importModel(id);
+      return undefined;
+    },
+    'voice:start': (_request, context) => voice.start(caller(context)),
+    'voice:stop': ({ voiceSessionId }, context) => voice.stop(caller(context), voiceSessionId),
+    'voice:cancel': ({ voiceSessionId }, context) => {
+      voice.cancel(caller(context), voiceSessionId);
+      return undefined;
+    },
+    'voice:audio': ({ voiceSessionId, seq, pcm }, context) => {
+      voice.audio(caller(context), voiceSessionId, seq, pcm);
       return undefined;
     },
   };

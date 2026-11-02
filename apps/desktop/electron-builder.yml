@@ -24,11 +24,17 @@ extraResources:
   - from: ../../packages/skills/examples
     to: skills-examples
     filter: ['**/*']
+  # Détection de parole Silero (ADR-004 D4), téléchargée par scripts/fetch-voice-models.ts.
+  - from: resources/voice
+    to: voice
+    filter: ['*.onnx']
 asar: true
 # sharp charge des binaires natifs : hors de l'archive asar (voir packages/documents/README.md).
 asarUnpack:
   - '**/node_modules/sharp/**'
   - '**/node_modules/@img/**'
+  # sherpa-onnx (voix, ADR-004 D2) : module N-API et libonnxruntime.dylib, signés par electron-builder.
+  - '**/node_modules/sherpa-onnx-*/**'
 mac:
   target:
     - target: dmg
@@ -44,6 +50,9 @@ mac:
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
   notarize: true
+  # Dictée (ADR-004 D8) : texte de la demande d'accès au micro.
+  extendInfo:
+    NSMicrophoneUsageDescription: YodAI utilise le micro pour transcrire votre voix sur ce Mac. L'audio n'est ni envoyé ni conservé.
 dmg:
   artifactName: ${productName}-${version}-${arch}.${ext}
 npmRebuild: true
