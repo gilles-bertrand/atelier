@@ -2,7 +2,7 @@
   "name": "@atelier/voice",
   "version": "0.1.0",
   "private": true,
-  "description": "Voix locale (ADR-004) : catalogue et gestion des modèles, moteur de reconnaissance.",
+  "description": "Voix locale (ADR-004) : catalogue et gestion des modèles, moteur sherpa-onnx et pipeline de dictée.",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -14,6 +14,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@atelier/shared": "workspace:*"
+    "@atelier/shared": "workspace:*",
+    "sherpa-onnx-node": "2.0.1",
+    "zod": "^4.6.7"
   }
 }
