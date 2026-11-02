@@ -632,10 +632,12 @@ let quitting = false;
 // Une seule instance par dossier de données : une deuxième partagerait la VM
 // et l'arrêterait en quittant (`limactl stop`), en pleine session de la
 // première. Elle s'efface au profit de la fenêtre existante.
-// Renommage en YodAI : l'app packagée garde son dossier de données d'origine
-// (historique, VM, réglages), qui suivrait sinon le nouveau nom du produit.
+// Dossier de données (historique, réglages, secrets) : `Application Support/@atelier/desktop`,
+// tiré du `name` du package.json, en dev comme packagé. Épinglé pour que le
+// renommage en YodAI (`app.setName`) ne le déplace pas. Ce n'est PAS
+// `Application Support/Atelier`, qui ne contient que la VM (`lima/`).
 // Avant le verrou d'instance unique, qui vit dans ce dossier.
-if (app.isPackaged) app.setPath('userData', join(app.getPath('appData'), 'Atelier'));
+app.setPath('userData', join(app.getPath('appData'), '@atelier', 'desktop'));
 const primaryInstance = app.requestSingleInstanceLock();
 if (!primaryInstance) app.exit(0);
 
