@@ -35,6 +35,15 @@ import type {
 import type { AppSettings, AppSettingsPatch, SecretId, SecretsPresence } from './settings.js';
 import type { SkillInfo } from './skills.js';
 import type { UsagePeriod, UsageSummary } from './usage.js';
+import type {
+  MicAccess,
+  TranscriptSegment,
+  VoiceInputWarning,
+  VoiceMode,
+  VoiceModelInfo,
+  VoiceSessionState,
+  VoiceStatus,
+} from './voice.js';
 
 /** Résultat d'un appel IPC : jamais d'exception qui traverse le pont, toujours un résultat typé. */
 export type IpcResult<T> = { ok: true; value: T } | { ok: false; error: SerializedAtelierError };
@@ -213,6 +222,51 @@ export interface IpcInvokeContract {
   'artifact:versions': { request: { id: string }; response: ArtifactVersion[] };
   /** Retire l'artefact de l'app (versions comprises) ; le fichier source reste sur le disque. */
   'artifact:delete': { request: { id: string }; response: undefined };
+
+  // --- Voix (ADR-004, phase 1 : dictée)
+  'voice:status': { request: undefined; response: VoiceStatus };
+  /** Demande l'accès macOS au micro (sur une action de l'utilisateur seulement). */
+  'voice:request-mic': { request: undefined; response: MicAccess };
+  /** Ouvre Réglages Système › Confidentialité et sécurité › Micro. */
+  'voice:open-mic-settings': { request: undefined; response: undefined };
+  /**
+   * Télécharge un modèle du catalogue (source officielle ou miroir des Réglages),
+   * puis contrôle son SHA-256 épinglé dans l'app avant toute extraction. La
+   * progression arrive par `voice:model`.
+   */
+  'voice:install-model': { request: { id: string }; response: undefined };
+  'voice:cancel-install': { request: { id: string }; response: undefined };
+  'voice:remove-model': { request: { id: string }; response: undefined };
+  /**
+   * Importe l'archive d'un modèle du catalogue, hors ligne : le main ouvre le
+   * sélecteur de fichier, et l'archive passe par le même contrôle SHA-256 qu'un
+   * téléchargement (`voice/model_invalid` sinon).
+   */
+  'voice:import-model': { request: { id: string }; response: undefined };
+  /**
+   * Ouvre une session vocale ; `voice/busy` si une autre est en cours (une seule
+   * à la fois). La session démarre en `starting` et passe en `listening` à la
+   * première trame reçue.
+   */
+  'voice:start': {
+    request: { mode: VoiceMode; sessionId?: string };
+    response: { voiceSessionId: string };
+  };
+  /** Termine la session et rend le texte final (segments assemblés, typographie française). */
+  'voice:stop': { request: { voiceSessionId: string }; response: { text: string } };
+  /** Abandonne la session : rien n'est rendu, le texte dicté est retiré. */
+  'voice:cancel': { request: { voiceSessionId: string }; response: undefined };
+  /**
+   * Trame du micro : PCM mono, `VOICE_SAMPLE_RATE` Hz, `VOICE_FRAME_MS` ms. Le
+   * main la refuse hors d'une session active ou venue d'un autre cadre que le
+   * cadre principal ; `seq` (à partir de 0, +1 par trame) révèle une perte ou un
+   * désordre. Relais par le main mesuré en S1 : p95 sous 1 ms, d'où l'absence
+   * de `MessagePort`.
+   */
+  'voice:audio': {
+    request: { voiceSessionId: string; seq: number; pcm: Float32Array };
+    response: undefined;
+  };
 }
 
 /** Canal d'invocation. */
@@ -245,6 +299,18 @@ export interface IpcEventContract {
   'project:changed': { projectId: string };
   /** Artefact publié (nouvelle version) ou retiré (`deleted`). */
   'artifact:changed': { artifact: Artifact; deleted?: boolean };
+  /** État global de la voix (micro, moteur, modèles). */
+  'voice:status': VoiceStatus;
+  /** Modèle qui change d'état, progression du téléchargement comprise. */
+  'voice:model': VoiceModelInfo;
+  /** Segment transcrit (à chaque pause, puis final). */
+  'voice:transcript': TranscriptSegment;
+  /** État d'une session vocale, avec une alerte éventuelle sur l'entrée audio. */
+  'voice:state': {
+    voiceSessionId: string;
+    state: VoiceSessionState;
+    warning?: VoiceInputWarning;
+  };
 }
 
 /** Canal d'événement. */
@@ -308,6 +374,17 @@ export const IPC_INVOKE_CHANNELS = [
   'artifact:get',
   'artifact:versions',
   'artifact:delete',
+  'voice:status',
+  'voice:request-mic',
+  'voice:open-mic-settings',
+  'voice:install-model',
+  'voice:cancel-install',
+  'voice:remove-model',
+  'voice:import-model',
+  'voice:start',
+  'voice:stop',
+  'voice:cancel',
+  'voice:audio',
 ] as const satisfies readonly IpcInvokeChannel[];
 
 /** Liste exhaustive des canaux d'événements. */
@@ -321,6 +398,10 @@ export const IPC_EVENT_CHANNELS = [
   'app:open-session',
   'project:changed',
   'artifact:changed',
+  'voice:status',
+  'voice:model',
+  'voice:transcript',
+  'voice:state',
 ] as const satisfies readonly IpcEventChannel[];
 
 // Vérifications à la compilation : les listes couvrent exactement les contrats.

@@ -395,6 +395,13 @@ export interface VoiceSettings {
 - **Événements** : `voice:status`, `voice:model` (`VoiceModelInfo`, progression comprise), `voice:transcript` (`TranscriptSegment`), `voice:state` (`{ voiceSessionId, state }`).
 - **Preload** : inchangé. Les canaux `voice:*` passent par `invoke` et `on`, comme les autres ; le contrat ne contient aucun `MessagePort`.
 - **Codes d'erreur** : `voice/mic_denied`, `voice/no_input`, `voice/model_missing`, `voice/model_invalid`, `voice/download_failed`, `voice/engine_failed`, `voice/busy`.
+- **Écarts de L0** (PR `feat/lead-shared-voice`, d'après les mesures de S1) :
+  - `VoiceSessionState` gagne `starting` : micro en cours d'ouverture, aucune trame reçue. Le main passe la session en `listening` à la première trame ; l'interface n'invite à parler qu'à ce moment (début de prise perdu, S1).
+  - `voice:state` porte `warning?: 'silent_input'` : trames nulles depuis `VOICE_SILENT_INPUT_MS` (micro muet sans signal, S1).
+  - `VoiceSettings.glossary?` : noms propres et marques à mieux reconnaître (hotwords sherpa-onnx, L2).
+  - Constantes : `VOICE_SAMPLE_RATE`, `VOICE_FRAME_MS`, `VOICE_FRAME_SAMPLES`, `VOICE_PRE_ROLL_MS` (300 ms gardés avant chaque segment), `VOICE_SILENT_INPUT_MS`, `MAX_DICTATION_MS`, `DEFAULT_STT_MODEL`, `DEFAULT_VOICE_SETTINGS`.
+  - `validateVoiceSettings` (fonction pure, messages en français) : modèle, délai de déchargement, miroir (règle de `checkServerUrl`), glossaire.
+  - Le contrôle SHA-256 s'applique avant toute extraction et tout chargement, pour un téléchargement comme pour un import (`voice:install-model`, `voice:import-model`) : c'est écrit dans le contrat des canaux, et L1 le teste.
 - **Phase 2** (L6) : `agent:send` gagne `inputMode?: 'dictation' | 'voice'`, et `ChatMessage.inputMode?` permet d'afficher une icône dans le fil. Nouvel événement `voice:audio-out` (`{ voiceSessionId, seq, sampleRate, pcm: Float32Array }`) pour la voix de l'agent. Aucun `switch` exhaustif à compléter.
 
 ## 6. Répartition (tickets #25 à #39)

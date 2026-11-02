@@ -6,6 +6,7 @@
 import type { LlmServerConfig } from './llm.js';
 import type { SandboxResources } from './sandbox.js';
 import type { SearchProviderId } from './search.js';
+import type { VoiceSettings } from './voice.js';
 
 /** Identifiants des secrets stockés via `safeStorage`. */
 export type SecretId = 'llm_token' | 'ollama_search_key' | 'brave_search_key';
@@ -42,6 +43,8 @@ export interface AppSettings {
    * planifiées tournent (ADR-002). Absent = `false`.
    */
   openAtLogin?: boolean;
+  /** Voix locale (ADR-004). Absent = `DEFAULT_VOICE_SETTINGS` (voix désactivée). */
+  voice?: VoiceSettings;
 }
 
 /** Modification partielle (profonde au premier niveau) des réglages. */

@@ -28,6 +28,17 @@ const MESSAGES: Record<AtelierErrorCode, string> = {
   'project/conflict':
     'La mémoire du projet a changé entre-temps (l’assistant y a peut-être écrit). Rechargez-la avant d’enregistrer.',
   'artifact/not_found': 'Cet artefact n’existe plus.',
+  'voice/mic_denied':
+    'Atelier n’a pas accès au micro. Autorisez-le dans Réglages Système › Confidentialité et sécurité › Micro.',
+  'voice/no_input':
+    'Aucun son ne parvient du micro. Vérifiez qu’il est branché et qu’il n’est pas coupé.',
+  'voice/model_missing':
+    'La dictée a besoin du modèle de reconnaissance : téléchargez-le dans Réglages › Voix.',
+  'voice/model_invalid':
+    'Le modèle de reconnaissance est endommagé ou ne correspond pas à celui attendu. Téléchargez-le à nouveau.',
+  'voice/download_failed': 'Le téléchargement du modèle a échoué. Réessayez plus tard.',
+  'voice/engine_failed': 'La reconnaissance vocale s’est arrêtée. Réessayez.',
+  'voice/busy': 'Une dictée est déjà en cours.',
   'tool/not_found': 'Action inconnue.',
   'tool/invalid_input': 'Paramètres d’action invalides.',
   'tool/path_outside_workspace': 'Ce fichier est en dehors du dossier de travail.',
