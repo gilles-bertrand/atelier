@@ -302,6 +302,12 @@ importers:
         specifier: ^3.10.2
         version: 3.10.2
 
+  packages/voice:
+    dependencies:
+      '@atelier/shared':
+        specifier: workspace:*
+        version: link:../shared
+
   packages/web:
     dependencies:
       '@atelier/shared':
