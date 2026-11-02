@@ -270,14 +270,25 @@ test('tableau de bord hebdo : projet, artefact, mémoire, tâche et lecture seul
     await (await sidebar(page)).getByRole('button', { name: 'Ventes', exact: true }).click();
     await projectPage(page);
     await page.getByRole('tab', { name: 'Artefacts' }).click();
-    const cards = page.getByRole('button', { name: /Ouvrir l’artefact/ });
+    // La liste et le sélecteur de versions se chargent après le clic, et `count()` n'attend
+    // pas : le rejeu du 02/11 a compté 0 vignette alors que la page en affichait une.
+    // On attend donc le premier élément, sans faire échouer l'étape s'il n'arrive pas.
+    const cards = page
+      .getByRole('list', { name: 'Artefacts du projet' })
+      .getByRole('button', { name: /Ouvrir l’artefact/ });
+    await cards
+      .first()
+      .waitFor({ timeout: 15_000 })
+      .catch(() => undefined);
     if ((await cards.count()) > 0) {
       found.artifactCards = (await cards.allInnerTexts()).map((t) => t.replace(/\s+/g, ' '));
       await cards.first().click();
-      found.versions = await page
-        .getByRole('combobox', { name: 'Version affichée' })
-        .getByRole('option')
-        .count();
+      const versions = page.getByRole('combobox', { name: 'Version affichée' }).getByRole('option');
+      await versions
+        .first()
+        .waitFor({ state: 'attached', timeout: 15_000 })
+        .catch(() => undefined);
+      found.versions = await versions.count();
       await page.screenshot({ path: testInfo.outputPath('artefact.png') });
     }
 
