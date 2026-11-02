@@ -99,6 +99,19 @@ Les chiffres portent sur FLEURS en français (lecture, parole propre). Ils sont 
 | Voxtral Mini 4B Realtime (Mistral)  | 4 B        | 6,42 % à 480 ms         | streaming natif                   | environ 9 Go en BF16                                           | Apache 2.0              | non (vLLM)                       | Serveur, phase 3                                                                   |
 | Nemotron 3.5 ASR streaming (NVIDIA) | 0,6 B      | 9,0 à 11,0 %            | streaming natif                   | environ 0,5 Go                                                 | OpenMDW-1.1             | int8, 453 Mio                    | Écarté : précision en français                                                     |
 
+**Mesures de S1 (#25, 02/11/2026, M4 Max 64 Go, sherpa-onnx-node 2.0.1, CPU 2 threads, int8).** Elles confirment le choix de Parakeet.
+
+| Modèle                   | WER FLEURS (10 phrases) | WER, voix de Gilles (10 phrases métier, micro du Mac) | Décodage de 15 s | Pic mémoire (Node) |
+| ------------------------ | ----------------------- | ----------------------------------------------------- | ---------------- | ------------------ |
+| **Parakeet TDT 0.6B v3** | **2,5 %**               | **13,2 %** (19,4 % avec les débuts de prise coupés)   | **300 à 470 ms** | 2,3 Go             |
+| Qwen3-ASR 0.6B           | 8,9 %                   | 25,0 % (26,5 %)                                       | environ 1,9 s    | 4,0 Go             |
+
+- **Qwen3-ASR 0.6B est écarté** : moins précis, environ 3 fois plus lent, et il invente parfois du texte (« 嗯 » sur un « euh », « en Irlande » pour « en néerlandais »).
+- **CoreML est écarté** : pas plus rapide que le CPU (RTF 0,047 contre 0,031), même charge CPU, et pic RSS de 5,4 Go. Le provider reste `cpu`.
+- **Erreurs restantes** : surtout les noms propres et les marques (Ollama, Qwen, Triptyk, Gembloux, Nox Law). Les hotwords de sherpa-onnx ou un glossaire de l'utilisateur sont à prévoir en L2.
+- **Début de prise perdu** : 0,55 à 0,98 s s'écoulent entre le clic et la première trame audio (getUserMedia, AudioContext, worklet). C'est la première cause d'erreur sur la voix de Gilles. La dictée doit ouvrir le micro avant de signaler qu'elle écoute. Garder environ 0,3 s d'audio avant chaque segment du VAD récupère aussi les attaques coupées.
+- **Micro muet** : une prise a reçu des trames entièrement nulles pendant 10 min, sans que rien ne le signale. La capture surveille `mute` et `ended` sur la piste, ainsi que les trames nulles, et prévient l'utilisateur.
+
 **Pourquoi pas un modèle en streaming pour la dictée ?** Parakeet transcrit chaque segment découpé par le détecteur de parole en quelques centaines de millisecondes. Le texte apparaît donc à chaque pause, sans la perte de précision des modèles en streaming (9 à 11 % pour Nemotron, 6,4 % pour Voxtral à 480 ms).
 
 ### 3.4 Budget mémoire (60 Go)
@@ -110,9 +123,15 @@ Les chiffres portent sur FLEURS en français (lecture, parole propre). Ils sont 
 | VM Lima                                                                      | 4 Gio               | 4 Gio             | réglage par défaut                                                         |
 | Atelier (main et renderer)                                                   | environ 1 Go        | environ 1,5 Go    | estimation                                                                 |
 | **Sous-total sans la voix**                                                  | **environ 36 Go**   | **environ 54 Go** |                                                                            |
-| Voix, profil recommandé (Silero, Parakeet v3 int8, synthèse d'environ 100 M) | 1 à 1,5 Go          | environ 2 Go      | estimation, mesurée en S1                                                  |
+| Voix, profil recommandé (Silero, Parakeet v3 int8, synthèse d'environ 100 M) | 1 à 1,5 Go          | environ 2 Go      | reconnaissance mesurée en S1 (voir ci-dessous) ; synthèse estimée          |
 | **Total**                                                                    | **environ 37,5 Go** | **environ 56 Go** | sous les 60 Go                                                             |
 
+- **Mesures de S1 pour la reconnaissance** (`utilityProcess` de l'app ad hoc) :
+  - empreinte physique du worker : 1,28 Go ; RSS de 1,30 Go une fois chargé, puis de 1,37 à 1,50 Go après 10 prises. Il gagne 30 à 100 Mo par session, d'où le déchargement après inactivité (D5) ;
+  - lancement du processus : 70 à 180 ms ; chargement des modèles : 750 à 1 030 ms ;
+  - qwen3.5:35b pendant la dictée : aucune perte de débit au rythme de la parole (111,7 tok/s contre 111,6 seul), −2,4 % en décodage continu ;
+  - relais renderer → main → worker : p95 de 0,4 à 0,7 ms, au repos comme pendant un tour de l'agent, sans trame perdue. Le relais par le main suffit, `MessagePort` reste une optimisation. L'horodatage aller simple souffre d'un décalage d'horloge entre processus qui a atteint 12 ms ; L0 mesurera en aller-retour.
+- **Non mesuré en S1** : pas de Mac de 16 Go disponible.
 - **Profil « qualité »** (Qwen3-ASR 1.7B et Qwen3-TTS 1.7B via MLX) : 6 à 7 Go de plus, soit un pic au-delà de 60 Go. Ces modèles tournent en plus sur le GPU et ralentissent le LLM. Leur place est sur le serveur (option D).
 - **Gros modèles** (Voxtral Small 24B, Nemotron 3.5 Transcribe 30B-A4B ; 48 à 60 Go en BF16) : ils ne tiennent qu'en déchargeant le modèle de l'agent. Écartés sur le Mac ; ils restent candidats côté serveur pour transcrire de longs enregistrements (§11).
 - **Mac client de 16 Go** (LLM sur le serveur) : le profil recommandé tient, avec environ 2 Go.
