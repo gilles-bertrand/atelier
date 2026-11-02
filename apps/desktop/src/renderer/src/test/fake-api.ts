@@ -3,6 +3,7 @@
  * journal des appels et émission d'événements du main.
  */
 import { act } from '@testing-library/react';
+import { DEFAULT_VOICE_SETTINGS } from '@atelier/shared';
 import type {
   AppSettings,
   AtelierApi,
@@ -51,12 +52,16 @@ export function installFakeApi(handlers: FakeHandlers = {}): FakeApi {
   const base: FakeHandlers = {
     'settings:get': () => settings,
     'settings:update': (patch) => {
+      const { voice, ...rest } = patch;
       settings = {
         ...settings,
-        ...patch,
+        ...rest,
         llm: { ...settings.llm, ...patch.llm },
         sandbox: { ...settings.sandbox, ...patch.sandbox },
         search: { ...settings.search, ...patch.search },
+        ...(voice !== undefined
+          ? { voice: { ...DEFAULT_VOICE_SETTINGS, ...settings.voice, ...voice } }
+          : {}),
       };
       return settings;
     },
