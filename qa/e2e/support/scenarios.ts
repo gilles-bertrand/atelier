@@ -317,6 +317,19 @@ export const projectTaskScenario: MockScenario = {
   ],
 };
 
+/**
+ * Dictée (ADR-004 L5, #31) : phrase « reconnue » par le faux moteur de voix,
+ * envoyée telle quelle. Le faux modèle répond sans outil.
+ */
+export const VOICE_PROMPT = 'Résume en trois points les ventes de Bruxelles du premier semestre.';
+export const VOICE_REPLY = 'Voici les trois points demandés sur les ventes de Bruxelles.';
+
+export const voiceScenario: MockScenario = {
+  name: 'dictée',
+  match: (t) => t === VOICE_PROMPT,
+  steps: [{ text: VOICE_REPLY }],
+};
+
 export const ALL_SCENARIOS: MockScenario[] = [
   excelScenario,
   nodeScenario,
@@ -328,4 +341,5 @@ export const ALL_SCENARIOS: MockScenario[] = [
   projectScenario,
   projectFollowupScenario,
   projectTaskScenario,
+  voiceScenario,
 ];

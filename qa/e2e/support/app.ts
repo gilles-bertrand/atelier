@@ -53,6 +53,12 @@ export interface LaunchOptions {
    * relance sur le même `userData` et le même dossier de travail (réouverture).
    */
   root?: string;
+  /** Arguments ajoutés à la ligne de commande (ex. faux micro de Chromium, e2e de la voix). */
+  extraArgs?: string[];
+  /** Réglages ajoutés à `settings.json` (ex. `voice`). */
+  extraSettings?: Record<string, unknown>;
+  /** Variables d'environnement ajoutées pour le process de l'app. */
+  extraEnv?: Record<string, string>;
 }
 
 export interface AtelierApp {
@@ -97,6 +103,7 @@ export async function launchAtelier(options: LaunchOptions): Promise<AtelierApp>
           projectsDir: join(root, 'Projets'),
           onboardingCompleted: true,
           privacyAcceptedAt: new Date().toISOString(),
+          ...options.extraSettings,
         },
         null,
         2,
@@ -120,7 +127,11 @@ export async function launchAtelier(options: LaunchOptions): Promise<AtelierApp>
     // Mock : on lance le script main directement (`app.getAppPath()` vaut alors
     // `out/main`, où `limactl` n'existe pas).
     // Réel : l'app du dépôt (ou l'app packagée, ATELIER_E2E_EXECUTABLE).
-    args: [...(executable ? [] : [IS_REAL ? DESKTOP_DIR : main]), `--user-data-dir=${userData}`],
+    args: [
+      ...(executable ? [] : [IS_REAL ? DESKTOP_DIR : main]),
+      `--user-data-dir=${userData}`,
+      ...(options.extraArgs ?? []),
+    ],
     ...(executable ? { executablePath: executable } : {}),
     cwd: DESKTOP_DIR,
     env: {
@@ -128,6 +139,7 @@ export async function launchAtelier(options: LaunchOptions): Promise<AtelierApp>
       NODE_ENV: 'production',
       ELECTRON_RENDERER_URL: '',
       ...(IS_REAL ? { ATELIER_VM_INSTANCE: E2E_VM_INSTANCE } : {}),
+      ...options.extraEnv,
     },
     timeout: 60_000,
   });

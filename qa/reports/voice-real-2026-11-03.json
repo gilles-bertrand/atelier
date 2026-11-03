@@ -1,0 +1,213 @@
+{
+  "date": "2026-11-03T15:02:58.393Z",
+  "archive": "/Users/gilles/.cache/atelier-voice-spike/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8.tar.bz2",
+  "importMs": 40274,
+  "unloadedAfterMs": 60050,
+  "werPercent": 17.27,
+  "werFleursPercent": 2.97,
+  "werGillesPercent": 36.57,
+  "maxFinalMs": 61,
+  "maxWorkerRssMiB": 1430,
+  "phrases": [
+    {
+      "id": "fleurs-1560",
+      "speechMs": 9360,
+      "ref": "Dès que vous sortez du courant, le retour à la nage n'est pas plus difficile que d'habitude.",
+      "hyp": "Dès que vous sortez du courant, le retour à la nage n'est pas plus difficile que d'habitude.",
+      "errors": 0,
+      "words": 19,
+      "finalMs": 60,
+      "workerRssMiB": 1346
+    },
+    {
+      "id": "fleurs-1651",
+      "speechMs": 8220,
+      "ref": "Ceux qui prévoient une année sabbatique ont la possibilité d'apprendre en voyageant, et de plus en plus d'entre eux choisissent cette possibilité.",
+      "hyp": "Ceux qui prévoient une année sabbatique ont la possibilité d'apprendre en voyageant et de plus en plus d'entre eux choisissent cette possibilité.",
+      "errors": 0,
+      "words": 24,
+      "finalMs": 54,
+      "workerRssMiB": 1365
+    },
+    {
+      "id": "fleurs-1599",
+      "speechMs": 8340,
+      "ref": "La population d'origine n'a pas changé du tout, elle a toujours besoin des mêmes adaptations.",
+      "hyp": "La population d'origine n'a pas changé du tout, elle a toujours besoin des mêmes adaptations.",
+      "errors": 0,
+      "words": 17,
+      "finalMs": 54,
+      "workerRssMiB": 1350
+    },
+    {
+      "id": "fleurs-1589",
+      "speechMs": 9780,
+      "ref": "Les critères qui déterminent une sous-culture comme distincte peuvent être linguistiques, esthétiques, religieux, politiques, sexuels, géographiques ou une combinaison de facteurs.",
+      "hyp": "Les critères qui déterminent une sous-culture comme distincte peuvent être linguistiques, esthétiques, religieux, politiques, sexuels, géographiques ou une combinaison de facteurs.",
+      "errors": 0,
+      "words": 22,
+      "finalMs": 60,
+      "workerRssMiB": 1379
+    },
+    {
+      "id": "fleurs-1615",
+      "speechMs": 12120,
+      "ref": "Il y a quelques milliers d’années, un homme appelé Aristarque a affirmé que le système solaire se déplaçait autour du Soleil.",
+      "hyp": "Il y a quelques milliers d'années, un homme appelé Aristarque a affirmé que le système solaire se déplaçait autour du Soleil.",
+      "errors": 0,
+      "words": 22,
+      "finalMs": 51,
+      "workerRssMiB": 1366
+    },
+    {
+      "id": "fleurs-1596",
+      "speechMs": 11580,
+      "ref": "Les naturalistes et les philosophes se sont concentrés sur les textes anciens, et en particulier sur la Bible en latin.",
+      "hyp": "Les naturalistes et les philosophes se sont concentrés sur les textes anciens, et en particulier sur la Bible en latin.",
+      "errors": 0,
+      "words": 20,
+      "finalMs": 57,
+      "workerRssMiB": 1353
+    },
+    {
+      "id": "fleurs-1543",
+      "speechMs": 8760,
+      "ref": "Le patient s'était rendu au Nigeria, où certains cas de virus Ebola se sont produits.",
+      "hyp": "Le patient s'était rendu au Nigeria, où certains cas de virus Ebola se sont produits.",
+      "errors": 0,
+      "words": 16,
+      "finalMs": 54,
+      "workerRssMiB": 1351
+    },
+    {
+      "id": "fleurs-1620",
+      "speechMs": 15360,
+      "ref": "Maintenant, largement disponible dans tout l’archipel, la cuisine javanaise propose un éventail de plats simplement assaisonnés, les saveurs prédominantes que les Javanais privilégient étant les cacahuètes, les piments, le sucre (en particulier le sucre de coco javanais) et diverses épices aromatiques.",
+      "hyp": "Maintenant, largement disponible dans tout l'archipel, la cuisine javanaise propose un éventail de pas simplement assaisonné, des saveurs prédominantes que le javanais privilégie étant les cacahuètes, les piments, le sucre, en particulier les sucres de coco javanais et diverses épices aromatiques.",
+      "errors": 7,
+      "words": 42,
+      "finalMs": 52,
+      "workerRssMiB": 1430
+    },
+    {
+      "id": "fleurs-1535",
+      "speechMs": 14460,
+      "ref": "Il repose sur les technologies satellitaires, et non sur les systèmes radars au sol utilisés auparavant, ce qui permet aux contrôleurs aériens de localiser les avions avec davantage de précision et de fournir aux pilotes des informations plus détaillées.",
+      "hyp": "Il repose sur les technologies satellitaires et non sur les systèmes radars au sol utilisés auparavant, ce qui permet aux contrôleurs aériens de localiser les avions avec davantage de précision et de fournir aux pilotes des informations plus détaillées.",
+      "errors": 0,
+      "words": 39,
+      "finalMs": 59,
+      "workerRssMiB": 1412
+    },
+    {
+      "id": "fleurs-1607",
+      "speechMs": 8880,
+      "ref": "Cela vaut la peine de se promener pendant une demi-heure dans ce village fascinant.",
+      "hyp": "Cela vaut la peine de se promener pendant une demi-heure dans ce village fascinant.",
+      "errors": 0,
+      "words": 15,
+      "finalMs": 52,
+      "workerRssMiB": 1340
+    },
+    {
+      "id": "gilles-01",
+      "speechMs": 33100,
+      "ref": "Peux-tu relire la pull request 133 et vérifier que la CI passe sur le runner macOS avant le merge ?",
+      "hyp": "Relire la pull request cent trente-trois et vérifier que le CI passe sur le Rener macOS avant le meurtre. Yeah. Yeah. Le serveur Olama fait tourner Quen trois point cinq derrière Cadi sur la machine de triptyque.",
+      "errors": 26,
+      "words": 20,
+      "finalMs": 52,
+      "workerRssMiB": 1372
+    },
+    {
+      "id": "gilles-02",
+      "speechMs": 6100,
+      "ref": "Lance la VM Lima, puis installe les dépendances avec pnpm dans le dossier Atelier.",
+      "hyp": "Puis installe les dépendances avec PNPM dans le dossier atelier.",
+      "errors": 4,
+      "words": 14,
+      "finalMs": 53,
+      "workerRssMiB": 1356
+    },
+    {
+      "id": "gilles-03",
+      "speechMs": 8000,
+      "ref": "Le serveur Ollama fait tourner Qwen 3.5 derrière Caddy, sur la machine de Triptyk.",
+      "hyp": "Oh lama fait tourner Quan trois point cinq derrière Cadi sur la machine de tripty.",
+      "errors": 9,
+      "words": 15,
+      "finalMs": 47,
+      "workerRssMiB": 1357
+    },
+    {
+      "id": "gilles-04",
+      "speechMs": 13000,
+      "ref": "Prépare une offre pour la commune de Gembloux : refonte du site, hébergement souverain et maintenance annuelle.",
+      "hyp": "une offre pour la commune de Jean Bloud. refondre du site. Hébergement. Souverin et maintenance annuelle.",
+      "errors": 5,
+      "words": 16,
+      "finalMs": 50,
+      "workerRssMiB": 1348
+    },
+    {
+      "id": "gilles-05",
+      "speechMs": 7700,
+      "ref": "Envoie à Nox Law Firm le rapport d'analyse de la cible, avec le score sur cent et la fiche du comité.",
+      "hyp": "Un oxlawform le rapport d'analyse de la cible avec le score sur son et la fiche du comité.",
+      "errors": 6,
+      "words": 22,
+      "finalMs": 44,
+      "workerRssMiB": 1365
+    },
+    {
+      "id": "gilles-06",
+      "speechMs": 10100,
+      "ref": "Classe les factures Visa d'octobre dans le dossier Factures, puis rapproche-les du relevé PDF.",
+      "hyp": "Les factures, visa d'octobre ou dans le dossier factures, puis rapproche-les du relevé PDF.",
+      "errors": 2,
+      "words": 16,
+      "finalMs": 51,
+      "workerRssMiB": 1377
+    },
+    {
+      "id": "gilles-07",
+      "speechMs": 10100,
+      "ref": "Ajoute un connecteur MCP vers Microsoft 365 pour lire les mails Outlook et l'agenda Teams.",
+      "hyp": "Un connecteur MCP vers Microsoft trois cent soixante-cinq pour lire les mails Outlook et l'agenda Teams",
+      "errors": 5,
+      "words": 16,
+      "finalMs": 49,
+      "workerRssMiB": 1387
+    },
+    {
+      "id": "gilles-08",
+      "speechMs": 10600,
+      "ref": "Le client de Louvain-la-Neuve veut une démo d'Atelier jeudi après-midi, en néerlandais si possible.",
+      "hyp": "Le client de Louvan veut une démo d'atelier jeudi après-midi. en Irlandais, si possible.",
+      "errors": 4,
+      "words": 18,
+      "finalMs": 49,
+      "workerRssMiB": 1362
+    },
+    {
+      "id": "gilles-09",
+      "speechMs": 10000,
+      "ref": "Crée un ticket dans le backlog : le build ad hoc plante au lancement parce que sharp n'est pas embarqué.",
+      "hyp": "Créer un ticket dans le backlog, le build ad hoc, plante au lancement, parce que chap n'est pas embarqué.",
+      "errors": 2,
+      "words": 20,
+      "finalMs": 43,
+      "workerRssMiB": 1367
+    },
+    {
+      "id": "gilles-10",
+      "speechMs": 9500,
+      "ref": "Résume la réunion de ce matin et liste les actions, les responsables et les échéances dans mon journal.",
+      "hyp": "La réunion de ce matin et liste les actions. les responsables et les échéances dans mon journal.",
+      "errors": 1,
+      "words": 18,
+      "finalMs": 61,
+      "workerRssMiB": 1347
+    }
+  ]
+}
