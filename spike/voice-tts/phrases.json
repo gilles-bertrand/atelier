@@ -1,0 +1,21 @@
+{
+  "fr": [
+    "Bonjour Gilles ! Que puis-je faire pour toi aujourd'hui ?",
+    "Je lis le fichier ventes point CSV.",
+    "J'ai lu le fichier des ventes de mars. Le chiffre d'affaires atteint quarante-deux mille trois cents euros, en hausse de huit pour cent.",
+    "C'est fait. J'ai créé le dossier Factures deux mille vingt-six et j'y ai rangé les douze PDF.",
+    "Tu as trois réunions demain : à neuf heures avec Nox, à quatorze heures trente avec l'équipe produit, et à dix-sept heures un appel avec Liège.",
+    "Je n'ai pas trouvé de contrat signé dans ce dossier. Veux-tu que je cherche aussi dans les courriels archivés ?",
+    "Pour continuer, j'ai besoin de ton autorisation. Réponds à l'écran, s'il te plaît.",
+    "Le rapport fait vingt pages, je l'ai enregistré dans le fichier synthèse. En bref, le projet est dans les temps, mais le budget dépasse de cinq pour cent.",
+    "D'après la météo, il fera onze degrés à Bruxelles cet après-midi, avec des averses vers seize heures.",
+    "J'ai lancé le script Python dans la machine virtuelle. Les tests passent, sauf un : la connexion à la base PostgreSQL échoue."
+  ],
+  "nl": [
+    "Goedemorgen Gilles! Waarmee kan ik je vandaag helpen?",
+    "Ik heb het bestand met de verkoopcijfers van maart gelezen. De omzet bedraagt tweeënveertigduizend euro.",
+    "Je hebt morgen drie vergaderingen, de eerste om negen uur in Gent.",
+    "Ik heb je toestemming nodig. Antwoord op het scherm, alsjeblieft.",
+    "Het rapport is klaar en staat in de map Facturen."
+  ]
+}
