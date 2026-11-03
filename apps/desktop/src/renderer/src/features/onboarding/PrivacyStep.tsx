@@ -59,6 +59,11 @@ export function PrivacyStep({ onBack, onDone }: { onBack: () => void; onDone: ()
             Quand l’assistant cherche sur internet, la question part vers le moteur de recherche
             choisi dans les Réglages.
           </p>
+          <p className="text-muted-foreground">
+            La dictée (bouton micro) transcrit votre voix sur ce Mac : l’audio n’est ni envoyé ni
+            conservé, seul le texte part au serveur, comme un message tapé. Le micro ne s’ouvre que
+            quand vous le demandez.
+          </p>
         </div>
       </div>
 

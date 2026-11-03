@@ -71,6 +71,10 @@ describe('onboarding', () => {
     // 3. Confidentialité
     await screen.findByRole('heading', { name: 'Où vont vos données' });
     expect(screen.getAllByText(/llm\.exemple\.fr/).length).toBeGreaterThan(0);
+    // Dictée (ADR-004 D9) : la voix reste sur le Mac.
+    expect(
+      screen.getByText(/La dictée \(bouton micro\) transcrit votre voix sur ce Mac/),
+    ).toBeInTheDocument();
     const next = screen.getByRole('button', { name: 'Continuer' });
     expect(next).toBeDisabled();
     await user.click(screen.getByRole('checkbox'));
