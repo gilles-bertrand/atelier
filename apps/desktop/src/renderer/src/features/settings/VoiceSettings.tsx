@@ -24,6 +24,7 @@ import { cn } from '@renderer/lib/utils';
 import { dictationBlocker, isMicBlocked, modelStateLabel } from '@renderer/lib/voice';
 import { useApp } from '@renderer/state/app-state';
 import { listMicrophones } from '../voice/capture';
+import { SLOW_MIC_START_MS, SLOW_MIC_START_TEXT } from '../voice/ComposerDictation';
 import { useDictation } from '../voice/useDictation';
 import { useVoiceStatus } from '../voice/useVoiceStatus';
 import { LevelMeter, MicDeniedAlert, ModelProgress, voiceErrorText } from '../voice/VoiceParts';
@@ -279,6 +280,9 @@ function MicTest({ deviceId, onTested }: { deviceId: string | undefined; onTeste
       error.code !== 'voice/model_missing' &&
       error.code !== 'voice/model_invalid' ? (
         <Alert tone="error">{voiceErrorText(error)}</Alert>
+      ) : null}
+      {phase === 'starting' && dictation.elapsedMs >= SLOW_MIC_START_MS ? (
+        <Alert tone="info">{SLOW_MIC_START_TEXT}</Alert>
       ) : null}
       {dictation.warning === 'silent_input' && active ? (
         <Alert tone="warning">

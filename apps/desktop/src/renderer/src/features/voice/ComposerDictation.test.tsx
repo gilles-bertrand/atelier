@@ -225,6 +225,24 @@ describe('Dictée dans le Composer', () => {
     expect(s.enable).toHaveBeenCalledTimes(1);
   });
 
+  it('invite à répondre à macOS quand le micro tarde à s’ouvrir', async () => {
+    const s = setup();
+    const now = Date.now();
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(now);
+    try {
+      await startDictation(s);
+      expect(screen.queryByText(/Si macOS demande l’accès au micro/)).toBeNull();
+      clock.mockReturnValue(now + 3_500);
+      expect(
+        await screen.findByText(/Si macOS demande l’accès au micro/, {}, { timeout: 2_000 }),
+      ).toBeInTheDocument();
+      listening(s.api);
+      expect(screen.queryByText(/Si macOS demande l’accès au micro/)).toBeNull();
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
   it('signale un micro muet (alerte silent_input)', async () => {
     const s = setup();
     await startDictation(s);

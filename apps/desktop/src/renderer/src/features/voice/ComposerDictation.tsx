@@ -39,6 +39,11 @@ export interface ComposerVoice {
 
 type Panel = 'mic_denied' | 'model' | undefined;
 
+/** Micro toujours fermé après ce délai : la demande d'accès de macOS attend peut-être. */
+export const SLOW_MIC_START_MS = 3_000;
+export const SLOW_MIC_START_TEXT =
+  'Le micro ne s’est pas encore ouvert. Si macOS demande l’accès au micro, répondez à sa fenêtre (elle peut être derrière YodAI).';
+
 const PHASE_ANNOUNCEMENTS: Record<Exclude<DictationPhase, 'idle'>, string> = {
   opening: 'Préparation de la dictée…',
   starting: 'Ouverture du micro…',
@@ -297,6 +302,10 @@ export function useComposerDictation({
         </span>
       </Alert>
     );
+  } else if (phase === 'starting' && dictation.elapsedMs >= SLOW_MIC_START_MS) {
+    // Vu dans l'app packagée : `getUserMedia` attend la réponse à la demande
+    // d'accès de macOS, parfois cachée derrière les fenêtres.
+    content = <Alert tone="info">{SLOW_MIC_START_TEXT}</Alert>;
   } else if (dictation.warning === 'silent_input' && listening) {
     content = (
       <Alert tone="warning">

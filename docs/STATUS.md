@@ -153,6 +153,14 @@ _Dernière mise à jour : 2026-10-29, Lead._
   - Erreurs en français : micro refusé (bouton vers Réglages Système › Micro), aucun micro, micro muet (`silent_input`), modèle absent ou corrompu (la carte revient), moteur arrêté.
   - Réglages › Voix : activer ; accès au micro ; choix du micro et test de 5 s (vu-mètre, transcription) ; modèles (état, tailles, licence, télécharger, importer, supprimer avec confirmation) ; source officielle ou miroir (validé par `validateVoiceSettings`) ; libération de la mémoire. Onboarding : paragraphe dictée dans l'étape Confidentialité.
   - Tests : `lib/voice.test.ts`, `features/voice/ComposerDictation.test.tsx`, `features/settings/VoiceSettings.test.tsx`.
+  - **Dictée vérifiée dans l'app packagée** (`dist:mac:adhoc`, 03/11, reprise de #29). Instance lancée par `open -n … --args --user-data-dir=<tmp> --remote-debugging-port`, pilotée par CDP (Playwright `connectOverCDP`), micro simulé par un WAV de Gilles (`--use-fake-device-for-media-stream --use-file-for-fake-audio-capture=… --disable-features=AudioServiceSandbox`).
+    - `codesign --verify --deep --strict` OK ; worklet présent dans l'asar et chargé en 2 ms.
+    - Carte du premier usage, puis téléchargement réel du modèle (465 Mo, progression), vérifié, installé et chargé.
+    - « Micro ouvert » 0,2 à 0,3 s après le clic ; texte à chaque pause ; texte final 62 à 217 ms après l'arrêt, inséré au curseur, non envoyé ; Échap, ⌘⇧D et test de 5 s des Réglages OK.
+  - **Pièges vus en vrai** :
+    - Au premier `getUserMedia` d'un build ad hoc, macOS affiche sa demande d'accès au micro, parfois derrière les fenêtres ; `getUserMedia` attend sans erreur. L'interface invite maintenant à y répondre après 3 s sans trame.
+    - `voice:status` (`systemPreferences.getMediaAccessStatus`) ne suit pas l'état réel : `granted` avant la demande de Chromium, `not-determined` après l'accord. À reprendre côté main (L3) ; sans effet bloquant sur la dictée.
+    - Même avec un autre `--user-data-dir`, une instance de test partage la VM : en ouvrant une conversation, elle y monte son dossier et la VM redémarre. À garder en tête pour L5.
 
 ## Demandes d'évolution de `packages/shared`
 
