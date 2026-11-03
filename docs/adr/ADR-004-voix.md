@@ -5,12 +5,13 @@
 - **Auteur** : architect
 - **Impact** : `packages/shared` (Lead), nouveau package `packages/voice`, `packages/agent-core` (phase 2 seulement), `apps/desktop` (main, renderer, packaging), `qa/`, `docs/`
 - **Révision du 2026-11-01** : l'audio passe par le main, car `contextBridge` ne transmet pas de `MessagePort` (D2, D3, §5) ; les gestionnaires de permission sont aussi installés en dev (D8) ; S1 mesure aussi le relais audio et, si possible, un Mac de 16 Go.
+- **Révision du 2026-11-03 (S2, #32)** : voix française par défaut **Supertonic 3, style M4** (§3.5, D4) ; pas de synthèse en néerlandais ; premier son visé à 0,55 s au lieu de 0,2 s (D7) ; restrictions d'usage OpenRAIL-M transmises aux utilisateurs (D5).
 
 ## 0. En bref
 
 - **Cowork n'a que la dictée.** Son bouton micro transcrit la voix en texte modifiable. Le mode vocal (échange parlé) existe dans Claude Desktop, sur le web et sur mobile, pas dans Cowork. Décision : **phase 1 = dictée** (parité avec Cowork), **phase 2 = mode conversation** (au-delà de Cowork).
 - **La RAM n'est pas ce qui décide.** Le profil recommandé occupe environ 1,5 à 2 Go sur les 60 Go. Ce qu'il faut protéger, c'est le LLM local (23 Go résidents, pic mesuré à 38,7 Gio) et le GPU qu'il occupe : **la voix tourne sur le CPU ou le Neural Engine, jamais sur le GPU**.
-- **Moteur recommandé : sherpa-onnx** (Apache 2.0, module Node N-API précompilé pour macOS arm64) dans un `utilityProcess` Electron. Il fournit la détection de parole Silero, la reconnaissance **Parakeet TDT 0.6B v3** (5,15 % de WER en français sur FLEURS ; 25 langues européennes, dont le néerlandais et l'anglais) et la synthèse, choisie à l'oreille en phase 2.
+- **Moteur recommandé : sherpa-onnx** (Apache 2.0, module Node N-API précompilé pour macOS arm64) dans un `utilityProcess` Electron. Il fournit la détection de parole Silero, la reconnaissance **Parakeet TDT 0.6B v3** (5,15 % de WER en français sur FLEURS ; 25 langues européennes, dont le néerlandais et l'anglais) et la synthèse **Supertonic 3** (voix M4), choisie à l'oreille en S2.
 - **Modèles téléchargés une fois**, empreintes SHA-256 épinglées dans le code comme pour Lima, rangés dans les données de l'app. Miroir interne et import hors ligne possibles. La mémoire est libérée après inactivité.
 - **Rien ne sort du Mac** : aucun service de reconnaissance en ligne, aucun fichier audio écrit. Seul le texte transcrit part au LLM, comme un message tapé.
 - **Trois spikes courts d'abord** : le moteur dans l'app signée (S1), l'écoute des voix françaises (S2), l'écho (S3).
@@ -149,6 +150,50 @@ Le choix se fait à l'oreille (spike S2), parmi des voix que le même moteur sai
 | Piper `fr_FR` (siwis, tom, upmc…) | environ 20 Mio en int8       | français ; voix néerlandaises disponibles (`nl_BE`, `nl_NL`)                 | variable selon la voix, certaines non commerciales   | oui                                                               | Très léger, timbre plus synthétique                                                    |
 | Qwen3-TTS 0.6B ou 1.7B            | 0,6 à 1,7 B                  | 10, dont le français                                                         | Apache 2.0                                           | non (PyTorch ou MLX)                                              | Meilleure qualité, mais sur GPU : profil serveur                                       |
 
+**Résultats de S2 (#32, 03/11/2026).** Code jetable sur la branche `spike/voice-tts-fr` ; rapport complet en commentaire interne du ticket.
+
+- **Protocole**
+  - 10 réponses types d'Atelier en français parlé : salutation, phrase d'attente d'outil, nombres et montants, heures, noms (Nox, Liège, Bruxelles), mots anglais (Python, PostgreSQL, PDF), question, demande d'autorisation.
+  - Synthèse phrase par phrase, comme en D7, avec sherpa-onnx-node 2.0.1 sur CPU (2 threads).
+  - Écoute à l'aveugle par Gilles : 5 voix sous des lettres tirées au hasard, volume égalisé.
+  - Intelligibilité contrôlée par Parakeet v3 (WER sur la sortie de la synthèse, nombres remis en lettres).
+- **Licences, voix par voix**
+  - **Écartées, non commerciales** : Piper `fr_FR` siwis et upmc, `nl_BE` nathalie, `nl_NL` ronnie et pim. Elles sont affinées depuis `en_US-lessac`, dont le corpus (Blizzard 2013) est sous licence de recherche ; celle-ci exclut « any commercial purpose, including … voice synthesis products ». Sont aussi écartées Piper `fr_FR` gilles, affinée depuis `en_US-ryan` (CC BY-NC-SA 4.0), ainsi que `fr_FR` miro et `nl_NL` dii (CC BY-NC-SA 4.0).
+  - **Exclues sauf décision de licence** : Piper `fr_FR` tom et tjiho sont sous AGPLv3. Par ailleurs, Piper et Kokoro en français exigent un phonémiseur externe : sherpa-onnx 2.x n'embarque plus espeak-ng, et `piper-phonemize-node` est sous GPL-3.0. Charger ce module natif dans l'app en ferait une œuvre dérivée GPL.
+  - **Utilisables** : Kokoro v1.0 (Apache 2.0, `ff_siwis` issu du corpus SIWIS sous CC-BY 4.0) ; Piper `nl_BE` rdh et `nl_NL` alex (CC0) ; Supertonic 3 (OpenRAIL-M, voir ci-dessous).
+  - **Pocket TTS** n'a pas été testé. Son français (`languages/french`) est dans `kyutai/pocket-tts`, dépôt à accès restreint ; il faudrait en plus un export ONNX maison, hors de la demi-journée prévue. Les miroirs non officiels sont écartés.
+- **Écoute à l'aveugle (Gilles, note de 1 à 5)**. Mesures de la première passe, machine chargée (9 à 11 sur 16 cœurs).
+
+| Voix                           | Note  | Premier son, médiane / max | RTF  | WER (Parakeet) | Licence                            |
+| ------------------------------ | ----- | -------------------------- | ---- | -------------- | ---------------------------------- |
+| **Supertonic 3, M4, 8 étapes** | **4** | 0,70 s / 1,74 s            | 0,19 | 3,0 %          | OpenRAIL-M                         |
+| Kokoro v1.0 `ff_siwis` int8    | 3     | 1,49 s / 3,72 s            | 0,56 | 3,5 %          | Apache 2.0 + GPL-3.0 (phonémiseur) |
+| Piper `fr_FR` tom medium       | 3     | 0,22 s / 0,55 s            | 0,07 | 2,5 %          | AGPLv3 + GPL-3.0 (phonémiseur)     |
+| Supertonic 3, F3, 8 étapes     | 2     | 0,73 s / 1,77 s            | 0,18 | 1,5 %          | OpenRAIL-M                         |
+| Supertonic 3, F3, 4 étapes     | 2     | 0,39 s / 0,95 s            | 0,09 | 6,6 %          | OpenRAIL-M                         |
+
+- **Néerlandais** : Gilles n'en veut pas en phase 2 (V5) ; aucune voix n'est retenue. Si le besoin revient, les candidates sont Supertonic 3 (même modèle, `lang: nl`) et Piper rdh ou alex (voix CC0, mais Piper exige le phonémiseur GPL, voir ci-dessus).
+- **Vitesse** (Supertonic M4, mesure rejouée deux fois sans autre test voix en cours, charge de 6,8 sur 16 cœurs ; les deux passes concordent à ±5 ms près). Le WER de ce tableau vient d'une autre synthèse que celle du tableau d'écoute : Supertonic part d'un bruit aléatoire à chaque génération, si bien que le WER d'une même voix varie d'environ ±2 points d'une passe à l'autre (M4 à 8 étapes : 3,0 % puis 5,1 % ; F3 : 1,5 % puis 4,0 %). Seuls les écarts nets comptent, comme les 40,9 % à 2 étapes.
+
+| Réglage                                           | Premier son, médiane / max | RTF  | WER                   |
+| ------------------------------------------------- | -------------------------- | ---- | --------------------- |
+| 8 étapes                                          | 0,70 s / 1,74 s            | 0,19 | 5,1 %                 |
+| **8 étapes, première phrase coupée à la virgule** | **0,54 s / 0,72 s**        | 0,19 | 4,5 %                 |
+| 5 étapes, coupée                                  | 0,36 s / 0,48 s            | 0,12 | 3,5 %                 |
+| 4 étapes, coupée                                  | 0,29 s / 0,38 s            | 0,10 | 6,1 %                 |
+| 2 étapes                                          | 0,21 s / 0,51 s            | 0,05 | 40,9 % (inutilisable) |
+
+- Mémoire : 0,52 Gio de RSS pour le processus Node complet ; chargement en 0,25 s.
+- 4 threads n'apportent rien par rapport à 2.
+- Supertonic rend l'audio d'une phrase d'un bloc, sans streaming interne. Le délai du premier son dépend donc de la longueur du premier morceau, d'où la coupure à la première virgule ou au premier deux-points (premier morceau d'au moins 12 caractères).
+- Gilles a noté F3 à 8 et à 4 étapes de la même façon : la différence ne s'entend pas. 5 étapes est le repli si le budget de D7 n'est pas tenu en L11.
+- **OpenRAIL-M de Supertonic 3** (BigScience Open RAIL-M du 18/08/2022, `Supertone/supertonic-3`, révision HF `3cadd1e`)
+  - Usage commercial et redistribution permis (§2, §4), sans redevance. Les sorties appartiennent à l'utilisateur, qui en répond (§6).
+  - **§4a et §5** : les restrictions de l'annexe A doivent figurer, comme clause opposable, dans tout accord qui régit l'usage ou la distribution du modèle, et nous devons exiger de nos utilisateurs qu'ils les respectent. **Elles se transmettent donc aux utilisateurs d'Atelier.**
+  - **§4b et §4c** : fournir une copie de la licence ; signaler les fichiers modifiés. L'archive sherpa-onnx est une quantification int8 (fichiers modifiés), et elle ne contient que la licence MIT du code de Supertone, pas l'OpenRAIL-M : c'est à nous de livrer le texte de la licence.
+  - **Annexe A**, clauses qui concernent un agent généraliste : (e) ne pas diffuser de contenu sans indiquer clairement qu'il est généré par une machine ; (g) aucune usurpation de la voix d'autrui ; (h) aucune décision entièrement automatisée qui affecte les droits d'une personne ; (l) aucun conseil médical ni interprétation de résultats médicaux ; (m) aucun usage pour l'administration de la justice, les forces de l'ordre, l'immigration ou l'asile. Les clauses (l) et (m) visent le _modèle de synthèse_ ; elles ne s'appliquent pas à l'agent lui-même, mais l'utilisateur ne doit pas employer la voix pour ces usages.
+  - §7 : Supertone se réserve de restreindre les usages contraires à la licence et demande d'utiliser la dernière version raisonnablement disponible.
+
 ### 3.6 Gestion des modèles
 
 | Option                                                      | Pour                                                                                                                                                                                  | Contre                                                                                                           |
@@ -214,13 +259,13 @@ Exception à M1 : le modèle Silero (0,6 à 2,2 Mo) est embarqué dans `Contents
 
 ### D4. Modèles retenus
 
-| Rôle                             | Modèle                                                                                                 | Embarqué ou téléchargé    |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------- |
-| Détection de parole              | Silero VAD (MIT)                                                                                       | embarqué                  |
-| Reconnaissance                   | Parakeet TDT 0.6B v3 int8 (CC-BY-4.0)                                                                  | téléchargé (464 Mio)      |
-| Reconnaissance, option           | Qwen3-ASR 0.6B int8 (Apache 2.0), si S1 le montre meilleur sur nos phrases                             | téléchargé (837 Mio)      |
-| Synthèse (phase 2)               | choisie en S2                                                                                          | téléchargé (20 à 140 Mio) |
-| Fin de tour (phase 2, en option) | Smart Turn v3.2 (BSD-2, 8 Mo, français pris en charge), seulement si le seuil de silence ne suffit pas | téléchargé                |
+| Rôle                             | Modèle                                                                                                   | Embarqué ou téléchargé |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------- | ---------------------- |
+| Détection de parole              | Silero VAD (MIT)                                                                                         | embarqué               |
+| Reconnaissance                   | Parakeet TDT 0.6B v3 int8 (CC-BY-4.0)                                                                    | téléchargé (464 Mio)   |
+| Reconnaissance, option           | Qwen3-ASR 0.6B int8 (Apache 2.0), si S1 le montre meilleur sur nos phrases                               | téléchargé (837 Mio)   |
+| Synthèse (phase 2)               | Supertonic 3 int8 (OpenRAIL-M), style M4, 8 étapes ; `sherpa-onnx-supertonic-3-tts-int8-2026-05-11` (S2) | téléchargé (123 Mio)   |
+| Fin de tour (phase 2, en option) | Smart Turn v3.2 (BSD-2, 8 Mo, français pris en charge), seulement si le seuil de silence ne suffit pas   | téléchargé             |
 
 ### D5. Gestion des modèles (`VoiceModelManager`, package `voice`, I/O injectées)
 
@@ -243,6 +288,9 @@ Exception à M1 : le modèle Silero (0,6 à 2,2 Mo) est embarqué dans `Contents
   - Chargement au premier usage. Préchargement au démarrage si la voix est active et que la machine a au moins 32 Go.
   - Arrêt du process après `idleUnloadMinutes` d'inactivité : 10 par défaut, 0 pour le garder chargé. S1 mesure le temps de rechargement.
 - **Licences** : l'attribution des modèles CC-BY figure dans « À propos › Licences ». Le catalogue ne contient aucune voix non commerciale.
+  - **Supertonic 3 (OpenRAIL-M)** : le texte complet de la licence et les restrictions de l'annexe A sont livrés avec le modèle et affichés au même endroit, via `voiceModelLicenses()`. **Prérequis avant de livrer la synthèse (L7 ou plus tard)** : des conditions d'utilisation qui reprennent l'annexe A comme clause opposable (§4a), à valider par Gilles ; voir le ticket #43. Atelier n'en a pas aujourd'hui, et le dépôt n'a pas de licence. La carte de téléchargement et Réglages › Voix indiquent que la voix est synthétique (annexe A, e).
+  - **Catalogue** : la source exacte est la release `tts-models` de sherpa-onnx (`sherpa-onnx-supertonic-3-tts-int8-2026-05-11.tar.bz2`, SHA-256 `82fa96f91c4ef8abaae3a14a3f4153facf88bed821d1f7331cec2700f432c427`, 123 Mio), dérivée de `Supertone/supertonic-3` à la révision HF `3cadd1ee6394adea1bd021217a0e650ede09a323`. Ces deux références sont épinglées dans le catalogue.
+  - **Aucun module GPL dans l'app** : pas de `piper-phonemize-node` ni d'espeak-ng. Une voix Piper ou Kokoro ne reviendrait qu'après une décision explicite sur la licence.
 
 ### D6. Dictée (phase 1)
 
@@ -268,7 +316,7 @@ Exception à M1 : le modèle Silero (0,6 à 2,2 Mo) est embarqué dans `Contents
 - **Entrée** : un bouton « Mode vocal » à côté du micro. Le mode s'applique à la conversation courante et à ses dossiers.
 - **Tours de parole** : la détection de parole tourne dans le worker. La fin de tour arrive après 700 ms de silence (réglable), avec Smart Turn en option. Le transcript devient le message de l'utilisateur (`inputMode: 'voice'`).
 - **Réponse**
-  - Le main découpe le texte de l'agent en phrases.
+  - Le main découpe le texte de l'agent en phrases. La première phrase d'une réponse est coupée à sa première virgule ou à son premier deux-points, pour que le premier son parte plus tôt (S2).
   - Chaque phrase passe par un filtre « prononçable », puis par la synthèse. Le filtre retire markdown, tableaux, URL et chemins complets, et écrit en toutes lettres nombres, montants, dates et unités.
   - Le renderer joue l'audio. Le texte complet reste dans le fil.
 - **Consignes du mode vocal** (agent-core, ajoutées au tour) et **thinking coupé** pendant ce tour :
@@ -284,13 +332,15 @@ Exception à M1 : le modèle Silero (0,6 à 2,2 Mo) est embarqué dans `Contents
 - **Fin** : bouton, Échap, fenêtre fermée, mise en veille, ou 60 s sans parole.
 - **Budget de latence** (cible : 2,5 s au plus en médiane)
 
-| Étape                            | Durée visée | Hypothèse                                       |
-| -------------------------------- | ----------- | ----------------------------------------------- |
-| Fin de parole détectée           | 0,7 s       | seuil de silence (moins avec Smart Turn)        |
-| Transcription du dernier segment | 0,1 à 0,3 s | Parakeet int8 sur CPU (mesuré en S1)            |
-| Premier token du LLM             | 0,3 à 1 s   | cache de préfixe d'Ollama chaud, thinking coupé |
-| Première phrase                  | 0,2 à 0,4 s | 104 tokens/s (QA)                               |
-| Premier son                      | 0,2 s       | synthèse d'environ 100 M sur CPU                |
+| Étape                            | Durée visée | Hypothèse                                                                                                                                     |
+| -------------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Fin de parole détectée           | 0,7 s       | seuil de silence (moins avec Smart Turn)                                                                                                      |
+| Transcription du dernier segment | 0,1 à 0,3 s | Parakeet int8 sur CPU (mesuré en S1)                                                                                                          |
+| Premier token du LLM             | 0,3 à 1 s   | cache de préfixe d'Ollama chaud, thinking coupé                                                                                               |
+| Première phrase                  | 0,2 à 0,4 s | 104 tokens/s (QA)                                                                                                                             |
+| Premier son                      | 0,55 s      | Supertonic M4, 8 étapes, premier morceau coupé à la première virgule (médiane mesurée en S2 : 0,54 s, max 0,72 s) ; repli à 5 étapes : 0,36 s |
+
+Somme en médiane : environ 2,4 s avec ce premier son de 0,55 s (0,7 + 0,2 + 0,65 + 0,3 + 0,55), pour une cible de 2,5 s. La marge est faible : si L11 la dépasse, le repli est de passer à 5 étapes (0,36 s).
 
 ### D8. Permissions macOS et Electron
 
@@ -472,17 +522,17 @@ Tailles : S pour au plus 1 jour d'agent, M pour 1 à 3 jours, L pour 3 à 5 jour
 
 ## 9. Risques
 
-| Risque                                                         | Effet                                         | Parade                                                                                              |
-| -------------------------------------------------------------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| Module natif dans l'app signée (asar, signature, notarisation) | Build cassé, ou voix muette une fois packagée | S1 sur le build ad hoc ; précédent de `sharp`                                                       |
-| Écho dans Chromium                                             | L'agent s'interrompt lui-même                 | S3 ; semi-duplex ; option B                                                                         |
-| Qualité de la voix française                                   | Mode vocal désagréable                        | S2 à l'oreille ; profil serveur (Qwen3-TTS) en phase 3                                              |
-| Vocabulaire métier (noms propres, clients, lieux belges)       | Transcriptions fautives                       | Texte toujours modifiable en dictée ; mots-clés tirés des noms de fichiers et de projets en phase 3 |
-| Concurrence avec le LLM                                        | Génération ralentie                           | CPU ou Neural Engine, jamais le GPU ; mesure en S1                                                  |
-| Relais audio par le main pendant un tour chargé                | Trames en retard, texte qui tarde             | Mesure en S1 (95e centile) ; `MessagePort` direct si besoin                                         |
-| Licences (CC-BY, OpenRAIL-M, voix Piper)                       | Non-conformité                                | Catalogue avec licence et attribution ; aucune voix non commerciale                                 |
-| Autorisation macOS et builds ad hoc                            | Accès au micro redemandé à chaque build       | Noté dans `docs/DEMO.md` ; disparaît avec la signature Developer ID                                 |
-| Premier token lent (prompt d'environ 4 000 tokens)             | Conversation peu naturelle                    | Thinking coupé en mode vocal ; cache de préfixe d'Ollama ; mesure en L11                            |
+| Risque                                                         | Effet                                         | Parade                                                                                                                                                                                                                                                                               |
+| -------------------------------------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Module natif dans l'app signée (asar, signature, notarisation) | Build cassé, ou voix muette une fois packagée | S1 sur le build ad hoc ; précédent de `sharp`                                                                                                                                                                                                                                        |
+| Écho dans Chromium                                             | L'agent s'interrompt lui-même                 | S3 ; semi-duplex ; option B                                                                                                                                                                                                                                                          |
+| Qualité de la voix française                                   | Mode vocal désagréable                        | S2 à l'oreille ; profil serveur (Qwen3-TTS) en phase 3                                                                                                                                                                                                                               |
+| Vocabulaire métier (noms propres, clients, lieux belges)       | Transcriptions fautives                       | Texte toujours modifiable en dictée ; mots-clés tirés des noms de fichiers et de projets en phase 3                                                                                                                                                                                  |
+| Concurrence avec le LLM                                        | Génération ralentie                           | CPU ou Neural Engine, jamais le GPU ; mesure en S1                                                                                                                                                                                                                                   |
+| Relais audio par le main pendant un tour chargé                | Trames en retard, texte qui tarde             | Mesure en S1 (95e centile) ; `MessagePort` direct si besoin                                                                                                                                                                                                                          |
+| Licences (CC-BY, OpenRAIL-M, voix Piper)                       | Non-conformité                                | Catalogue avec licence et attribution ; aucune voix non commerciale ; OpenRAIL-M livrée avec le modèle ; prérequis avant de livrer la synthèse (L7 ou plus tard) : des conditions d'utilisation qui reprennent l'annexe A, à valider par Gilles (ticket #43) ; aucun module GPL (D5) |
+| Autorisation macOS et builds ad hoc                            | Accès au micro redemandé à chaque build       | Noté dans `docs/DEMO.md` ; disparaît avec la signature Developer ID                                                                                                                                                                                                                  |
+| Premier token lent (prompt d'environ 4 000 tokens)             | Conversation peu naturelle                    | Thinking coupé en mode vocal ; cache de préfixe d'Ollama ; mesure en L11                                                                                                                                                                                                             |
 
 ## 10. Options écartées
 
