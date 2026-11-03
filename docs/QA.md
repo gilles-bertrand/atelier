@@ -319,6 +319,66 @@ Une écriture dans un dossier en lecture seule passait d'abord par la modale de 
 
 Arbitrage de l'architecte (31/10) : vérification préalable `ToolDefinition.precheck`, appelée par `executeTool` avant la question (ADR-003 D9). L'e2e vérifie désormais qu'aucune modale n'est ouverte pour `Archives/brouillon.md`, alors que celle de `Compta/synthese.md` l'est.
 
+## Dictée (ADR-004 L5, ticket #31, 03/11/2026)
+
+Branche `feat/qa-voice`, base `main` e360db1 (L0 à L4 et #41). Specs : `qa/e2e/voice-dictation.spec.ts` (mock, CI) et `qa/e2e/voice-dictation.real.spec.ts` (réel, local). Rapport brut : [`qa/reports/voice-real-2026-11-03.json`](../qa/reports/voice-real-2026-11-03.json). Mode d'emploi : [`qa/README.md`](../qa/README.md#dictée-adr-004-l5-ticket-31).
+
+Les instances de test tournent sous `--user-data-dir`, sans VM (#41) et avec le faux serveur LLM : ni Qwen ni la VM `atelier` ne sont touchés. L'app lit l'autorisation micro de macOS comme `granted` (`systemPreferences.getMediaAccessStatus` remplacé dans le process de test). `askForMediaAccess` n'est jamais appelé et la base TCC n'est ni lue ni modifiée.
+
+### Mock (CI) : 3/3
+
+Le faux worker `qa/e2e/support/fake-voice-worker.mjs` parle le protocole main ↔ worker et remplace `voice-worker.js` (`utilityProcess.fork` patché). Parakeet est « installé » par son manifeste et des fichiers creux de la bonne taille. Le micro est une sinusoïde WebAudio rendue par `getUserMedia`. Le reste est le vrai code : worklet de capture à 16 kHz, trames `voice:audio`, relais et contrôles du main, superviseur, insertion au curseur. Le faux moteur ne rend son texte que s'il a reçu au moins 8 trames de 1 600 échantillons non nulles.
+
+| Cas                                                                                                             | Résultat |
+| --------------------------------------------------------------------------------------------------------------- | -------- |
+| Clic sur « Dicter (⌘⇧D) » : chronomètre affiché, premier segment visible dans le champ pendant l'écoute         | ✅       |
+| « Terminer la dictée » : texte final inséré, annonce « Dictée terminée, texte inséré. »                         | ✅       |
+| Rien n'est envoyé tout seul (F1) : aucune requête au LLM avant « Envoyer »                                      | ✅       |
+| Envoi : le modèle reçoit la phrase dictée comme un message tapé, la réponse s'affiche                           | ✅       |
+| Première dictée : `voice.enabled` passe à `true` dans `settings.json`                                           | ✅       |
+| Échap pendant la dictée : texte d'origine rendu (« Bonjour, »), annonce « Dictée annulée, texte dicté retiré. » | ✅       |
+| Sans modèle installé : la carte « Modèle de reconnaissance vocale » propose « Télécharger », champ vide         | ✅       |
+
+### Réel : vrai Parakeet, micro simulé par un WAV (MacBook Pro M4 Max, 64 Go)
+
+**Déroulé.** L'archive officielle de Parakeet v3 int8 (464,6 Mio, téléchargée une fois dans `~/.cache/atelier-voice-spike`) est importée hors ligne par le canal `voice:import-model`. Les réglages pointent vers un miroir injoignable (`http://127.0.0.1:9/`) : tout téléchargement aurait échoué. Viennent ensuite 20 dictées, une par phrase du jeu de S1 (10 FLEURS, 10 enregistrements de Gilles). Pour chacune, l'app est relancée sur le même `userData`, et Chromium lit comme micro le WAV de la phrase (48 kHz, 1 s de silence avant, 2 s après). L'app est ensuite laissée inactive.
+
+| Mesure                                                                     | Résultat                                                   | Cible                   |
+| -------------------------------------------------------------------------- | ---------------------------------------------------------- | ----------------------- |
+| Import hors ligne (SHA-256, liste `tar`, extraction, contrôle)             | ✅ 40,3 s, manifeste `origin: import`, empreinte conforme  | F3                      |
+| Dictée après import, sans réseau pour la voix                              | ✅ 20/20 dictées avec texte                                | F3, N1                  |
+| Texte final après « Terminer » (clic → annonce « texte inséré »)           | ✅ 43 à 61 ms (médiane 52 ms), 52 ms pour 15,4 s de parole | N3 : ≤ 1 s pour 15 s    |
+| WER FLEURS (10 phrases, 236 mots)                                          | 2,97 % (S1, fichier entier : 2,54 %)                       | référence S1            |
+| WER phrases de Gilles, hors `gilles-01` (9 phrases, 155 mots)              | 24,5 % (S1, fichier entier : 19,4 %)                       | référence S1            |
+| WER global des 20 phrases                                                  | 17,3 % (`gilles-01` compris, voir plus bas)                | –                       |
+| Mémoire résidente du worker « YodAI Voice » (`getAppMetrics`), après prise | 1 340 à 1 430 Mio                                          | sortie de S1 : ≤ 1,5 Go |
+| Libération après inactivité (`idleUnloadMinutes: 1`)                       | ✅ worker arrêté 60,05 s après la dernière dictée          | D5                      |
+
+Le délai mesuré inclut l'interrogation du DOM par Playwright : le texte final arrive bien avant la seconde exigée. Le découpage à chaque pause transcrit déjà les segments pendant l'écoute, et seul le dernier reste à faire à l'arrêt.
+
+**Lecture du WER.** L'app reproduit le moteur mesuré au spike : sur FLEURS, ce sont les deux mêmes phrases qui portent les erreurs (`fleurs-1620`, `fleurs-1535` en S1 ; `fleurs-1620` ici). Les phrases de Gilles cumulent trois causes déjà connues en S1 :
+
+- **Enregistrements coupés au début.** Le premier mot manque dans le fichier lui-même (« Lance la VM Lima, », « Prépare », « Ajoute », « Classe », « Résume ») : S1 le perdait aussi en lisant le fichier entier. C'est l'écart entre les 19,4 % de S1 et ses 13,2 % une fois ces débuts de prise rétablis.
+- **Noms propres** : Ollama → « Oh lama », Qwen → « Quan », Caddy → « Cadi », Triptyk → « tripty », Gembloux → « Jean Bloud », Nox Law Firm → « oxlawform », Louvain-la-Neuve → « Louvan », sharp → « chap ». Le glossaire (hotwords) reste hors de L2.
+- **`gilles-01`** : l'enregistrement de 33 s contient aussi la phrase de `gilles-03` et deux « Yeah » ; sa référence ne couvre que la première phrase, d'où 26 erreurs pour 20 mots (125 % en S1). À réenregistrer avant de s'en servir comme référence.
+
+L'écart de 5 points avec S1 sur les phrases de Gilles vient de la dictée réelle, qui transcrit **segment par segment** à chaque pause, quand S1 transcrivait le fichier d'un bloc :
+
+- **Contexte perdu entre segments** : « refonte du site, hébergement souverain » devient « refondre du site. Hébergement. Souverin ».
+- **Ponctuation parasite** : chaque segment se termine par un point, et le suivant garde la minuscule (« liste les actions. les responsables »). L'utilisateur verra ces points au milieu de ses phrases. À arbitrer par le Lead (assemblage des segments dans `packages/voice/src/dictation.ts`, ou `joinSegments` côté renderer).
+- **Nombres écrits en lettres** : « Microsoft trois cent soixante-cinq » pour « Microsoft 365 ». Le WER en compte 4 erreurs, la lecture n'en souffre pas.
+- **Néerlandais → « Irlandais »**, déjà vu en S1.
+
+### Limites et points d'attention
+
+- **`--no-sandbox` pour l'instance réelle.** Avec l'Electron du dépôt, le service audio sandboxé de Chromium ne lit pas le WAV du faux micro (« Failed to read … as input to the fake device »), même avec `--disable-features=AudioServiceSandbox`, qui suffisait au spike sur l'app packagée. Seule cette instance de mesure tourne sans sandbox. La capture, le relais et le worker n'en dépendent pas, mais l'e2e réel ne couvre pas le sandbox du renderer.
+- **Aucune invite macOS : le vrai micro n'est jamais ouvert.** Avant chaque dictée, l'e2e réel vérifie par `enumerateDevices` que le seul micro visible est le faux périphérique de Chromium, et s'arrête sinon.
+  - Pendant la mise au point, un essai a perdu ses commutateurs, qui étaient passés par `NODE_OPTIONS=--require`, ignoré par Electron. Pendant une dictée d'environ 10 s, il a lu l'entrée par défaut. Aucun audio n'a été écrit, et le texte reconnu a été supprimé.
+  - Les commutateurs passent désormais sur la ligne de commande, et le garde-fou ci-dessus est en place.
+- **Une prise par process.** L'app est relancée à chaque phrase pour changer de WAV : la croissance mémoire au fil des prises d'une même session (30 à 100 Mo par prise en S1) n'est pas remesurée ici.
+- **Pas de mesure sur l'app packagée ni sur un Mac de 16 Go.** Le packaging (asar, signature) a été vérifié en S1 et L3.
+- **Le préchargement au démarrage (D5) n'est pas vérifié.** Les relances ont démarré avec la voix active, sur un Mac de 64 Go : le modèle était donc préchargé avant le clic, mais l'e2e ne le contrôle pas.
+
 ## Bugs relevés
 
 | Issue | Sujet                                                                                            | Agent(s)            | État                                          |

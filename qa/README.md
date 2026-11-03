@@ -9,7 +9,7 @@ Paquet `@atelier/qa` : les e2e des critères d'acceptation, la campagne de robus
 | `e2e/support/scenarios.ts` | les scénarios mockés, avec les demandes du brief mot pour mot                                           |
 | `robustness/`              | campagne avec un vrai modèle : injections, chemins piégés, boucles, sorties, réseau                     |
 | `bench/`                   | débit du modèle, démarrage de la VM, changement de dossier, premier lancement                           |
-| `test/`                    | Vitest : le faux serveur reste compris par le provider de l'app (AI SDK)                                |
+| `test/`                    | Vitest : le faux serveur reste compris par le provider de l'app (AI SDK), calcul du WER                 |
 | `reports/`                 | rapports datés produits par `robustness` et `bench`                                                     |
 
 Les fichiers de test sont dans [`fixtures/`](../fixtures/) : `demo-ventes/` (3 CSV, janvier à juin 2026) et `demo-documents/` (rapport PDF de 30 pages, facture scannée, photo de ticket), générés par `fixtures/generate-demo-fixtures.py`.
@@ -41,6 +41,20 @@ VM et instances de test (ticket #41) : lancée avec `--user-data-dir`, l'app n'a
 - Le mode réel demande `atelier-e2e`, créée au premier run réel (3 à 4 min, environ 4,6 Go) puis réutilisée. Votre app et sa VM `atelier` peuvent rester ouvertes.
 - Seul le port hôte 8888 (SearXNG) va à la première VM démarrée.
 - Suppression : `LIMA_HOME="$HOME/Library/Application Support/Atelier/lima" apps/desktop/resources/lima/bin/limactl delete --force atelier-e2e`.
+
+### Dictée (ADR-004 L5, ticket #31)
+
+- `e2e/voice-dictation.spec.ts` (mock, CI) : faux worker de reconnaissance (`e2e/support/fake-voice-worker.mjs`, lancé à la place de `voice-worker.js` en patchant `utilityProcess.fork`), Parakeet « installé » par un manifeste et des fichiers creux de la bonne taille, micro remplacé par une sinusoïde WebAudio (`getUserMedia`). Le reste est le vrai code : capture et worklet, trames `voice:audio`, relais du main, insertion au curseur, envoi. Le Silero embarqué est copié dans `out/main/resources/voice` depuis `apps/desktop/resources/voice` (`pnpm fetch:voice`, téléchargé et vérifié s'il manque).
+- `e2e/voice-dictation.real.spec.ts` (local, macOS arm64, `ffmpeg`) : vrai worker sherpa-onnx et Parakeet importé hors ligne, micro simulé par un WAV 48 kHz (`--use-fake-device-for-media-stream --use-file-for-fake-audio-capture=<wav> --no-sandbox`, sans quoi le service audio sandboxé ne lit pas le fichier), une dictée par phrase du jeu de S1, l'app relancée sur le même `userData`. Avant chaque dictée, le test vérifie que le seul micro visible est le faux périphérique de Chromium. Rapport : `reports/voice-real-<date>.json`.
+
+```bash
+pnpm --filter @atelier/desktop build
+cd qa && ATELIER_E2E_VOICE=real npx playwright test e2e/voice-dictation.real.spec.ts
+```
+
+Variables : `ATELIER_VOICE_PARAKEET_ARCHIVE` (archive officielle, défaut `~/.cache/atelier-voice-spike/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8.tar.bz2`, à télécharger une fois), `ATELIER_E2E_VOICE_CORPUS` (JSON `[{ id, file, ref }]`, séparés par des virgules ; défaut : le jeu de S1 dans `~/.cache/atelier-voice-spike`), `ATELIER_E2E_VOICE_WAV_DIR` (dossier des WAV préparés par `ffmpeg`, défaut : dossier temporaire). Ni Qwen ni VM : le LLM est le faux serveur.
+
+Micro : l'instance de test lit l'autorisation macOS comme `granted` (`systemPreferences.getMediaAccessStatus` remplacé). `askForMediaAccess` n'est jamais appelé, la base TCC n'est ni lue ni modifiée, et le vrai micro n'est jamais ouvert : aucune invite macOS.
 
 Pour piloter l'app packagée à la main sans VM, il suffit du `--user-data-dir`. Avec une VM dédiée : `open -n YodAI.app --env ATELIER_VM_INSTANCE=atelier-qa --args --user-data-dir=<tmp>`.
 
