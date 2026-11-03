@@ -70,8 +70,8 @@ async function exists(path: string): Promise<boolean> {
  * Déplace `skills/` et `mcp.json` d'un ancien dossier ({@link legacyAppFolders})
  * vers `~/YodAI/`, seulement si les réglages pointent encore vers un de ces
  * anciens chemins par défaut (un chemin choisi par l'utilisateur n'est jamais
- * touché) et que la cible n'existe pas (rien n'est écrasé : dans ce cas
- * l'ancien chemin reste réglé).
+ * touché) et que la cible n'existe pas ou est un dossier vide (rien n'est
+ * écrasé : sinon l'ancien chemin reste réglé).
  *
  * Les dossiers de projets déjà créés ne bougent pas : leurs chemins sont
  * enregistrés dans l'historique, les conversations et les tâches planifiées.
@@ -95,6 +95,9 @@ export async function migrateLegacyFolders(
     const from = legacyFolders.map((folder) => join(folder, name)).find((p) => p === settings[key]);
     if (from === undefined) continue;
     if (await exists(from)) {
+      // Une cible vide (dossier créé avant la migration, `.DS_Store` seul) ne
+      // contient rien à protéger : elle est remplacée.
+      await removeIfEmpty(to);
       if (await exists(to)) {
         result.kept.push(from);
         continue;
