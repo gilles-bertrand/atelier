@@ -8,7 +8,8 @@ const loadConfig = {
   stt: { modelId: 'parakeet-tdt-0.6b-v3-int8', dir: '/models/parakeet' },
 };
 
-function setup(engine = new FakeEngine({ script: ['Bonjour.', 'Au revoir !'] })) {
+/** Premier segment, puis le bloc final retranscrit à l'arrêt (#42). */
+function setup(engine = new FakeEngine({ script: ['Bonjour.', 'Bonjour, au revoir !'] })) {
   const sent: WorkerToMainMessage[] = [];
   let listener: (data: unknown) => void = () => undefined;
   let exited = 0;
@@ -49,10 +50,10 @@ describe('runVoiceWorker', () => {
     expect(sent.find((m) => m.type === 'final')).toEqual({
       type: 'final',
       voiceSessionId: 'v1',
-      text: 'Bonjour. Au revoir !',
+      text: 'Bonjour, au revoir !',
       reason: 'stopped',
     });
-    expect(sent.filter((m) => m.type === 'transcript')).toHaveLength(2);
+    expect(sent.filter((m) => m.type === 'transcript')).toHaveLength(1);
     expect(sent.flatMap((m) => (m.type === 'state' ? [m.state] : []))).toEqual([
       'starting',
       'listening',

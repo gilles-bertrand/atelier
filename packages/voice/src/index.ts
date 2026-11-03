@@ -26,6 +26,8 @@ export {
 export {
   AudioHistory,
   DictationSession,
+  FINAL_BLOCK_BUDGET_MS,
+  FINAL_BLOCK_MAX_MS,
   type DictationCallbacks,
   type DictationOptions,
 } from './dictation.js';

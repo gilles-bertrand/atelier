@@ -282,12 +282,71 @@ export function applyFrenchTypography(text: string): string {
 }
 
 /**
+ * Abréviations courantes (fr, en, nl) dont le point n'est pas une fin de
+ * phrase : il reste en place même si le segment suivant commence par une
+ * minuscule.
+ */
+const ABBREVIATIONS = new Set([
+  'etc',
+  'cf',
+  'ex',
+  'env',
+  'vs',
+  'approx',
+  'resp',
+  'mr',
+  'mrs',
+  'ms',
+  'dr',
+  'st',
+  'no',
+  'nr',
+  'bijv',
+  'enz',
+  'dhr',
+  'mevr',
+  'ca',
+]);
+
+/**
+ * Point final d'un segment qui n'est pas une vraie fin de phrase : Parakeet
+ * ponctue chaque segment comme une phrase complète, même quand la pause tombe
+ * au milieu d'une phrase. Rend vrai si `text` se termine par un point simple
+ * (ni « ... », ni « … », ni une abréviation comme « etc. » ou « e.g. »).
+ */
+function endsWithPauseFullStop(text: string): boolean {
+  if (!text.endsWith('.') || text.endsWith('..')) return false;
+  const lastWord = text.slice(0, -1).split(/\s+/).pop() ?? '';
+  // « e.g. », « U.S. », « o.a. » : point interne, abréviation.
+  if (lastWord.includes('.')) return false;
+  return !ABBREVIATIONS.has(lastWord.toLowerCase());
+}
+
+/** Vrai si `text` commence par une minuscule (après d'éventuels guillemets ou parenthèses). */
+function startsLowercase(text: string): boolean {
+  const first = /\p{L}/u.exec(text.replace(/^[«"“'‘(\s]+/u, ''));
+  return first?.index === 0 && /\p{Ll}/u.test(first[0]);
+}
+
+/**
  * Assemble les textes des segments d'une dictée : espaces superflus retirés,
  * segments vides ignorés, une espace entre deux segments.
+ *
+ * Le point qui ferme un segment est retiré quand le segment suivant commence
+ * par une minuscule : la pause tombait au milieu d'une phrase (« liste les
+ * actions. les responsables » → « liste les actions les responsables »). Les
+ * « ? », « ! » et « … » restent, comme un point suivi d'une majuscule.
  */
 export function assembleSegments(texts: readonly string[]): string {
-  return texts
-    .map((t) => t.replace(/[ \t]+/g, ' ').trim())
-    .filter((t) => t !== '')
-    .join(' ');
+  const parts = texts.map((t) => t.replace(/[ \t]+/g, ' ').trim()).filter((t) => t !== '');
+  let out = '';
+  for (const part of parts) {
+    if (out === '') {
+      out = part;
+      continue;
+    }
+    if (startsLowercase(part) && endsWithPauseFullStop(out)) out = out.slice(0, -1);
+    out += ` ${part}`;
+  }
+  return out;
 }

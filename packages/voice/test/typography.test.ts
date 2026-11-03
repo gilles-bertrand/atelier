@@ -73,4 +73,64 @@ describe('assembleSegments', () => {
     );
     expect(assembleSegments([])).toBe('');
   });
+
+  // Phrases réelles de la QA de la dictée (#42) : Parakeet ponctue chaque segment.
+  it('retire le point d’une pause au milieu d’une phrase (fr)', () => {
+    expect(
+      assembleSegments([
+        'La réunion de ce matin et liste les actions.',
+        'les responsables et les échéances dans mon journal.',
+      ]),
+    ).toBe(
+      'La réunion de ce matin et liste les actions les responsables et les échéances dans mon journal.',
+    );
+    expect(assembleSegments(['jeudi après-midi.', 'en néerlandais, si possible.'])).toBe(
+      'jeudi après-midi en néerlandais, si possible.',
+    );
+  });
+
+  it('retire le point d’une pause au milieu d’une phrase (en, nl)', () => {
+    expect(assembleSegments(['Please open the file.', 'and read the first page.'])).toBe(
+      'Please open the file and read the first page.',
+    );
+    expect(assembleSegments(['Open het bestand.', 'en lees de eerste pagina.'])).toBe(
+      'Open het bestand en lees de eerste pagina.',
+    );
+  });
+
+  it('garde une vraie fin de phrase, ? ! et …', () => {
+    expect(assembleSegments(['Bonjour.', 'Comment ça va ?'])).toBe('Bonjour. Comment ça va ?');
+    expect(assembleSegments(['Is it done?', 'yes it is.'])).toBe('Is it done? yes it is.');
+    expect(assembleSegments(['Super !', 'on y va.'])).toBe('Super ! on y va.');
+    expect(assembleSegments(['Et puis…', 'rien.'])).toBe('Et puis… rien.');
+    expect(assembleSegments(['Et puis...', 'rien.'])).toBe('Et puis... rien.');
+    expect(assembleSegments(['Dat is goed.', 'Dank je.'])).toBe('Dat is goed. Dank je.');
+  });
+
+  it('garde le point des abréviations', () => {
+    expect(assembleSegments(['Les fichiers, les dossiers, etc.', 'puis la VM.'])).toBe(
+      'Les fichiers, les dossiers, etc. puis la VM.',
+    );
+    expect(assembleSegments(['Some tools, e.g.', 'pnpm.'])).toBe('Some tools, e.g. pnpm.');
+    expect(assembleSegments(['Bel dhr.', 'jansen.'])).toBe('Bel dhr. jansen.');
+  });
+
+  it('regarde la première lettre après un guillemet ou une parenthèse', () => {
+    expect(assembleSegments(['Il a dit.', `«${NBSP}bonjour${NBSP}».`])).toBe(
+      `Il a dit «${NBSP}bonjour${NBSP}».`,
+    );
+    expect(assembleSegments(['Voir la note.', '(page 3).'])).toBe('Voir la note (page 3).');
+    expect(assembleSegments(['Voir la note.', '(Page 3).'])).toBe('Voir la note. (Page 3).');
+  });
+
+  it('ne laisse aucun « . » suivi d’une minuscule entre deux segments', () => {
+    const text = assembleSegments([
+      'une offre pour la commune de Gembloux.',
+      'refonte du site.',
+      'Hébergement.',
+      'souverain et maintenance annuelle.',
+    ]);
+    expect(text).not.toMatch(/\.\s+\p{Ll}/u);
+    expect(text.endsWith('.')).toBe(true);
+  });
 });

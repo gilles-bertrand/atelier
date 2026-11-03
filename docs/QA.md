@@ -369,6 +369,37 @@ L'écart de 5 points avec S1 sur les phrases de Gilles vient de la dictée réel
 - **Nombres écrits en lettres** : « Microsoft trois cent soixante-cinq » pour « Microsoft 365 ». Le WER en compte 4 erreurs, la lecture n'en souffre pas.
 - **Néerlandais → « Irlandais »**, déjà vu en S1.
 
+### Ponctuation des pauses (ticket backlog #42, 03/11/2026)
+
+**Correctif.** À l'arrêt, la dictée retranscrit toute la parole d'un bloc : les segments sont mis bout à bout, chacun suivi de 300 ms de la pause qui l'a fermé (`packages/voice/src/dictation.ts`). Le bloc n'est tenté que si sa durée prévue tient en 1 s, d'après la vitesse du moteur mesurée pendant la session, avec une marge de × 1,5. La parole est en outre plafonnée à 20 s. Sinon, ou si le bloc échoue ou dépasse 1 s, les textes des segments sont assemblés sans erreur : le point d'un segment est retiré quand le suivant commence par une minuscule. Les `?`, `!`, `…` et les abréviations gardent leur ponctuation (`assembleSegments`, repris par `joinSegments` pour le texte en direct). Une dictée d'un seul segment, déjà transcrite pendant l'écoute, garde son texte.
+
+**Critère** (révisé par le Lead) : WER du bloc au plus égal à celui du segment par segment sur le même audio, plus aucun « . » suivi d'une minuscule, N3 tenu. Les 19,4 % de S1 ne sont pas exigibles d'un flux micro : sur les mêmes fichiers, Parakeet change 2 ou 3 mots selon le silence de tête (« Microsoft 365 » / « trois cent soixante-cinq », « néerlandais » / « Irlandais »). Cet écart est une piste à part.
+
+**Banc hors app** (Parakeet v3 int8, 2 threads, M4 Max, load average 6 à 8 sur 16 cœurs, phrases de Gilles hors `gilles-01`, 1 s de silence avant, 2 s après) :
+
+| Texte final                                         | WER (155 mots) |
+| --------------------------------------------------- | -------------- |
+| Segment par segment (avant)                         | 23,2 %         |
+| Bloc, segments collés sans pause                    | 23,2 %         |
+| Bloc, 300 ms de pause après chaque segment (retenu) | 18,7 %         |
+| Bloc, 500 ms de pause après chaque segment          | 18,7 %         |
+
+Sans la pause, Parakeet colle deux segments (« souverain|et maintenance » → « souverainance »). Délai d'un bloc : 357 ms pour 11 s d'audio de parole, 643 ms pour 20 s, 1,5 s pour 45 s.
+
+**Scénario réel** (`ATELIER_E2E_VOICE=real`, même déroulé qu'au-dessus, rapport `qa/reports/voice-real-2026-11-03-pauses.json`, load average 3,7 à 6,9, banc TTS de #32 par moments en parallèle) :
+
+| Mesure                                           | Avant (L5)          | Après                                 |
+| ------------------------------------------------ | ------------------- | ------------------------------------- |
+| WER phrases de Gilles, hors `gilles-01`          | 24,5 % (38 erreurs) | 22,6 % (35 erreurs)                   |
+| WER FLEURS                                       | 2,97 %              | 2,54 %                                |
+| « . » suivi d'une minuscule dans le texte inséré | 3 phrases           | ✅ aucune                             |
+| Texte final après « Terminer »                   | 43 à 61 ms          | 36 à 819 ms (médiane 52 ms) : N3 tenu |
+| Mémoire résidente du worker                      | 1 340 à 1 430 Mio   | jusqu'à 1 495 Mio                     |
+
+Les dictées d'un seul segment gardent un texte final en 36 à 57 ms. Celles de plusieurs segments passent par le bloc : 317 à 819 ms. Exemples : « refonte du site. Hébergement souverain et maintenance annuelle » (`gilles-04`, 2 erreurs au lieu de 5), « jeudi après-midi en néerlandais, si possible » (`gilles-08`), « liste les actions, les responsables » (`gilles-10`).
+
+Limite : si le bloc dépasse son délai malgré la prévision, le repli attend la fin de son décodage natif, qui ne s'interrompt pas, puis transcrit les segments sautés. Le texte final peut alors dépasser 1 s. Ce cas n'est pas apparu dans le scénario réel.
+
 ### Limites et points d'attention
 
 - **`--no-sandbox` pour l'instance réelle.** Avec l'Electron du dépôt, le service audio sandboxé de Chromium ne lit pas le WAV du faux micro (« Failed to read … as input to the fake device »), même avec `--disable-features=AudioServiceSandbox`, qui suffisait au spike sur l'app packagée. Seule cette instance de mesure tourne sans sandbox. La capture, le relais et le worker n'en dépendent pas, mais l'e2e réel ne couvre pas le sandbox du renderer.
