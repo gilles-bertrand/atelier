@@ -11,8 +11,10 @@ import {
   fallbackLimaHome,
   guestToHost,
   hostToGuest,
+  isInstanceName,
   limaSocketFits,
   limaSocketPath,
+  MAX_INSTANCE_NAME_LENGTH,
   UNIX_PATH_MAX,
 } from '../src/paths.js';
 import { parseProvisionMarker, progressAt, progressFromLimaMessage } from '../src/progress.js';
@@ -252,6 +254,21 @@ describe('chemins', () => {
       expect(chosen).toBe(fallbackLimaHome(home));
       expect(limaSocketFits(chosen, 'atelier')).toBe(false);
     });
+  });
+  it("valide les noms d'instance : minuscules, chiffres, tirets simples (ticket #41)", () => {
+    for (const name of [
+      'atelier',
+      'atelier-e2e',
+      'atelier-it',
+      'atelier-verif41',
+      'a'.repeat(32),
+    ]) {
+      expect(isInstanceName(name), name).toBe(true);
+    }
+    const invalid = ['', 'Atelier', 'atelier_e2e', 'atelier.e2e', 'atelier e2e', '../atelier'];
+    invalid.push('atelier/e2e', '-atelier', 'atelier-', 'atelier--e2e', 'a'.repeat(33));
+    for (const name of invalid) expect(isInstanceName(name), name).toBe(false);
+    expect(MAX_INSTANCE_NAME_LENGTH).toBe(32);
   });
   it('hôte → VM', () => {
     expect(hostToGuest('/Users/a/projet/x/y.txt', mounts)).toBe('/workspace/x/y.txt');

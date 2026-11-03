@@ -8,7 +8,7 @@
  *
  * Un `--user-data-dir` passé en ligne de commande l'emporte : e2e (`qa/e2e`),
  * instances de mesure ou de QA, qui ne doivent jamais toucher aux données ni au
- * verrou d'instance unique de l'utilisateur.
+ * verrou d'instance unique de l'utilisateur, ni à sa VM (voir `vm-instance.ts`).
  */
 import { join } from 'node:path';
 

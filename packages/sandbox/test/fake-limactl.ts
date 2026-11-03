@@ -21,6 +21,8 @@ export interface FakeExecResult {
 }
 
 interface FakeState {
+  /** Nom de l'instance (`--name=` de `limactl create`). */
+  name: string;
   exists: boolean;
   status: 'Running' | 'Stopped';
   mounts: LimaMount[];
@@ -59,6 +61,7 @@ const log = (msg: string, level = 'info'): string => JSON.stringify({ level, msg
 export class FakeLimactl {
   readonly calls: FakeCall[] = [];
   readonly state: FakeState = {
+    name: 'atelier',
     exists: false,
     status: 'Stopped',
     mounts: [],
@@ -114,9 +117,9 @@ export class FakeLimactl {
       case 'list': {
         if (!this.state.exists) return makeResult(options, {});
         const instance = {
-          name: 'atelier',
+          name: this.state.name,
           status: this.state.status,
-          dir: '/fake/lima/atelier',
+          dir: `/fake/lima/${this.state.name}`,
           vmType: 'vz',
           arch: 'aarch64',
           cpus: this.state.cpus,
@@ -127,6 +130,8 @@ export class FakeLimactl {
         return makeResult(options, { stdout: `${JSON.stringify(instance)}\n` });
       }
       case 'create':
+        this.state.name =
+          args.find((arg) => arg.startsWith('--name='))?.slice('--name='.length) ?? 'atelier';
         this.state.exists = true;
         this.state.status = 'Stopped';
         this.applySets(args);

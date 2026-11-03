@@ -27,8 +27,10 @@ export {
   fallbackLimaHome,
   guestToHost,
   hostToGuest,
+  isInstanceName,
   limaSocketFits,
   limaSocketPath,
+  MAX_INSTANCE_NAME_LENGTH,
   UNIX_PATH_MAX,
 } from './paths.js';
 export { DEFAULT_MAX_OUTPUT_BYTES, OutputCollector } from './output.js';

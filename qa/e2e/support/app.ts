@@ -6,7 +6,10 @@
  * Deux modes (variable `ATELIER_E2E_MODE`) :
  * - `mock` (défaut, CI) : faux serveur LLM local (`mock-llm.ts`), pas de VM ;
  * - `real` (local) : Ollama (`ATELIER_E2E_LLM_URL`, défaut http://localhost:11434,
- *   modèle `ATELIER_E2E_MODEL`, défaut `atelier`) et la VM Lima de l'app.
+ *   modèle `ATELIER_E2E_MODEL`, défaut `atelier`) et la VM dédiée des e2e,
+ *   `atelier-e2e`, créée au premier run réel puis réutilisée (ticket #41). La VM
+ *   `atelier` de l'app n'est jamais touchée : l'app refuse ce nom sous
+ *   `--user-data-dir`.
  */
 import { cp, mkdir, mkdtemp, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
@@ -26,6 +29,12 @@ export const IS_REAL = MODE === 'real';
 export const REPO_ROOT = resolve(import.meta.dirname, '..', '..', '..');
 export const DESKTOP_DIR = join(REPO_ROOT, 'apps', 'desktop');
 export const FIXTURES_DIR = join(REPO_ROOT, 'fixtures');
+
+/**
+ * VM des e2e réels (`ATELIER_VM_INSTANCE`, ticket #41) : dans le LIMA_HOME de
+ * l'app, à côté d'`atelier`. Le mode mock n'a pas de VM.
+ */
+export const E2E_VM_INSTANCE = 'atelier-e2e';
 
 /** Durées maximales d'un tour : un vrai modèle 35b + VM est lent. */
 export const TURN_TIMEOUT = IS_REAL ? 15 * 60_000 : 30_000;
@@ -103,15 +112,23 @@ export async function launchAtelier(options: LaunchOptions): Promise<AtelierApp>
   }
   const logs: string[] = [];
   const executable = process.env['ATELIER_E2E_EXECUTABLE'];
+  // VM (ticket #41) : sous `--user-data-dir`, l'app n'en démarre aucune sans
+  // ATELIER_VM_INSTANCE. Réel : la VM dédiée des e2e. Mock : aucune, même
+  // avec l'app packagée ou une variable héritée du shell.
+  const { ATELIER_VM_INSTANCE: _inherited, ...inheritedEnv } = process.env;
   const app = await electron.launch({
-    // Mock : on lance le script main directement. `app.getAppPath()` vaut alors
-    // `out/main`, où `limactl` n'existe pas : jamais de VM, même dans un checkout
-    // où `pnpm fetch:lima` a été lancé (la VM locale n'est pas touchée).
+    // Mock : on lance le script main directement (`app.getAppPath()` vaut alors
+    // `out/main`, où `limactl` n'existe pas).
     // Réel : l'app du dépôt (ou l'app packagée, ATELIER_E2E_EXECUTABLE).
     args: [...(executable ? [] : [IS_REAL ? DESKTOP_DIR : main]), `--user-data-dir=${userData}`],
     ...(executable ? { executablePath: executable } : {}),
     cwd: DESKTOP_DIR,
-    env: { ...process.env, NODE_ENV: 'production', ELECTRON_RENDERER_URL: '' },
+    env: {
+      ...inheritedEnv,
+      NODE_ENV: 'production',
+      ELECTRON_RENDERER_URL: '',
+      ...(IS_REAL ? { ATELIER_VM_INSTANCE: E2E_VM_INSTANCE } : {}),
+    },
     timeout: 60_000,
   });
   app.process().stdout?.on('data', (chunk: Buffer) => logs.push(chunk.toString()));

@@ -457,6 +457,40 @@ describe('LimaSandbox.stop / reset / diagnostics', () => {
   });
 });
 
+describe("LimaSandbox : nom d'instance (ticket #41)", () => {
+  /** Instance visée par un appel limactl ; `undefined` pour `list` et `--version`. */
+  function target(args: string[]): string | undefined {
+    const verb = args[0] ?? '';
+    if (verb === 'create')
+      return args.find((a) => a.startsWith('--name='))?.slice('--name='.length);
+    if (verb === 'shell') return args[args.indexOf('--') - 1];
+    if (['start', 'stop', 'edit', 'delete'].includes(verb)) return args.at(-1);
+    return undefined;
+  }
+
+  it("ne pilote que l'instance demandée, jamais la VM atelier de l'app", async () => {
+    const { fake, sandbox } = setup({}, { instanceName: 'atelier-e2e' });
+    await sandbox.setWorkspace(workspace);
+    await sandbox.ensureReady();
+    await sandbox.setWorkspace(otherWorkspace);
+    await sandbox.exec('echo ok');
+    await sandbox.reset();
+    await sandbox.stop();
+    const targeted = fake.limactlArgs().filter((args) => target(args) !== undefined);
+    expect(new Set(targeted.map((args) => args[0]))).toEqual(
+      new Set(['create', 'start', 'shell', 'stop', 'edit', 'delete']),
+    );
+    expect(new Set(targeted.map(target))).toEqual(new Set(['atelier-e2e']));
+    expect((await sandbox.diagnostics()).extra?.['instanceName']).toBe('atelier-e2e');
+  });
+
+  it('refuse un nom qui sortirait de LIMA_HOME ou que Lima rejetterait', () => {
+    for (const instanceName of ['../atelier', 'atelier/e2e', 'Atelier', 'atelier.e2e']) {
+      expect(() => setup({}, { instanceName }), instanceName).toThrow(AtelierError);
+    }
+  });
+});
+
 describe('LimaSandbox chemins', () => {
   it('convertit les chemins hôte ↔ VM', async () => {
     const { sandbox } = await readySandbox();
