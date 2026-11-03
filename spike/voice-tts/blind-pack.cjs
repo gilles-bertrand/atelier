@@ -14,7 +14,7 @@ const sherpa = createRequire(path.join(repo, 'packages/voice/package.json'))('sh
 const [lang, dest, ...pairs] = process.argv.slice(2);
 const phrases = JSON.parse(fs.readFileSync(path.join(__dirname, 'phrases.json'), 'utf8'))[lang];
 
-const TARGET_RMS = 0.06; // environ -24 dBFS
+const TARGET_RMS = 0.1; // environ -20 dBFS
 function normalize(samples) {
   let sum = 0;
   for (const s of samples) sum += s * s;
