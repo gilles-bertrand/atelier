@@ -145,6 +145,15 @@ _Dernière mise à jour : 2026-10-29, Lead._
   - Packaging : `sherpa-onnx-node` et `sherpa-onnx-darwin-arm64` 2.0.1 dans `@atelier/desktop` (externes), `asarUnpack` `**/node_modules/sherpa-onnx-*/**`, entitlement `com.apple.security.device.audio-input` (signé et ad hoc), `NSMicrophoneUsageDescription`, Silero dans `Contents/Resources/voice` via `pnpm fetch:voice` (empreinte épinglée, appelé par `dist:mac` et `dist:mac:adhoc` ; à lancer une fois en dev). Build ad hoc vérifié le 02/11 : `codesign --verify --deep --strict` OK, entitlement et Info.plist présents, module natif signé hors de l'asar.
   - Pas encore exercé : une dictée réelle dans l'app (pas d'interface avant L4) ; e2e en L5.
 
+- **L4 (#30, `feat/ui-voice-renderer`) : dictée dans l'interface.**
+  - Capture (`features/voice/capture.ts`) : `getUserMedia` (écho, bruit, gain, `deviceId`), `AudioContext` à 16 kHz, `AudioWorklet` `src/renderer/public/voice-capture-worklet.js` (copié à côté de `index.html`, sous `script-src 'self'`) ; trames de 100 ms par `voice:audio` avec `seq` ; vu-mètre calculé dans le renderer. Capture injectée par `MicCaptureContext` (fausse capture dans les tests).
+  - Composer : bouton micro à gauche de l'envoi, ⌘⇧D (libre : les raccourcis de `Workspace` ignorent Maj). En écoute : bouton rouge, vu-mètre, chronomètre, champ en lecture seule et envoi suspendu ; texte inséré au curseur à chaque pause (`voice:transcript`), remplacé par le texte final de `voice:stop` ; Échap annule et rend le texte d'avant ; arrêt à 5 min par le main (le renderer garde le texte reçu), filet côté renderer 3 s plus tard. Dictée possible pendant un tour de l'agent. État annoncé par `aria-live`.
+  - **Visibilité du micro** : affiché tant que la voix n'a pas été désactivée (`voice` absent = jamais réglée : la voix s'active au premier usage, `voice.enabled: true`) ; masqué si l'utilisateur coupe la dictée dans Réglages › Voix.
+  - Premier usage : `voice:request-mic` au clic si l'accès n'est pas déterminé ; carte « La dictée a besoin du modèle de reconnaissance (environ 490 Mo, téléchargé une fois, traité sur ce Mac). » avec progression (`voice:model`) et annulation.
+  - Erreurs en français : micro refusé (bouton vers Réglages Système › Micro), aucun micro, micro muet (`silent_input`), modèle absent ou corrompu (la carte revient), moteur arrêté.
+  - Réglages › Voix : activer ; accès au micro ; choix du micro et test de 5 s (vu-mètre, transcription) ; modèles (état, tailles, licence, télécharger, importer, supprimer avec confirmation) ; source officielle ou miroir (validé par `validateVoiceSettings`) ; libération de la mémoire. Onboarding : paragraphe dictée dans l'étape Confidentialité.
+  - Tests : `lib/voice.test.ts`, `features/voice/ComposerDictation.test.tsx`, `features/settings/VoiceSettings.test.tsx`.
+
 ## Demandes d'évolution de `packages/shared`
 
 _Format : date, agent, type proposé, raison, packages impactés._

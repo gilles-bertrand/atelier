@@ -14,6 +14,7 @@ import {
   Upload,
   type LucideIcon,
 } from 'lucide-react';
+import { DEFAULT_VOICE_SETTINGS } from '@atelier/shared';
 import type {
   DeniedAction,
   FileCard,
@@ -42,6 +43,7 @@ import {
 import { ArtifactViewer } from '../projects/ArtifactViewer';
 import { RunBanner } from '../schedule/RunBanner';
 import { headerInset, SidebarOpenButton, useShellChrome } from '../sidebar/shell-chrome';
+import type { ComposerVoice } from '../voice/ComposerDictation';
 import { Composer, type PendingAttachment } from './Composer';
 import { ContextGauge } from './ContextGauge';
 import { FilePreviewContext, type FilePreviewControls } from './file-preview-context';
@@ -109,8 +111,23 @@ export function ChatView({
   /** Conversation d'un run planifié : « Autoriser pour cette tâche » (ADR-002 D4). */
   onAuthorizeTask?: (taskId: string, denied: DeniedAction[]) => void;
 }) {
-  const { state } = useApp();
+  const { state, actions: appActions } = useApp();
   const { sidebarOpen } = useShellChrome();
+  // Dictée : visible tant que l'utilisateur ne l'a pas désactivée dans Réglages › Voix ;
+  // jamais réglée, elle s'active à son premier usage.
+  const voiceSettings = state.settings.voice;
+  const voice = useMemo<ComposerVoice | undefined>(
+    () =>
+      voiceSettings?.enabled === false
+        ? undefined
+        : {
+            settings: voiceSettings ?? DEFAULT_VOICE_SETTINGS,
+            enable: async () => {
+              await appActions.updateSettings({ voice: { enabled: true } });
+            },
+          },
+    [voiceSettings, appActions],
+  );
   const { actions } = useChat();
   const view = useSessionView(session.id);
   const [draft, setDraft] = useState('');
@@ -525,6 +542,7 @@ export function ChatView({
                 }
                 onAddFiles={(files) => void importFiles(files)}
                 textareaRef={textarea}
+                voice={voice}
               />
             </div>
             {artifactId !== undefined ? (

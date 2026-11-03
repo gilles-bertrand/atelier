@@ -1,7 +1,7 @@
 /**
  * Zone de saisie : texte, pièces jointes en attente (vignettes pour les images,
  * tuile typée pour les autres), trombone pour joindre sans glisser-déposer,
- * envoi (Entrée) ou arrêt du tour en cours.
+ * dictée (micro, ⌘⇧D), envoi (Entrée) ou arrêt du tour en cours.
  */
 import { useId, useRef, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { ArrowUp, Paperclip, Square, X } from 'lucide-react';
@@ -9,6 +9,7 @@ import type { Attachment } from '@atelier/shared';
 import { FileTypeIcon } from '@renderer/components/FileTypeIcon';
 import { Button } from '@renderer/components/ui/button';
 import { formatBytes } from '@renderer/lib/format';
+import { useComposerDictation, type ComposerVoice } from '../voice/ComposerDictation';
 
 export interface PendingAttachment {
   attachment: Attachment;
@@ -31,6 +32,7 @@ export function Composer({
   footer,
   onAddFiles,
   textareaRef,
+  voice,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -51,14 +53,28 @@ export function Composer({
   onAddFiles?: (files: File[]) => void;
   /** Champ de saisie, pour y placer le curseur depuis la vue (suggestions). */
   textareaRef?: RefObject<HTMLTextAreaElement | null>;
+  /** Dictée (ADR-004) ; absente quand la voix est désactivée dans les Réglages. */
+  voice?: ComposerVoice | undefined;
 }) {
   const inputId = useId();
   const hintId = useId();
   const ownTextarea = useRef<HTMLTextAreaElement>(null);
   const textarea = textareaRef ?? ownTextarea;
   const fileInput = useRef<HTMLInputElement>(null);
+  const dictation = useComposerDictation({
+    voice,
+    value,
+    onChange,
+    textarea,
+    disabled,
+  });
+  // Pendant la dictée, rien ne part : le texte dicté se relit avant l'envoi.
   const canSend =
-    !running && !disabled && !importing && (value.trim() !== '' || attachments.length > 0);
+    !running &&
+    !disabled &&
+    !importing &&
+    !dictation.active &&
+    (value.trim() !== '' || attachments.length > 0);
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
     if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
@@ -108,6 +124,7 @@ export function Composer({
             </ul>
           ) : null}
           {notice ? <div className="px-3 pt-3">{notice}</div> : null}
+          {dictation.panel ? <div className="px-3 pt-3">{dictation.panel}</div> : null}
           <label htmlFor={inputId} className="sr-only">
             Votre message
           </label>
@@ -117,6 +134,8 @@ export function Composer({
             rows={2}
             value={value}
             disabled={disabled}
+            readOnly={dictation.active}
+            aria-busy={dictation.active}
             aria-describedby={hintId}
             placeholder="Demandez quelque chose à l’assistant…"
             onChange={(e) => {
@@ -164,6 +183,7 @@ export function Composer({
             </p>
             <div className="flex shrink-0 items-center gap-1">
               {status}
+              {dictation.button}
               {running ? (
                 <Button size="sm" variant="outline" onClick={onStop}>
                   <Square className="size-3.5 fill-current" aria-hidden />

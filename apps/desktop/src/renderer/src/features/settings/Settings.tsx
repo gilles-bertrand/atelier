@@ -7,6 +7,7 @@ import {
   FolderKanban,
   ChartColumn,
   Globe,
+  Mic,
   Plug,
   Server,
   Sparkles,
@@ -23,6 +24,7 @@ import { ScheduleSettings } from './ScheduleSettings';
 import { SearchSettings } from './SearchSettings';
 import { ServerSettings } from './ServerSettings';
 import { UsageSettings } from './UsageSettings';
+import { VoiceSettings } from './VoiceSettings';
 
 const SECTIONS = [
   { id: 'server', label: 'Serveur et modèle', icon: Server },
@@ -31,6 +33,7 @@ const SECTIONS = [
   { id: 'schedule', label: 'Tâches planifiées', icon: CalendarClock },
   { id: 'projects', label: 'Projets', icon: FolderKanban },
   { id: 'search', label: 'Recherche web', icon: Globe },
+  { id: 'voice', label: 'Voix', icon: Mic },
   { id: 'skills', label: 'Skills', icon: Sparkles },
   { id: 'mcp', label: 'Connecteurs', icon: Plug },
 ] as const;
@@ -111,6 +114,7 @@ export function Settings({ onClose }: { onClose: () => void }) {
             {section === 'schedule' ? <ScheduleSettings /> : null}
             {section === 'projects' ? <ProjectsSettings /> : null}
             {section === 'search' ? <SearchSettings /> : null}
+            {section === 'voice' ? <VoiceSettings /> : null}
             {section === 'skills' ? <SkillsSettings /> : null}
             {section === 'mcp' ? <McpSettings /> : null}
           </div>
