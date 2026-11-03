@@ -1,6 +1,6 @@
 /**
  * Projets (ADR-003, lot L5, ticket #22), scénario réel « tableau de bord hebdo » :
- * un vrai modèle (Ollama local), la VM Lima de l'app, et un projet sur deux
+ * un vrai modèle (Ollama local), la VM dédiée des e2e (`atelier-e2e`), et un projet sur deux
  * dossiers. Le principal contient les CSV de `fixtures/demo-ventes` ; « Archives »
  * est en lecture seule.
  *
@@ -24,6 +24,7 @@ import {
   autoApprove,
   describeCalls,
   DESKTOP_DIR,
+  E2E_VM_INSTANCE,
   FIXTURES_DIR,
   IS_REAL,
   listFiles,
@@ -103,14 +104,14 @@ async function projectMemory(page: Page, name: string): Promise<string> {
 
 const execFileAsync = promisify(execFile);
 
-/** Commande dans la VM de l'app (utilisateur par défaut de Lima) : code de sortie et sortie. */
+/** Commande dans la VM des e2e (utilisateur par défaut de Lima) : code de sortie et sortie. */
 async function inVm(command: string[]): Promise<{ code: number; output: string }> {
   const limactl = join(DESKTOP_DIR, 'resources', 'lima', 'bin', 'limactl');
   try {
     const { stdout, stderr } = await execFileAsync(
       limactl,
-      ['shell', '--workdir', '/', 'atelier', '--', ...command],
-      { env: { ...process.env, LIMA_HOME: chooseLimaHome('atelier') }, timeout: 60_000 },
+      ['shell', '--workdir', '/', E2E_VM_INSTANCE, '--', ...command],
+      { env: { ...process.env, LIMA_HOME: chooseLimaHome(E2E_VM_INSTANCE) }, timeout: 60_000 },
     );
     return { code: 0, output: `${stdout}${stderr}`.trim() };
   } catch (error) {

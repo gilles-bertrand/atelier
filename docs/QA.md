@@ -278,9 +278,12 @@ Comportement du modèle :
 
 Conditions pour rejouer ce scénario :
 
-- **Aucune autre instance d'Atelier pendant le run**, y compris une app lancée avec `--user-data-dir` (spike, bench) : toutes partagent la VM `atelier`.
-  - Le 02/11 à 10:46, une instance de dictée du spike voix (#25) a démarré la VM depuis l'onboarding et l'a remontée avec ses propres dossiers. Elle l'a ensuite arrêtée en quittant proprement (`limactl stop`).
-  - Le 2e run et les contrôles dans la VM n'ont donc pas pu se faire. Le spike remplace désormais la VM par un bouchon.
+- **Le run a sa propre VM, `atelier-e2e`** (ticket #41, 03/11) : une instance lancée avec `--user-data-dir` n'a pas de VM, sauf si `ATELIER_VM_INSTANCE` en nomme une dédiée. Le mode réel demande `atelier-e2e`, dans le même `LIMA_HOME` qu'`atelier`, et `atelier` est refusé.
+  - Plus de remontage, d'arrêt ni de suppression de la VM de la session principale par un run, un spike ou un banc de mesure.
+  - Premier run réel : création en 3 à 4 min, environ 4,6 Go de disque. Runs suivants : VM prête en 8 s environ.
+  - Pour la supprimer : `LIMA_HOME="$HOME/Library/Application Support/Atelier/lima" apps/desktop/resources/lima/bin/limactl delete --force atelier-e2e`.
+  - Reste partagé : le port hôte 8888 de SearXNG, gardé par la première VM démarrée. L'autre n'a qu'un avertissement de Lima. Le modèle Ollama local est partagé aussi (`/api/ps`).
+  - Avant #41, le 02/11 à 10:46, une instance de dictée du spike voix (#25) avait démarré la VM `atelier` depuis l'onboarding et l'avait remontée avec ses propres dossiers, puis arrêtée en quittant (`limactl stop`). Le 2e run et les contrôles dans la VM n'avaient pas pu se faire.
 - **Quitter Atelier par Cmd+Q.** Sur macOS, fermer la fenêtre laisse l'app tourner, et elle garde la VM.
 - **Lancer sous `caffeinate -ims`, Mac sur secteur.** Le 31/10, capot fermé, une « Maintenance Sleep » a coupé le tour au bout de 2 min : « Tour non terminé après 900000 ms », le délai étant mesuré à l'horloge murale.
 - **Construire depuis un worktree propre d'`origin/main`.** Le checkout partagé porte souvent le travail en cours d'un autre agent. Dans le worktree, relier `apps/desktop/resources/lima` et le binaire d'Electron au checkout principal.

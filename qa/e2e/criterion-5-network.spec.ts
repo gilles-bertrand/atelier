@@ -79,7 +79,7 @@ test('critère 5 : curl échoue dans la VM tant que le réseau est coupé', asyn
     .slice(blocked.length);
   expect(allowed.some((c) => (c.output ?? '').includes('Example Domain'))).toBe(true);
 
-  // 3. Coupé de nouveau à la fin (pas d'effet de bord sur la VM partagée).
+  // 3. Coupé de nouveau à la fin : la VM des e2e sert d'un run à l'autre.
   await toggle.click();
   await expect(toggle).toHaveAttribute('aria-checked', 'false');
 });

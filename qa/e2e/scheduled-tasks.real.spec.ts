@@ -10,7 +10,14 @@
  */
 import { join } from 'node:path';
 import { readFile } from 'node:fs/promises';
-import { FIXTURES_DIR, IS_REAL, listFiles, sidebar, TURN_TIMEOUT } from './support/app.js';
+import {
+  FIXTURES_DIR,
+  IS_REAL,
+  listFiles,
+  sidebar,
+  TURN_TIMEOUT,
+  waitForSandbox,
+} from './support/app.js';
 import { expect, test } from './support/fixture.js';
 
 test.skip(!IS_REAL, 'Mode réel seulement (Ollama local et VM).');
@@ -38,7 +45,7 @@ function amounts(text: string): number[] {
 test('rapport hebdo : tâche du lundi 08:00, exécutée maintenant avec Qwen', async ({
   atelier,
 }, testInfo) => {
-  test.setTimeout(TURN_TIMEOUT + 5 * 60_000);
+  test.setTimeout(TURN_TIMEOUT + 10 * 60_000);
   const { page, workspace } = atelier;
   const nav = await sidebar(page);
   await nav.getByRole('button', { name: 'Tâches planifiées' }).click();
@@ -62,6 +69,9 @@ test('rapport hebdo : tâche du lundi 08:00, exécutée maintenant avec Qwen', a
     .click()
     .catch(() => undefined);
 
+  // Le run calcule dans la VM des e2e : au tout premier run réel, elle est
+  // encore en création (3 à 4 min, ticket #41).
+  await waitForSandbox(page);
   const started = Date.now();
   await page.getByRole('button', { name: 'Exécuter « Rapport hebdo » maintenant' }).click();
   const run = page

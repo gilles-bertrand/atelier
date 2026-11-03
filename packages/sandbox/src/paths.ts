@@ -38,6 +38,19 @@ export function limaSocketFits(limaHome: string, instanceName: string): boolean 
   return limaSocketPath(limaHome, instanceName).length < UNIX_PATH_MAX;
 }
 
+/** Longueur maximale d'un nom d'instance (le socket de Lima doit rester court). */
+export const MAX_INSTANCE_NAME_LENGTH = 32;
+
+/**
+ * Vrai si `name` est un nom d'instance Lima sûr : minuscules, chiffres et tirets
+ * simples, sans tiret au bord, 32 caractères au plus. C'est un sous-ensemble
+ * prudent de ce que Lima accepte. Le nom finit dans des chemins
+ * (`<LIMA_HOME>/<nom>`) : jamais de `/`, de `.` ni d'espace.
+ */
+export function isInstanceName(name: string): boolean {
+  return name.length <= MAX_INSTANCE_NAME_LENGTH && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name);
+}
+
 /**
  * Choisit le `LIMA_HOME` d'Atelier.
  *

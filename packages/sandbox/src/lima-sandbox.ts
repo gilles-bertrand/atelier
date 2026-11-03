@@ -39,6 +39,7 @@ import {
   defaultSkillsDir,
   guestToHost,
   hostToGuest,
+  isInstanceName,
   limaSocketFits,
   limaSocketPath,
   UNIX_PATH_MAX,
@@ -82,7 +83,10 @@ export interface LimaSandboxOptions {
   limaHome?: string;
   /** Dossier des skills monté sur `/skills` (défaut : `~/YodAI/skills`). */
   skillsDir?: string;
-  /** Nom de l'instance (défaut : `atelier`). */
+  /**
+   * Nom de l'instance (défaut : `atelier`, la VM de l'app). Une instance de test
+   * en prend une autre (`atelier-e2e`…, ticket #41). Voir `isInstanceName`.
+   */
   instanceName?: string;
   /** Ressources de la VM (Réglages). */
   resources?: Partial<SandboxResources>;
@@ -137,6 +141,11 @@ export class LimaSandbox implements Sandbox {
     this.runner = options.runner ?? spawnRunner;
     this.log = options.log ?? (() => undefined);
     this.name = options.instanceName ?? DEFAULT_INSTANCE_NAME;
+    if (!isInstanceName(this.name)) {
+      throw new AtelierError('sandbox/failed', `Nom de VM invalide : « ${this.name} ».`, {
+        details: { instanceName: this.name },
+      });
+    }
     this.limactl = new Limactl({
       limactlPath: options.limactlPath,
       limaHome: options.limaHome ?? chooseLimaHome(this.name),

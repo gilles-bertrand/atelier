@@ -38,6 +38,7 @@ import { ModelCatalog, serverModelSource } from './llm/model-catalog.js';
 import { ServerMonitor } from './llm/server-monitor.js';
 import { APP_NAME, defaultProjectsDir, migrateLegacyFolders } from './app-folders.js';
 import { pinnedUserDataDir } from './user-data.js';
+import { chooseVm, VM_INSTANCE_ENV } from './vm-instance.js';
 import { limaPreflight, resolveAppPaths } from './paths.js';
 import { AgentRuntimeHost } from './runtime/agent-runtime.js';
 import { ChatManager } from './runtime/chat-manager.js';
@@ -58,6 +59,7 @@ import {
   type ProjectStore,
 } from './projects/project-store.js';
 import { PermissionBroker } from './runtime/permission-broker.js';
+import { DisabledSandbox } from './runtime/disabled-sandbox.js';
 import { SandboxManager } from './runtime/sandbox-manager.js';
 import { InMemorySessionStore, type SessionStore } from './runtime/session-store.js';
 import { openDatabase, SqliteSessionStore } from './runtime/sqlite-store.js';
@@ -358,13 +360,23 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
     },
   });
 
+  // VM de l'instance (ticket #41) : `atelier` pour l'app ; une instance de test
+  // (`--user-data-dir`) n'en a pas, sauf VM dédiée demandée par ATELIER_VM_INSTANCE.
+  const vm = chooseVm({
+    userDataDirImposed: app.commandLine.hasSwitch('user-data-dir'),
+    requested: process.env[VM_INSTANCE_ENV],
+  });
+  log(vm.kind === 'lima' ? `vm: instance ${vm.instanceName}` : `vm: aucune (${vm.reason})`);
+
   const sandbox = new SandboxManager({
     holder: () => lease.holder(),
     create: () => {
+      if (vm.kind === 'disabled') return new DisabledSandbox(vm.reason);
       const s = settings.get();
       return new LimaSandbox({
         limactlPath: paths.limactl,
         templatesDir: paths.limaTemplates,
+        instanceName: vm.instanceName,
         skillsDir: s.skillsDir,
         resources: {
           cpus: s.sandbox.cpus,
@@ -377,7 +389,8 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
         },
       });
     },
-    preflight: () => limaPreflight(paths, app.isPackaged),
+    preflight: () =>
+      vm.kind === 'disabled' ? Promise.resolve(vm.reason) : limaPreflight(paths, app.isPackaged),
     onStatus: (status) => {
       broadcast('sandbox:status', status);
     },

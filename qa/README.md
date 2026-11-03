@@ -26,16 +26,23 @@ pnpm --filter @atelier/qa e2e:real criterion-2   # un seul critère
 
 Les deux commandes construisent d'abord l'app (`electron-vite build`), puis lancent Electron avec un `userData` et un dossier de travail temporaires (réglages pré-remplis, onboarding passé). La boîte « Choisir un dossier » est remplacée par le dossier de test, et le glisser-déposer passe par un vrai drag Chromium (CDP `Input.dispatchDragEvent`) pour que `webUtils.getPathForFile` résolve les chemins.
 
-| Mode   | Modèle                                                                                          | VM                                                                            | Ce qui est vérifié                                                                                                        |
-| ------ | ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `mock` | faux serveur, séquence d'outils scriptée                                                        | aucune (l'app est lancée par son script main, `limactl` introuvable)          | le contrat de l'app : tâches, permissions avant écriture, cartes, vision appelée, refus propre sans VM                    |
-| `real` | `ATELIER_E2E_LLM_URL` (défaut `http://localhost:11434`), `ATELIER_E2E_MODEL` (défaut `atelier`) | VM `atelier` de l'app (`apps/desktop/resources/lima`, voir `pnpm fetch:lima`) | en plus : le classeur (totaux mensuels, graphique), les montants lus par la vision, le blocage réseau puis l'autorisation |
+| Mode   | Modèle                                                                                          | VM                                                                                                               | Ce qui est vérifié                                                                                                        |
+| ------ | ----------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `mock` | faux serveur, séquence d'outils scriptée                                                        | aucune (l'app est lancée par son script main, `limactl` introuvable)                                             | le contrat de l'app : tâches, permissions avant écriture, cartes, vision appelée, refus propre sans VM                    |
+| `real` | `ATELIER_E2E_LLM_URL` (défaut `http://localhost:11434`), `ATELIER_E2E_MODEL` (défaut `atelier`) | VM dédiée `atelier-e2e` (`apps/desktop/resources/lima`, voir `pnpm fetch:lima`), jamais la VM `atelier` de l'app | en plus : le classeur (totaux mensuels, graphique), les montants lus par la vision, le blocage réseau puis l'autorisation |
 
 Variables utiles : `ATELIER_E2E_KEEP=1` garde les dossiers temporaires, `ATELIER_E2E_EXECUTABLE=/Applications/Atelier.app/Contents/MacOS/Atelier` teste l'app packagée, `ATELIER_E2E_REPORT=1` écrit le temps de lancement dans `reports/`.
 
 En cas d'échec, le rapport HTML (`qa/playwright-report/`) contient la trace, une capture, la liste des appels d'outils de la conversation (lue par `session:open`) et le journal du process main.
 
-⚠️ En mode réel, l'app utilise la VM `atelier` de votre machine (remontée sur le dossier de test). Ne lancez pas l'app Atelier en même temps.
+VM et instances de test (ticket #41) : lancée avec `--user-data-dir`, l'app n'a pas de VM, sauf si `ATELIER_VM_INSTANCE=atelier-<nom>` en demande une dédiée (`atelier` est refusé).
+
+- Le mode mock n'en demande pas, même avec `ATELIER_E2E_EXECUTABLE`.
+- Le mode réel demande `atelier-e2e`, créée au premier run réel (3 à 4 min, environ 4,6 Go) puis réutilisée. Votre app et sa VM `atelier` peuvent rester ouvertes.
+- Seul le port hôte 8888 (SearXNG) va à la première VM démarrée.
+- Suppression : `LIMA_HOME="$HOME/Library/Application Support/Atelier/lima" apps/desktop/resources/lima/bin/limactl delete --force atelier-e2e`.
+
+Pour piloter l'app packagée à la main sans VM, il suffit du `--user-data-dir`. Avec une VM dédiée : `open -n YodAI.app --env ATELIER_VM_INSTANCE=atelier-qa --args --user-data-dir=<tmp>`.
 
 ## Robustesse avec Qwen
 
