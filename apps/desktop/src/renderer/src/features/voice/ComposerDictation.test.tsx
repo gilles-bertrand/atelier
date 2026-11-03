@@ -52,6 +52,7 @@ function setup({
     const [value, setValue] = useState(initial);
     return (
       <MicCaptureContext value={capture.start}>
+        <button type="button">Ailleurs</button>
         <Composer
           value={value}
           onChange={setValue}
@@ -105,12 +106,12 @@ describe('Dictée dans le Composer', () => {
   it('passe par les états du bouton : repos, écoute (rouge, vu-mètre, chronomètre), fin', async () => {
     const s = setup();
     expect(s.micButton()).toHaveAccessibleName('Dicter (⌘⇧D)');
-    expect(s.micButton()).toHaveAttribute('aria-pressed', 'false');
+    // Le libellé change : pas d'`aria-pressed` en plus (VoiceOver lirait « sélectionné »).
+    expect(s.micButton()).not.toHaveAttribute('aria-pressed');
 
     await startDictation(s);
     expect(s.api.callsTo('voice:start')).toEqual([{ mode: 'dictation' }]);
     expect(s.micButton()).toHaveAccessibleName('Terminer la dictée (⌘⇧D)');
-    expect(s.micButton()).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByTestId('voice-announcer')).toHaveTextContent('Ouverture du micro');
 
     listening(s.api);
@@ -178,6 +179,33 @@ describe('Dictée dans le Composer', () => {
     expect(s.api.callsTo('voice:stop')).toEqual([]);
     expect(s.capture.stopped).toBe(1);
     expect(screen.getByTestId('voice-announcer')).toHaveTextContent('Dictée annulée');
+  });
+
+  it('Échap ailleurs (aperçu, menu) n’annule pas la dictée', async () => {
+    const s = setup({ initial: 'Début' });
+    await startDictation(s);
+    listening(s.api);
+    segment(s.api, 0, 'gardé');
+    screen.getByRole('button', { name: 'Ailleurs' }).focus();
+
+    await userEvent.keyboard('{Escape}');
+    expect(s.api.callsTo('voice:cancel')).toEqual([]);
+    expect(s.textarea()).toHaveValue('Début gardé');
+    expect(s.micButton()).toHaveAccessibleName('Terminer la dictée (⌘⇧D)');
+  });
+
+  it('ne reprend pas le focus si l’utilisateur est passé ailleurs', async () => {
+    const s = setup({ handlers: { 'voice:stop': () => ({ text: 'Bonjour' }) } });
+    await startDictation(s);
+    listening(s.api);
+    const elsewhere = screen.getByRole('button', { name: 'Ailleurs' });
+    elsewhere.focus();
+
+    await userEvent.keyboard('{Meta>}{Shift>}D{/Shift}{/Meta}');
+    await waitFor(() => {
+      expect(s.textarea()).toHaveValue('Bonjour');
+    });
+    expect(elsewhere).toHaveFocus();
   });
 
   it('⌘⇧D démarre puis termine la dictée', async () => {

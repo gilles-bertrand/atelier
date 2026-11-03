@@ -550,7 +550,7 @@ function SourceSection() {
           </div>
           <Hint>https:// obligatoire, sauf pour localhost ou une adresse Tailscale.</Hint>
           {invalid !== undefined ? (
-            <p role="alert" className="text-sm text-destructive">
+            <p role="alert" className="text-sm text-destructive-text">
               {invalid}
             </p>
           ) : null}
@@ -615,7 +615,7 @@ function MemorySection() {
         </div>
         <Hint>0 garde le moteur chargé tant que l’app est ouverte.</Hint>
         {invalid !== undefined ? (
-          <p role="alert" className="text-sm text-destructive">
+          <p role="alert" className="text-sm text-destructive-text">
             {invalid}
           </p>
         ) : null}

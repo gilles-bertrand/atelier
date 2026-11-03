@@ -20,8 +20,12 @@ function withModel(status: VoiceStatus, model: VoiceModelInfo): VoiceStatus {
 /**
  * `eager` : lit l'état au montage (Réglages). Sinon, seulement au premier
  * `refresh()` (Composer : pas d'IPC tant que le micro n'est pas utilisé).
+ * `subscribe: false` : aucun abonnement aux événements (voix désactivée).
  */
-export function useVoiceStatus({ eager = false }: { eager?: boolean } = {}): {
+export function useVoiceStatus({
+  eager = false,
+  subscribe = true,
+}: { eager?: boolean; subscribe?: boolean } = {}): {
   status: VoiceStatus | undefined;
   refresh: () => Promise<VoiceStatus>;
 } {
@@ -34,6 +38,7 @@ export function useVoiceStatus({ eager = false }: { eager?: boolean } = {}): {
   }, []);
 
   useEffect(() => {
+    if (!subscribe) return;
     const api = atelier();
     const offStatus = api.on('voice:status', update);
     const offModel = api.on('voice:model', (model) => {
@@ -43,7 +48,7 @@ export function useVoiceStatus({ eager = false }: { eager?: boolean } = {}): {
       offStatus();
       offModel();
     };
-  }, [update]);
+  }, [subscribe, update]);
 
   const refresh = useCallback(async () => {
     const next = await call('voice:status');
