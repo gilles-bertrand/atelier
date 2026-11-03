@@ -84,6 +84,12 @@ async function main() {
   const gap = new Float32Array(Math.round(0.25 * tts.sampleRate));
   for (let i = 0; i < phrases.length; i++) {
     const sentences = splitSentences(phrases[i]);
+    // FIRST_CLAUSE=1 : la première phrase est coupée à la première virgule ou
+    // au premier deux-points, pour réduire le délai du premier son.
+    if (process.env.FIRST_CLAUSE === '1') {
+      const m = /^(.{12,}?[,:])\s+(.{12,})$/u.exec(sentences[0]);
+      if (m) sentences.splice(0, 1, m[1], m[2]);
+    }
     const parts = [];
     let firstSoundMs = null;
     const start = performance.now();
