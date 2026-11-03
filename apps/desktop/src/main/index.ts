@@ -36,6 +36,7 @@ import { registerIpcHandlers } from './ipc.js';
 import { ModelCatalog, serverModelSource } from './llm/model-catalog.js';
 import { ServerMonitor } from './llm/server-monitor.js';
 import { APP_NAME, defaultProjectsDir, migrateLegacyFolders } from './app-folders.js';
+import { pinnedUserDataDir } from './user-data.js';
 import { limaPreflight, resolveAppPaths } from './paths.js';
 import { AgentRuntimeHost } from './runtime/agent-runtime.js';
 import { ChatManager } from './runtime/chat-manager.js';
@@ -632,12 +633,13 @@ let quitting = false;
 // Une seule instance par dossier de données : une deuxième partagerait la VM
 // et l'arrêterait en quittant (`limactl stop`), en pleine session de la
 // première. Elle s'efface au profit de la fenêtre existante.
-// Dossier de données (historique, réglages, secrets) : `Application Support/@atelier/desktop`,
-// tiré du `name` du package.json, en dev comme packagé. Épinglé pour que le
-// renommage en YodAI (`app.setName`) ne le déplace pas. Ce n'est PAS
-// `Application Support/Atelier`, qui ne contient que la VM (`lima/`).
-// Avant le verrou d'instance unique, qui vit dans ce dossier.
-app.setPath('userData', join(app.getPath('appData'), '@atelier', 'desktop'));
+// Dossier de données épinglé (voir user-data.ts), sauf `--user-data-dir`
+// imposé (e2e, QA). Avant le verrou d'instance unique, qui vit dans ce dossier.
+const pinnedUserData = pinnedUserDataDir(
+  app.getPath('appData'),
+  app.commandLine.hasSwitch('user-data-dir'),
+);
+if (pinnedUserData !== undefined) app.setPath('userData', pinnedUserData);
 const primaryInstance = app.requestSingleInstanceLock();
 if (!primaryInstance) app.exit(0);
 
