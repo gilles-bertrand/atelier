@@ -393,6 +393,12 @@ export class DictationSession {
    * Retranscrit d'un bloc tous les segments de la dictée, mis bout à bout.
    * Rend `undefined` si le moteur échoue ou dépasse `finalBlockBudgetMs` :
    * l'appelant assemble alors les segments, sans erreur.
+   *
+   * Limite connue : le décodage natif ne s'interrompt pas. Après un
+   * dépassement, les segments sautés passent derrière la fin du bloc dans le
+   * moteur, et le texte final peut arriver au-delà de N3 (≈ délai + fin du
+   * bloc + segments sautés). Cas rare : le bloc n'est tenté que si la vitesse
+   * mesurée prévoit qu'il tient, avec une marge de × 1,5.
    */
   private async transcribeBlock(parts: Float32Array[]): Promise<string | undefined> {
     const audio = new Float32Array(parts.reduce((n, p) => n + p.length, 0));

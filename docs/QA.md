@@ -398,6 +398,8 @@ Sans la pause, Parakeet colle deux segments (« souverain|et maintenance » → 
 
 Les dictées d'un seul segment gardent un texte final en 36 à 57 ms. Celles de plusieurs segments passent par le bloc : 317 à 819 ms. Exemples : « refonte du site. Hébergement souverain et maintenance annuelle » (`gilles-04`, 2 erreurs au lieu de 5), « jeudi après-midi en néerlandais, si possible » (`gilles-08`), « liste les actions, les responsables » (`gilles-10`).
 
+Limite : si le bloc dépasse son délai malgré la prévision, le repli attend la fin de son décodage natif, qui ne s'interrompt pas, puis transcrit les segments sautés. Le texte final peut alors dépasser 1 s. Ce cas n'est pas apparu dans le scénario réel.
+
 ### Limites et points d'attention
 
 - **`--no-sandbox` pour l'instance réelle.** Avec l'Electron du dépôt, le service audio sandboxé de Chromium ne lit pas le WAV du faux micro (« Failed to read … as input to the fake device »), même avec `--disable-features=AudioServiceSandbox`, qui suffisait au spike sur l'app packagée. Seule cette instance de mesure tourne sans sandbox. La capture, le relais et le worker n'en dépendent pas, mais l'e2e réel ne couvre pas le sandbox du renderer.
