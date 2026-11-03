@@ -52,6 +52,21 @@ const END_ANNOUNCEMENTS: Record<DictationEnd, string> = {
   mic_lost: 'Le micro a été coupé. Le texte reçu est inséré.',
 };
 
+/**
+ * Le focus est sur la dictée (champ, bouton micro) ou nulle part : Échap et le
+ * retour du curseur la concernent. Ailleurs (aperçu, menu, barre latérale), on
+ * n'y touche pas.
+ */
+function focusOnDictation(field: HTMLElement | null, controls: HTMLElement | null): boolean {
+  const focused = document.activeElement;
+  return (
+    focused === null ||
+    focused === document.body ||
+    focused === field ||
+    controls?.contains(focused) === true
+  );
+}
+
 export function useComposerDictation({
   voice,
   value,
@@ -65,7 +80,7 @@ export function useComposerDictation({
   textarea: RefObject<HTMLTextAreaElement | null>;
   disabled: boolean;
 }): { button: ReactNode; panel: ReactNode; active: boolean } {
-  const { status, refresh } = useVoiceStatus();
+  const { status, refresh } = useVoiceStatus({ subscribe: voice !== undefined });
   const [panel, setPanel] = useState<Panel>();
   const [preparing, setPreparing] = useState(false);
   const [installing, setInstalling] = useState(false);
@@ -74,6 +89,8 @@ export function useComposerDictation({
   /** Texte autour du curseur au début de la dictée, et texte d'origine (Échap). */
   const anchor = useRef<{ before: string; after: string; original: string } | undefined>(undefined);
   const pendingCursor = useRef<number | undefined>(undefined);
+  /** Bouton micro et chronomètre : avec le champ, ce qui appartient à la dictée. */
+  const controls = useRef<HTMLSpanElement>(null);
   /** Le champ a eu le focus : sa sélection est celle de l'utilisateur (sinon, fin du texte). */
   const touched = useRef(false);
   useEffect(() => {
@@ -124,6 +141,8 @@ export function useComposerDictation({
     const field = textarea.current;
     if (cursor === undefined || !field) return;
     pendingCursor.current = undefined;
+    // L'utilisateur est passé ailleurs pendant la transcription : on le laisse.
+    if (!focusOnDictation(field, controls.current)) return;
     field.focus();
     field.setSelectionRange(cursor, cursor);
   }, [value, textarea]);
@@ -190,6 +209,8 @@ export function useComposerDictation({
     if (!voice) return;
     const onKey = (event: KeyboardEvent): void => {
       if (event.key === 'Escape' && active) {
+        // Échap ailleurs (aperçu de fichier, menu) garde son rôle habituel.
+        if (!focusOnDictation(textarea.current, controls.current)) return;
         event.preventDefault();
         event.stopPropagation();
         cancel();
@@ -205,7 +226,7 @@ export function useComposerDictation({
     return () => {
       window.removeEventListener('keydown', onKey, true);
     };
-  }, [voice, active, cancel]);
+  }, [voice, active, cancel, textarea]);
 
   if (!voice) return { button: null, panel: null, active: false };
 
@@ -240,7 +261,7 @@ export function useComposerDictation({
     : `Dicter (${DICTATION_SHORTCUT_LABEL})`;
 
   const button = (
-    <span className="flex items-center gap-2">
+    <span ref={controls} className="flex items-center gap-2">
       {listening ? (
         <span className="flex items-center gap-1.5 text-xs tabular-nums text-destructive-text">
           <LevelMeter level={dictation.level} />
@@ -252,7 +273,6 @@ export function useComposerDictation({
         variant={active ? 'destructive' : 'ghost'}
         aria-label={label}
         title={label}
-        aria-pressed={active}
         disabled={(disabled && !active) || (preparing && !active)}
         onClick={toggle}
         className={cn('size-8 shrink-0', !active && 'text-muted-foreground')}
