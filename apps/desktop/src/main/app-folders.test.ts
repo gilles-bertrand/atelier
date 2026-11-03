@@ -40,6 +40,28 @@ describe('dossier de l’app', () => {
 });
 
 describe('migrateLegacyFolders', () => {
+  it('reprend ~/Documents/YodAI même si ~/YodAI/skills existe déjà vide', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'yodai-home-'));
+    const documents = join(home, 'Documents', 'YodAI');
+    await mkdir(join(documents, 'skills', 'xlsx'), { recursive: true });
+    await writeFile(join(documents, 'skills', 'xlsx', 'SKILL.md'), '# xlsx');
+    await mkdir(defaultSkillsDir(home), { recursive: true });
+    await writeFile(join(defaultSkillsDir(home), '.DS_Store'), '');
+    const result = await migrateLegacyFolders(
+      { skillsDir: join(documents, 'skills'), mcpConfigPath: join(documents, 'mcp.json') },
+      home,
+    );
+
+    expect(result.moved).toEqual([[join(documents, 'skills'), defaultSkillsDir(home)]]);
+    expect(result.kept).toEqual([]);
+    expect(result.patch).toEqual({
+      skillsDir: defaultSkillsDir(home),
+      mcpConfigPath: defaultMcpConfigPath(home),
+    });
+    expect(await readFile(join(defaultSkillsDir(home), 'xlsx', 'SKILL.md'), 'utf8')).toBe('# xlsx');
+    expect(await exists(documents)).toBe(false);
+  });
+
   it('déplace skills et mcp.json de ~/Atelier et supprime l’ancien dossier vide', async () => {
     const home = await legacyHome();
     await writeFile(join(legacyAppFolder(home), '.DS_Store'), '');
@@ -62,9 +84,9 @@ describe('migrateLegacyFolders', () => {
     expect(await readdir(legacyAppFolder(home))).toEqual(['Projets']);
   });
 
-  it('n’écrase rien : si la cible existe, l’ancien chemin reste réglé', async () => {
+  it('n’écrase rien : si la cible existe et n’est pas vide, l’ancien chemin reste réglé', async () => {
     const home = await legacyHome();
-    await mkdir(defaultSkillsDir(home), { recursive: true });
+    await mkdir(join(defaultSkillsDir(home), 'perso'), { recursive: true });
     const result = await migrateLegacyFolders(legacySettings(home), home);
 
     expect(result.kept).toEqual([join(home, 'Atelier', 'skills')]);
