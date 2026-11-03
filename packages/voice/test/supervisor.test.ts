@@ -26,7 +26,7 @@ function setup(
     spawn: () => {
       const w = createFakeWorker(
         options.createEngine ??
-          (() => Promise.resolve(new FakeEngine({ script: ['Bonjour.', 'Encore.'] }))),
+          (() => Promise.resolve(new FakeEngine({ script: ['Bonjour.', 'Bonjour.'] }))),
       );
       workers.push(w);
       return w;
@@ -82,7 +82,8 @@ describe('VoiceWorkerSupervisor', () => {
     const text = supervisor.stop('v1');
     await tick(10);
     expect(await text).toBe('Bonjour.');
-    expect(transcripts).toEqual(['Bonjour.']);
+    // Segment fermé par l'arrêt : repris dans le bloc final, sans transcription à part (#42).
+    expect(transcripts).toEqual([]);
     expect(engineStates).toEqual(['loading', 'ready']);
     expect(supervisor.activeSessionId).toBeUndefined();
   });
@@ -183,7 +184,7 @@ describe('VoiceWorkerSupervisor', () => {
         attempts += 1;
         return attempts === 1
           ? Promise.reject(new Error('fichier corrompu'))
-          : Promise.resolve(new FakeEngine({ script: ['Ok.'] }));
+          : Promise.resolve(new FakeEngine({ script: ['Ok.', 'Ok.'] }));
       },
     });
     const first = supervisor.start('v1').catch((e: unknown) => e);

@@ -62,6 +62,17 @@ describe('joinSegments', () => {
     segments[3] = '';
     expect(joinSegments(segments)).toBe('Bonjour. Comment ça va ?');
   });
+
+  it('retire le point d’une pause au milieu d’une phrase (#42)', () => {
+    expect(
+      joinSegments(['Le client veut une démo jeudi après-midi.', 'en néerlandais, si possible.']),
+    ).toBe('Le client veut une démo jeudi après-midi en néerlandais, si possible.');
+    expect(joinSegments(['Read the report.', 'and send it.'])).toBe('Read the report and send it.');
+    expect(joinSegments(['Lees het rapport.', 'en stuur het.'])).toBe(
+      'Lees het rapport en stuur het.',
+    );
+    expect(joinSegments(['Is het klaar?', 'ja.'])).toBe('Is het klaar? ja.');
+  });
 });
 
 describe('micLevel', () => {

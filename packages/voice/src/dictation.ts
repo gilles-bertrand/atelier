@@ -4,7 +4,13 @@
  *
  * - Chaque segment fermé par une pause est transcrit, dans l'ordre, et émis
  *   aussitôt (`onSegment`) avec la typographie française s'il est en français.
- * - `stop()` transcrit le dernier segment et rend le texte assemblé.
+ * - `stop()` rend le texte final. Quand la retranscription d'un bloc tient
+ *   dans le délai du texte final (1 s, d'après la vitesse du moteur mesurée
+ *   pendant la session) et la parole en 20 s, tous les segments sont
+ *   retranscrits d'un bloc : Parakeet retrouve le contexte coupé aux pauses et
+ *   ne met plus de point à chaque pause (#42). Sinon, ou si le bloc échoue ou
+ *   tarde, les textes des segments sont assemblés, sans le point d'une pause
+ *   au milieu d'une phrase.
  * - `cancel()` abandonne tout : rien n'est rendu, les transcriptions en cours
  *   sont ignorées.
  * - Au bout de `maxDurationMs` (5 min), la dictée s'arrête d'elle-même
@@ -46,6 +52,46 @@ export interface DictationOptions {
    * doit couvrir le plus long segment du détecteur de parole (20 s).
    */
   historyMs?: number;
+  /**
+   * Plafond de l'audio de parole (pré-roll compris) retranscrit d'un bloc à
+   * l'arrêt, en millisecondes : `FINAL_BLOCK_MAX_MS` par défaut, 0 pour
+   * assembler toujours les segments.
+   */
+  finalBlockMaxMs?: number;
+  /**
+   * Délai accordé au bloc, en millisecondes : `FINAL_BLOCK_BUDGET_MS` par
+   * défaut. Le bloc n'est tenté que si sa durée prévue (vitesse mesurée × 1,5)
+   * y tient ; au-delà de ce délai, les segments sont assemblés.
+   */
+  finalBlockBudgetMs?: number;
+  /** Horloge en millisecondes, `performance.now` par défaut (injectable en test). */
+  now?: () => number;
+}
+
+/**
+ * Plafond de la parole retranscrite d'un bloc (#42), quelle que soit la
+ * vitesse du moteur : 643 ms pour 20 s d'audio de parole sur M4 Max (Parakeet
+ * v3 int8, 2 threads), 1,5 s pour 45 s.
+ */
+export const FINAL_BLOCK_MAX_MS = 20_000;
+/** Délai du texte final par bloc (N3 : texte final en 1 s au plus). */
+export const FINAL_BLOCK_BUDGET_MS = 1_000;
+/** Marge sur la durée prévue du bloc, d'après la vitesse mesurée des segments. */
+const FINAL_BLOCK_MARGIN = 1.5;
+/**
+ * Audio gardé après chaque segment dans le bloc (la pause qui l'a fermé),
+ * complété par du silence s'il n'est pas encore arrivé. Sans lui, Parakeet
+ * colle deux segments (« souverain|et maintenance » → « souverainance ») et
+ * perd la fin du dernier : WER des phrases de Gilles 23,2 % sans, 18,7 % avec
+ * 300 ms (24,5 % segment par segment).
+ */
+const FINAL_BLOCK_POST_ROLL_MS = 300;
+
+/** Segment sauté pendant l'arrêt, gardé pour le repli si le bloc échoue. */
+interface PendingSegment {
+  audio: Float32Array;
+  startMs: number;
+  endMs: number;
 }
 
 export interface DictationCallbacks {
@@ -127,11 +173,30 @@ export class DictationSession {
   private readonly maxSamples: number;
   private readonly preRollSamples: number;
   private readonly silentSamples: number;
+  private readonly blockMaxSamples: number;
+  private readonly blockBudgetMs: number;
+  private readonly postRollSamples: number;
+  private readonly now: () => number;
 
   private segmenter: SpeechSegmenter | undefined;
   private readonly history: AudioHistory;
   /** Textes des segments, dans l'ordre, typographie appliquée. */
   private texts: string[] = [];
+  /**
+   * Audio des segments (pré-roll compris), gardé pour la retranscription d'un
+   * bloc ; `undefined` dès que la parole dépasse `finalBlockMaxMs`.
+   */
+  private blockAudio: Float32Array[] | undefined = [];
+  private blockSamples = 0;
+  /** Fin (position absolue) du dernier segment gardé : le pré-roll suivant ne la recouvre pas. */
+  private blockEnd = 0;
+  /** Arrêt en cours avec retranscription d'un bloc : les segments en file sont sautés. */
+  private finalizingBlock = false;
+  /** Segments sautés pendant l'arrêt, transcrits seulement si le bloc échoue. */
+  private skipped: PendingSegment[] = [];
+  /** Vitesse mesurée du moteur : durée des transcriptions et audio transcrit. */
+  private decodeMs = 0;
+  private decodedSamples = 0;
   private nextIndex = 0;
   private language: TextLanguage = 'unknown';
   /** Transcriptions en file : une à la fois, dans l'ordre des segments. */
@@ -151,6 +216,11 @@ export class DictationSession {
     this.preRollSamples = msToSamples(options.preRollMs ?? VOICE_PRE_ROLL_MS);
     this.silentSamples = msToSamples(options.silentInputMs ?? VOICE_SILENT_INPUT_MS);
     this.history = new AudioHistory(msToSamples(options.historyMs ?? 30_000));
+    this.blockMaxSamples = msToSamples(options.finalBlockMaxMs ?? FINAL_BLOCK_MAX_MS);
+    this.blockBudgetMs = options.finalBlockBudgetMs ?? FINAL_BLOCK_BUDGET_MS;
+    this.postRollSamples = msToSamples(FINAL_BLOCK_POST_ROLL_MS);
+    this.now = options.now ?? (() => performance.now());
+    if (this.blockMaxSamples <= 0) this.blockAudio = undefined;
     this.segmenter = this.engine.createSegmenter();
   }
 
@@ -215,8 +285,24 @@ export class DictationSession {
     if (this.segmenter !== undefined && this.failure === undefined) {
       this.enqueue(this.segmenter.flush());
     }
+    // Les segments qui n'ont pas commencé attendent : le bloc les reprendra s'il
+    // est retenu. La décision suit le segment en cours, qui mesure le moteur.
+    if (this.blockAudio !== undefined && this.blockAudio.length > 0) this.finalizingBlock = true;
     await this.queue;
-    const text = assembleSegments(this.texts);
+    const block = this.blockFits() ? this.blockAudio : undefined;
+    let text: string | undefined;
+    if (block !== undefined && this.failure === undefined && !this.cancelled) {
+      text = await this.transcribeBlock(block);
+    }
+    this.dropBlock();
+    if (text === undefined) {
+      // Repli : les segments sautés sont transcrits, puis assemblés.
+      this.finalizingBlock = false;
+      const pending = this.skipped;
+      this.skipped = [];
+      for (const p of pending) await this.transcribe(p.audio, p.startMs, p.endMs);
+      text = assembleSegments(this.texts);
+    }
     const failure = this.failure;
     this.release();
     if (this.cancelled) {
@@ -240,24 +326,129 @@ export class DictationSession {
       audio.set(segment.samples, preRoll.length);
       // L'audio du segment n'est plus utile qu'à travers `audio`.
       segment.samples.fill(0);
+      this.keepForBlock(start, segment.startSample + segment.samples.length);
       const startMs = samplesToMs(segment.startSample - preRoll.length);
       const endMs = samplesToMs(segment.startSample + segment.samples.length);
       this.queue = this.queue.then(() => this.transcribe(audio, startMs, endMs));
     }
   }
 
+  /**
+   * Garde pour le bloc l'audio `[start, end)` d'un segment (pré-roll compris)
+   * et la pause qui le suit (`FINAL_BLOCK_POST_ROLL_MS`), tant que le bloc
+   * tient dans son plafond. Positions absolues dans le flux.
+   */
+  private keepForBlock(start: number, end: number): void {
+    if (this.blockAudio === undefined) return;
+    // Pause déjà gardée après le segment précédent : pas d'audio en double.
+    const from = Math.max(start, this.blockEnd);
+    const to = Math.max(from, end + this.postRollSamples);
+    this.blockEnd = to;
+    this.blockSamples += to - from;
+    if (this.blockSamples > this.blockMaxSamples) {
+      this.dropBlock();
+      return;
+    }
+    // La fin de la pause n'est peut-être pas encore reçue : silence à la place.
+    const part = new Float32Array(to - from);
+    const heard = this.history.slice(from, to);
+    part.set(heard, 0);
+    heard.fill(0);
+    this.blockAudio.push(part);
+  }
+
+  /**
+   * Le bloc est-il utile et tient-il dans son délai ? Un seul segment n'a pas
+   * de pause interne : déjà transcrit pendant l'écoute, son texte sert tel
+   * quel ; sauté à l'arrêt, il coûte autant en bloc qu'à part. Sinon, la durée
+   * prévue (vitesse mesurée sur les segments déjà transcrits, × 1,5) doit tenir
+   * dans `finalBlockBudgetMs` ; sans mesure, le bloc n'est pas tenté.
+   */
+  private blockFits(): boolean {
+    const block = this.blockAudio;
+    if (block === undefined || block.length === 0) return false;
+    if (block.length === 1) return this.skipped.length > 0;
+    if (this.decodedSamples === 0) return false;
+    const predictedMs =
+      (this.blockSamples * this.decodeMs * FINAL_BLOCK_MARGIN) / this.decodedSamples;
+    return predictedMs <= this.blockBudgetMs;
+  }
+
+  /** Efface et relâche l'audio gardé pour le bloc. */
+  private dropBlock(): void {
+    for (const part of this.blockAudio ?? []) part.fill(0);
+    this.blockAudio = undefined;
+  }
+
+  /** Texte d'un résultat du moteur, typographie appliquée ; met à jour la langue. */
+  private finishText(rawText: string, engineLang: string | undefined): string {
+    const raw = rawText.trim();
+    if (raw === '') return '';
+    const lang = detectTextLanguage(raw, engineLang);
+    if (lang !== 'unknown') this.language = lang;
+    return (lang === 'unknown' ? this.language : lang) === 'fr' ? applyFrenchTypography(raw) : raw;
+  }
+
+  /**
+   * Retranscrit d'un bloc tous les segments de la dictée, mis bout à bout.
+   * Rend `undefined` si le moteur échoue ou dépasse `finalBlockBudgetMs` :
+   * l'appelant assemble alors les segments, sans erreur.
+   */
+  private async transcribeBlock(parts: Float32Array[]): Promise<string | undefined> {
+    const audio = new Float32Array(parts.reduce((n, p) => n + p.length, 0));
+    let offset = 0;
+    for (const part of parts) {
+      audio.set(part, offset);
+      offset += part.length;
+    }
+    this.dropBlock();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<undefined>((resolve) => {
+      timer = setTimeout(() => {
+        resolve(undefined);
+      }, this.blockBudgetMs);
+    });
+    const decoded = this.engine.transcribe(audio).then(
+      (result) => (this.isCancelled() ? '' : this.finishText(result.text, result.lang)),
+      () => undefined,
+    );
+    try {
+      return await Promise.race([decoded, late]);
+    } finally {
+      clearTimeout(timer);
+      // Le décodage natif ne s'interrompt pas : l'audio est effacé à sa fin.
+      void decoded.finally(() => audio.fill(0));
+    }
+  }
+
+  private fail(cause: unknown): void {
+    if (this.cancelled || this.failure !== undefined) return;
+    // Le message d'origine n'est pas recopié : il ne contient pas de texte dicté,
+    // mais rien ne le garantit pour un moteur futur.
+    this.failure = new AtelierError(
+      'voice/engine_failed',
+      'Le moteur de reconnaissance a échoué pendant la dictée.',
+      { retryable: true, cause },
+    );
+    this.callbacks.onError?.(this.failure);
+  }
+
   private async transcribe(audio: Float32Array, startMs: number, endMs: number): Promise<void> {
+    if (this.finalizingBlock && !this.cancelled && this.failure === undefined) {
+      // Repris par le bloc ; transcrit seulement si le bloc échoue.
+      this.skipped.push({ audio, startMs, endMs });
+      return;
+    }
     try {
       if (this.cancelled || this.failure !== undefined) return;
+      const started = this.now();
       const result = await this.engine.transcribe(audio);
+      this.decodeMs += this.now() - started;
+      this.decodedSamples += audio.length;
       // `cancel()` a pu passer pendant l'attente.
       if (this.isCancelled()) return;
-      const raw = result.text.trim();
-      if (raw === '') return;
-      const lang = detectTextLanguage(raw, result.lang);
-      if (lang !== 'unknown') this.language = lang;
-      const text =
-        (lang === 'unknown' ? this.language : lang) === 'fr' ? applyFrenchTypography(raw) : raw;
+      const text = this.finishText(result.text, result.lang);
+      if (text === '') return;
       this.texts.push(text);
       const segment: TranscriptSegment = {
         voiceSessionId: this.voiceSessionId,
@@ -270,15 +461,7 @@ export class DictationSession {
       this.nextIndex += 1;
       this.callbacks.onSegment?.(segment);
     } catch (cause) {
-      if (this.cancelled || this.failure !== undefined) return;
-      // Le message d'origine n'est pas recopié : il ne contient pas de texte dicté,
-      // mais rien ne le garantit pour un moteur futur.
-      this.failure = new AtelierError(
-        'voice/engine_failed',
-        'Le moteur de reconnaissance a échoué pendant la dictée.',
-        { retryable: true, cause },
-      );
-      this.callbacks.onError?.(this.failure);
+      this.fail(cause);
     } finally {
       audio.fill(0);
     }
@@ -318,5 +501,8 @@ export class DictationSession {
     this.segmenter = undefined;
     this.history.clear();
     this.texts = [];
+    this.dropBlock();
+    for (const p of this.skipped) p.audio.fill(0);
+    this.skipped = [];
   }
 }

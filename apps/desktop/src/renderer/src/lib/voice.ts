@@ -10,6 +10,8 @@ import {
   type VoiceSettings,
   type VoiceStatus,
 } from '@atelier/shared';
+// Fonctions pures, sans dépendance : le renderer n'importe que ce module de la voix.
+import { assembleSegments } from '@atelier/voice/typography';
 
 /** Texte composé et position du curseur après le texte dicté. */
 export interface ComposedText {
@@ -34,12 +36,13 @@ export function composeDictation(before: string, dictated: string, after: string
   return { value: head + trail + after, cursor: head.length };
 }
 
-/** Assemble les segments reçus (à chaque pause), dans l'ordre de leur rang. */
+/**
+ * Assemble les segments reçus (à chaque pause), dans l'ordre de leur rang,
+ * comme le texte final du worker : le point d'une pause au milieu d'une phrase
+ * est retiré (#42).
+ */
 export function joinSegments(segments: readonly (string | undefined)[]): string {
-  return segments
-    .map((s) => s?.trim() ?? '')
-    .filter((s) => s !== '')
-    .join(' ');
+  return assembleSegments(Array.from(segments, (s) => s ?? ''));
 }
 
 /**
