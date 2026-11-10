@@ -384,7 +384,7 @@ Somme en médiane : environ 2,4 s avec ce premier son de 0,55 s (0,7 + 0,2 + 0,6
 - Reconnaissance : modèle, état, taille, suppression.
 - Source des modèles (officielle ou miroir) et import.
 - Libération de la mémoire après N minutes.
-- En phase 2 : voix, vitesse, interruption à la voix, silence avant la réponse.
+- En phase 2 : voix, vitesse, silence avant la réponse. Pas d'interruption à la voix en v1 (S3).
 
 ## 5. Contrat `packages/shared` (demande au Lead)
 
@@ -444,8 +444,8 @@ export interface VoiceSettings {
   // phase 2
   ttsVoice?: string;
   ttsRate?: number; // 0,8 à 1,3
-  bargeIn?: boolean;
-  endOfTurnSilenceMs?: number;
+  endOfTurnSilenceMs?: number; // 300 à 3 000 ms, 700 par défaut
+  // bargeIn retiré en L6 : semi-duplex en v1 (S3)
 }
 ```
 
@@ -470,7 +470,16 @@ export interface VoiceSettings {
   - Constantes : `VOICE_SAMPLE_RATE`, `VOICE_FRAME_MS`, `VOICE_FRAME_SAMPLES`, `VOICE_PRE_ROLL_MS` (300 ms gardés avant chaque segment), `VOICE_SILENT_INPUT_MS`, `MAX_DICTATION_MS`, `DEFAULT_STT_MODEL`, `DEFAULT_VOICE_SETTINGS`.
   - `validateVoiceSettings` (fonction pure, messages en français) : modèle, délai de déchargement, miroir (règle de `checkServerUrl`), glossaire.
   - Le contrôle SHA-256 s'applique avant toute extraction et tout chargement, pour un téléchargement comme pour un import (`voice:install-model`, `voice:import-model`) : c'est écrit dans le contrat des canaux, et L1 le teste.
-- **Phase 2** (L6) : `agent:send` gagne `inputMode?: 'dictation' | 'voice'`, et `ChatMessage.inputMode?` permet d'afficher une icône dans le fil. Nouvel événement `voice:audio-out` (`{ voiceSessionId, seq, sampleRate, pcm: Float32Array }`) pour la voix de l'agent. Aucun `switch` exhaustif à compléter.
+- **Phase 2** (L6, PR `feat/lead-shared-voice-conversation`, d'après S2 et S3). Aucun `switch` exhaustif à compléter.
+  - `VoiceInputMode = 'dictation' | 'voice'` : `agent:send` gagne `inputMode?`, et `ChatMessage.inputMode?` permet d'afficher une icône dans le fil.
+  - Événement `voice:audio-out` (`VoiceAudioOut` : `{ voiceSessionId, turnId, seq, sampleRate, pcm: Float32Array, final }`). Le renderer le joue par WebAudio (S3) et jette les morceaux d'un `turnId` interrompu ; `final` marque la fin de la réponse.
+  - **Écarts dus à S3 (semi-duplex)** :
+    - `bargeIn` est retiré de `VoiceSettings` ;
+    - canal `voice:interrupt` (`{ voiceSessionId }`) : bouton « Interrompre » ou raccourci, qui arrête la synthèse et le tour ;
+    - canal `voice:playback-ended` (`{ voiceSessionId, turnId, lastSeq }`) : le renderer signale la fin de la lecture, seul moment que le main ne peut pas connaître ; le main ignore les trames du micro pendant `VOICE_ECHO_GUARD_MS` (1 500 ms), puis repasse en `listening`.
+  - `voice:start` en mode `conversation` exige `sessionId` ; la session se termine par `voice:stop`, `voice:cancel` ou `VOICE_CONVERSATION_IDLE_MS` (60 s) sans parole.
+  - Constantes : `DEFAULT_TTS_VOICE` (`supertonic-3-m4`, S2), `VOICE_TTS_RATE_MIN` et `VOICE_TTS_RATE_MAX`, `DEFAULT_END_OF_TURN_SILENCE_MS` (700), `MIN_END_OF_TURN_SILENCE_MS` et `MAX_END_OF_TURN_SILENCE_MS` (300 et 3 000), `VOICE_ECHO_GUARD_MS`, `VOICE_CONVERSATION_IDLE_MS`.
+  - `validateVoiceSettings` contrôle aussi `ttsVoice`, `ttsRate` et `endOfTurnSilenceMs`.
 
 ## 6. Répartition (tickets #25 à #39)
 

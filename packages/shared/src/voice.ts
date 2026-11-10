@@ -1,6 +1,6 @@
 /**
- * Voix locale (voir `docs/adr/ADR-004-voix.md`), phase 1 : dictée dans le
- * Composer. La reconnaissance tourne sur le Mac (sherpa-onnx et Parakeet dans un
+ * Voix locale (voir `docs/adr/ADR-004-voix.md`). Phase 1 : dictée dans le
+ * Composer. Phase 2 (L6) : mode conversation, en semi-duplex (S3). La reconnaissance tourne sur le Mac (sherpa-onnx et Parakeet dans un
  * `utilityProcess`) ; l'audio ne quitte jamais le Mac et n'est jamais écrit sur
  * le disque.
  *
@@ -127,12 +127,43 @@ export interface VoiceSettings {
    * principale source d'erreurs mesurée en S1. Au plus {@link MAX_VOICE_GLOSSARY_TERMS}.
    */
   glossary?: string[];
-  // Phase 2 (L6) : voix, vitesse, interruption à la voix, silence de fin de tour.
+  // --- Phase 2 (L6), mode conversation. Pas de réglage « interruption à la
+  // voix » : la v1 est en semi-duplex (S3, ADR-004 D7, Écho).
+  /** Voix de synthèse (catalogue) ; absent : {@link DEFAULT_TTS_VOICE}. */
   ttsVoice?: string;
-  /** Vitesse de la synthèse, de 0,8 à 1,3. */
+  /** Vitesse de la synthèse, de {@link VOICE_TTS_RATE_MIN} à {@link VOICE_TTS_RATE_MAX} ; absent : 1. */
   ttsRate?: number;
-  bargeIn?: boolean;
+  /**
+   * Silence qui termine un tour de parole, en millisecondes, de
+   * {@link MIN_END_OF_TURN_SILENCE_MS} à {@link MAX_END_OF_TURN_SILENCE_MS} ;
+   * absent : {@link DEFAULT_END_OF_TURN_SILENCE_MS}.
+   */
   endOfTurnSilenceMs?: number;
+}
+
+/**
+ * Origine d'un message de l'utilisateur, pour l'icône du fil : `dictation`
+ * (dictée relue dans le Composer, phase 1) ou `voice` (tour du mode
+ * conversation, envoyé sans relecture). Absent : texte tapé.
+ */
+export type VoiceInputMode = 'dictation' | 'voice';
+
+/**
+ * Morceau de la voix de l'agent (événement `voice:audio-out`), PCM mono à
+ * `sampleRate` Hz. Le renderer le joue par WebAudio (S3 : moins de fuites
+ * d'écho que `<audio>`), dans l'ordre de `seq`, et jette tout morceau d'un
+ * `turnId` interrompu.
+ */
+export interface VoiceAudioOut {
+  voiceSessionId: string;
+  /** Tour de l'agent qui parle (`agent:send` → `turnId`). */
+  turnId: string;
+  /** Rang dans la session, à partir de 0, +1 par morceau. */
+  seq: number;
+  sampleRate: number;
+  pcm: Float32Array;
+  /** Dernier morceau de la réponse : la lecture se termine après lui. */
+  final: boolean;
 }
 
 /** Fréquence d'échantillonnage des trames du micro (PCM mono). */
@@ -158,6 +189,23 @@ export const MAX_VOICE_IDLE_UNLOAD_MINUTES = 1_440;
 /** Modèle de reconnaissance par défaut (ADR-004 D4, confirmé par S1). */
 export const DEFAULT_STT_MODEL = 'parakeet-tdt-0.6b-v3-int8';
 
+/** Voix de synthèse par défaut : Supertonic 3, style M4 (S2, ADR-004 D4). */
+export const DEFAULT_TTS_VOICE = 'supertonic-3-m4';
+/** Bornes de la vitesse de synthèse. */
+export const VOICE_TTS_RATE_MIN = 0.8;
+export const VOICE_TTS_RATE_MAX = 1.3;
+/** Silence de fin de tour (ADR-004 D7 : 700 ms, réglable). */
+export const DEFAULT_END_OF_TURN_SILENCE_MS = 700;
+export const MIN_END_OF_TURN_SILENCE_MS = 300;
+export const MAX_END_OF_TURN_SILENCE_MS = 3_000;
+/**
+ * Semi-duplex (S3) : après la fin de la voix de l'agent, les trames du micro
+ * restent ignorées pendant cette durée, le temps que l'écho s'éteigne.
+ */
+export const VOICE_ECHO_GUARD_MS = 1_500;
+/** Le mode conversation se termine après cette durée sans parole (ADR-004 D7, Fin). */
+export const VOICE_CONVERSATION_IDLE_MS = 60_000;
+
 /** Réglages par défaut : voix désactivée tant que l'utilisateur ne l'a pas activée. */
 export const DEFAULT_VOICE_SETTINGS: Readonly<VoiceSettings> = {
   enabled: false,
@@ -172,7 +220,7 @@ export interface VoiceSettingsIssue {
 }
 
 /**
- * Valide les réglages de la voix (phase 1). Renvoie le premier problème, ou
+ * Valide les réglages de la voix (phases 1 et 2). Renvoie le premier problème, ou
  * `undefined`. Défensive : la valeur peut venir de l'IPC.
  */
 export function validateVoiceSettings(settings: VoiceSettings): VoiceSettingsIssue | undefined {
@@ -216,6 +264,37 @@ export function validateVoiceSettings(settings: VoiceSettings): VoiceSettingsIss
         };
       }
     }
+  }
+  if (
+    settings.ttsVoice !== undefined &&
+    (typeof settings.ttsVoice !== 'string' || settings.ttsVoice.trim() === '')
+  ) {
+    return { field: 'ttsVoice', message: 'Choisissez une voix de synthèse.' };
+  }
+  const rate = settings.ttsRate;
+  if (
+    rate !== undefined &&
+    (typeof rate !== 'number' ||
+      !Number.isFinite(rate) ||
+      rate < VOICE_TTS_RATE_MIN ||
+      rate > VOICE_TTS_RATE_MAX)
+  ) {
+    return {
+      field: 'ttsRate',
+      message: 'La vitesse de la voix doit être comprise entre 0,8 et 1,3.',
+    };
+  }
+  const silence = settings.endOfTurnSilenceMs;
+  if (
+    silence !== undefined &&
+    (!Number.isInteger(silence) ||
+      silence < MIN_END_OF_TURN_SILENCE_MS ||
+      silence > MAX_END_OF_TURN_SILENCE_MS)
+  ) {
+    return {
+      field: 'endOfTurnSilenceMs',
+      message: `Le silence avant la réponse doit être un nombre entier de millisecondes, entre ${String(MIN_END_OF_TURN_SILENCE_MS)} et ${String(MAX_END_OF_TURN_SILENCE_MS)}.`,
+    };
   }
   return undefined;
 }

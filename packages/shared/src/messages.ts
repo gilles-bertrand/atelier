@@ -7,6 +7,7 @@
  */
 import type { ArtifactCard } from './projects.js';
 import type { TodoItem } from './todo.js';
+import type { VoiceInputMode } from './voice.js';
 
 /** Auteur d'un message affiché. */
 export type ChatRole = 'user' | 'assistant';
@@ -130,6 +131,8 @@ export interface ChatMessage {
    * « modèle changé » dans le fil et à l'infobulle. Absent : messages antérieurs à #13.
    */
   model?: string;
+  /** Message de l'utilisateur dicté ou parlé (icône dans le fil). Absent : tapé. */
+  inputMode?: VoiceInputMode;
 }
 
 /** Résumé d'une session pour l'accueil (« sessions récentes »). */
