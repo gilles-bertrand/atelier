@@ -212,6 +212,14 @@ export class ProjectService implements ProjectMemoryWriter, ArtifactPublisher {
     return project;
   }
 
+  /**
+   * Signale un changement du projet (`project:changed`) : une conversation y
+   * est entrée ou en est sortie (#21). Rien pour un projet supprimé entre-temps.
+   */
+  notifyChanged(projectId: string): void {
+    if (this.#o.store.get(projectId)) this.#o.onProjectChanged?.(projectId);
+  }
+
   /** Dossier principal d'un projet (conversation ou tâche de ce projet). */
   primaryOf(projectId: string): string {
     const primary = this.get(projectId).folders[0]?.path;

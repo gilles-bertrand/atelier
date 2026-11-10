@@ -239,6 +239,29 @@ function WorkspaceViews() {
     [refresh, refreshProjects, openProject],
   );
 
+  /**
+   * Glisser-déposer ou « Déplacer vers le projet… » (#21) : la conversation
+   * entre dans un projet ou en sort (`null`), son dossier ne change pas. Le main
+   * revérifie la règle ; un refus affiche son motif.
+   */
+  const moveSession = useCallback(
+    async (session: SessionSummary, projectId: string | null): Promise<boolean> => {
+      setError(undefined);
+      try {
+        const moved = await call('session:set-project', { sessionId: session.id, projectId });
+        setSessions((list) => list?.map((s) => (s.id === moved.id ? moved : s)));
+        setCurrent((open) => (open?.id === moved.id ? moved : open));
+        // Hors projet : son dossier réapparaît dans « Dossiers », même retiré de la liste.
+        if (projectId === null) showFolder(moved.workspace);
+        return true;
+      } catch (e) {
+        setError(errorMessage(toSerializedError(e)));
+        return false;
+      }
+    },
+    [showFolder],
+  );
+
   const projectAction = (task: () => Promise<unknown>): void => {
     setError(undefined);
     task().catch((e: unknown) => {
@@ -337,6 +360,7 @@ function WorkspaceViews() {
                 }
               }}
               onProjectFromFolder={(workspace) => void projectFromFolder(workspace)}
+              onMoveSession={moveSession}
               hiddenFolders={sidebar.hiddenFolders}
               searchRef={searchRef}
               onNewConversation={newFromShortcut}

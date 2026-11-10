@@ -290,6 +290,28 @@ export class ChatManager {
     return this.#o.store.update(sessionId, { model: name });
   }
 
+  /**
+   * Rattache la conversation au projet `projectId`, ou l'en sort (`null`, #21).
+   * Le dossier de travail et l'historique ne changent pas. Les consignes, la
+   * mémoire, les dossiers rattachés et les outils du projet sont relus au
+   * début de chaque tour ; la session agent est recréée au tour suivant, car
+   * son projet a changé (`#agentSession`). Refusé pendant un tour (`agent/busy`).
+   *
+   * La règle du déplacement (`checkSessionMove`) est vérifiée par l'appelant,
+   * qui connaît les projets.
+   */
+  setProject(sessionId: string, projectId: string | null): SessionSummary {
+    const session = this.#session(sessionId);
+    if ((session.projectId ?? null) === projectId) return session;
+    this.#assertIdle(this.#runtime(sessionId));
+    return this.#o.store.update(sessionId, { projectId });
+  }
+
+  /** Résumé d'une conversation ; `session/not_found` si elle n'existe pas. */
+  get(sessionId: string): SessionSummary {
+    return this.#session(sessionId);
+  }
+
   /** Messages affichés et dernier usage connu (jauge de contexte dès la réouverture). */
   open(sessionId: string): {
     session: SessionSummary;
