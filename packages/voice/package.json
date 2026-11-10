@@ -1,6 +1,7 @@
 {
   "name": "@atelier/voice",
   "version": "0.1.0",
+  "license": "FSL-1.1-ALv2",
   "private": true,
   "description": "Voix locale (ADR-004) : catalogue et gestion des modèles, moteur sherpa-onnx et pipeline de dictée.",
   "type": "module",

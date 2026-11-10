@@ -2,9 +2,9 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
-import type { ConnectionTestResult } from '@atelier/shared';
+import { CHARTER_VERSION, type ConnectionTestResult } from '@atelier/shared';
 import { App } from '@renderer/App';
-import { FakeIpcFailure, installFakeApi } from '@renderer/test/fake-api';
+import { defaultTestSettings, FakeIpcFailure, installFakeApi } from '@renderer/test/fake-api';
 import { chatModels, initialModel } from '@renderer/lib/models';
 import { sandboxPhase } from './SandboxStep';
 import { validateServerUrl } from './ServerStep';
@@ -77,8 +77,14 @@ describe('onboarding', () => {
     ).toBeInTheDocument();
     const next = screen.getByRole('button', { name: 'Continuer' });
     expect(next).toBeDisabled();
-    await user.click(screen.getByRole('checkbox'));
+    await user.click(screen.getByLabelText(/J’ai compris que mes documents/));
+    // Charte d'usage (#43) : obligatoire aussi.
+    expect(next).toBeDisabled();
+    await user.click(screen.getByLabelText(/J’ai lu la charte d’usage/));
     await user.click(next);
+    expect(api.callsTo('settings:update')).toContainEqual(
+      expect.objectContaining({ charterAcceptedVersion: CHARTER_VERSION }),
+    );
 
     // 4. VM
     await screen.findByRole('heading', { name: 'Environnement d’exécution' });
@@ -135,7 +141,8 @@ describe('onboarding', () => {
     await screen.findByText('Connexion réussie');
     await user.click(screen.getByRole('button', { name: 'Continuer' }));
     await user.click(await screen.findByRole('button', { name: 'Continuer' }));
-    await user.click(await screen.findByRole('checkbox'));
+    await user.click(await screen.findByLabelText(/J’ai compris que mes documents/));
+    await user.click(screen.getByLabelText(/J’ai lu la charte d’usage/));
     await user.click(screen.getByRole('button', { name: 'Continuer' }));
     await user.click(await screen.findByRole('button', { name: 'Préparer l’environnement' }));
     expect(await screen.findByText(/Espace disque insuffisant/)).toBeInTheDocument();
@@ -180,5 +187,26 @@ describe('fonctions de l’onboarding', () => {
     expect(sandboxPhase({ state: 'provisioning', networkEnabled: false }, false)).toBe('preparing');
     expect(sandboxPhase({ state: 'absent', networkEnabled: false }, true)).toBe('preparing');
     expect(sandboxPhase({ state: 'stopped', networkEnabled: false }, false)).toBe('idle');
+  });
+
+  it('charte d’usage (#43) : représentée à un utilisateur existant, puis acceptée', async () => {
+    const user = userEvent.setup();
+    const api = installFakeApi({
+      'settings:get': () =>
+        defaultTestSettings({ onboardingCompleted: true, charterAcceptedVersion: '2020-01-01' }),
+    });
+    render(<App />);
+    await screen.findByRole('heading', { name: 'La charte d’usage a changé' });
+    expect(screen.getByRole('region', { name: 'Charte d’usage' })).toHaveTextContent(
+      /Usages interdits/,
+    );
+    const accept = screen.getByRole('button', { name: 'Accepter et continuer' });
+    expect(accept).toBeDisabled();
+    await user.click(screen.getByLabelText(/J’ai lu la charte d’usage/));
+    await user.click(accept);
+    expect(api.callsTo('settings:update')).toContainEqual(
+      expect.objectContaining({ charterAcceptedVersion: CHARTER_VERSION }),
+    );
+    expect(await screen.findByText('Sur quoi travaille-t-on ?')).toBeInTheDocument();
   });
 });

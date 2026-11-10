@@ -39,6 +39,14 @@ export interface AppSettings {
   /** Avertissement de confidentialité accepté (horodatage ISO 8601). */
   privacyAcceptedAt?: string;
   /**
+   * Version de la charte d'usage acceptée ({@link CHARTER_VERSION} au moment de
+   * l'acceptation). Différente de la version courante : l'app représente la
+   * charte avant de continuer (#43).
+   */
+  charterAcceptedVersion?: string;
+  /** Horodatage ISO 8601 de l'acceptation de la charte. */
+  charterAcceptedAt?: string;
+  /**
    * Ouvrir Atelier à la connexion, fenêtre masquée, pour que les tâches
    * planifiées tournent (ADR-002). Absent = `false`.
    */
@@ -59,3 +67,15 @@ export type AppSettingsPatch = {
 
 /** Présence des secrets (jamais leur valeur). */
 export type SecretsPresence = Record<SecretId, boolean>;
+
+/**
+ * Version courante de la charte d'usage (`docs/legal/CHARTE.md`). À changer à
+ * chaque modification de fond de la charte : tous les utilisateurs devront
+ * l'accepter de nouveau.
+ */
+export const CHARTER_VERSION = '2026-11-10';
+
+/** Vrai si la version courante de la charte a été acceptée. */
+export function isCharterAccepted(settings: Pick<AppSettings, 'charterAcceptedVersion'>): boolean {
+  return settings.charterAcceptedVersion === CHARTER_VERSION;
+}

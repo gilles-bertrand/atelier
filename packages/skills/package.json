@@ -1,6 +1,7 @@
 {
   "name": "@atelier/skills",
   "version": "0.1.0",
+  "license": "FSL-1.1-ALv2",
   "private": true,
   "description": "Loader de skills (SKILL.md) et skills d’exemple.",
   "type": "module",

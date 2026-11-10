@@ -1,6 +1,7 @@
 {
   "name": "@atelier/desktop",
   "version": "0.1.0",
+  "license": "FSL-1.1-ALv2",
   "private": true,
   "description": "Atelier : application desktop (Electron main + preload + renderer React).",
   "author": "Triptyk",

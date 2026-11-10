@@ -1,17 +1,23 @@
 import { useId, useState } from 'react';
 import { Loader2, ShieldCheck } from 'lucide-react';
+import { CHARTER_VERSION, isCharterAccepted } from '@atelier/shared';
 import { Button } from '@renderer/components/ui/button';
 import { Alert } from '@renderer/components/ui/primitives';
 import { toSerializedError } from '@renderer/lib/api';
 import { errorMessage } from '@renderer/lib/error-messages';
 import { hostOf } from '@renderer/lib/format';
 import { useApp } from '@renderer/state/app-state';
+import { CharterCheckbox } from '../legal/CharterGate';
+import { LegalText } from '../legal/LegalText';
+import { CHARTER_TEXT } from '../legal/texts';
 import { StepCard } from './StepCard';
 
 export function PrivacyStep({ onBack, onDone }: { onBack: () => void; onDone: () => void }) {
   const { state, actions } = useApp();
   const checkboxId = useId();
+  const charterId = useId();
   const [accepted, setAccepted] = useState(state.settings.privacyAcceptedAt !== undefined);
+  const [charterAccepted, setCharterAccepted] = useState(isCharterAccepted(state.settings));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const host = hostOf(state.settings.llm.baseUrl);
@@ -20,7 +26,12 @@ export function PrivacyStep({ onBack, onDone }: { onBack: () => void; onDone: ()
     setSaving(true);
     setError(undefined);
     try {
-      await actions.updateSettings({ privacyAcceptedAt: new Date().toISOString() });
+      const now = new Date().toISOString();
+      await actions.updateSettings({
+        privacyAcceptedAt: now,
+        charterAcceptedVersion: CHARTER_VERSION,
+        charterAcceptedAt: now,
+      });
       onDone();
     } catch (e) {
       setError(errorMessage(toSerializedError(e)));
@@ -37,7 +48,7 @@ export function PrivacyStep({ onBack, onDone }: { onBack: () => void; onDone: ()
           <Button variant="ghost" onClick={onBack}>
             Retour
           </Button>
-          <Button onClick={() => void save()} disabled={!accepted || saving}>
+          <Button onClick={() => void save()} disabled={!accepted || !charterAccepted || saving}>
             {saving ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
             Continuer
           </Button>
@@ -81,6 +92,12 @@ export function PrivacyStep({ onBack, onDone }: { onBack: () => void; onDone: ()
           J’ai compris que mes documents sont envoyés au serveur {host}.
         </label>
       </div>
+
+      <details className="group space-y-3">
+        <summary className="cursor-pointer text-sm font-medium">Lire la charte d’usage</summary>
+        <LegalText text={CHARTER_TEXT} label="Charte d’usage" className="mt-3" />
+      </details>
+      <CharterCheckbox id={charterId} checked={charterAccepted} onChange={setCharterAccepted} />
 
       {error ? <Alert tone="error">{error}</Alert> : null}
     </StepCard>

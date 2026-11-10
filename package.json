@@ -2,6 +2,7 @@
   "name": "atelier",
   "private": true,
   "version": "0.1.0",
+  "license": "FSL-1.1-ALv2",
   "description": "Atelier : agent IA local de type Cowork pour macOS (Electron + Ollama distant + VM Lima)",
   "type": "module",
   "packageManager": "pnpm@11.9.0",

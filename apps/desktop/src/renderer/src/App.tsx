@@ -1,7 +1,9 @@
 import { Loader2 } from 'lucide-react';
 import { Button } from '@renderer/components/ui/button';
 import { Alert } from '@renderer/components/ui/primitives';
+import { isCharterAccepted } from '@atelier/shared';
 import { Workspace } from '@renderer/features/Workspace';
+import { CharterGate } from '@renderer/features/legal/CharterGate';
 import { Onboarding } from '@renderer/features/onboarding/Onboarding';
 import { errorMessage } from '@renderer/lib/error-messages';
 import { AppStateProvider, useAppStatus } from '@renderer/state/app-state';
@@ -28,7 +30,10 @@ function Root() {
       </div>
     );
   }
-  return status.state.settings.onboardingCompleted ? <Workspace /> : <Onboarding />;
+  const { settings } = status.state;
+  if (!settings.onboardingCompleted) return <Onboarding />;
+  // Charte d'usage (#43) : acceptée dans l'onboarding, sinon représentée ici.
+  return isCharterAccepted(settings) ? <Workspace /> : <CharterGate />;
 }
 
 export function App() {
