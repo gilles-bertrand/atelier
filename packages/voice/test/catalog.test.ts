@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_STT_MODEL } from '@atelier/shared';
+import { DEFAULT_STT_MODEL, DEFAULT_TTS_VOICE } from '@atelier/shared';
 import {
   PARAKEET_TDT_V3_INT8,
   SILERO_VAD,
+  SUPERTONIC_3_INT8,
+  SUPERTONIC_FALLBACK_NUM_STEPS,
+  SUPERTONIC_NUM_STEPS,
+  TTS_VOICES,
+  findTtsVoice,
   VOICE_MODEL_CATALOG,
   checkArchiveEntries,
   entryDiskBytes,
@@ -47,6 +52,42 @@ describe('catalogue des modèles de voix', () => {
         'tokens.txt',
       ]),
     );
+  });
+
+  it('la voix par défaut est Supertonic 3 M4 à 8 étapes, épinglée (S2)', () => {
+    const voice = findTtsVoice(DEFAULT_TTS_VOICE);
+    expect(voice).toMatchObject({ id: 'supertonic-3-m4', sid: 8, lang: 'fr', numSteps: 8 });
+    expect(SUPERTONIC_NUM_STEPS).toBe(8);
+    expect(SUPERTONIC_FALLBACK_NUM_STEPS).toBe(5);
+    expect(findCatalogEntry(voice?.modelId ?? '')).toBe(SUPERTONIC_3_INT8);
+    expect(SUPERTONIC_3_INT8).toMatchObject({
+      role: 'tts',
+      license: 'OpenRAIL-M',
+      languages: ['fr'],
+      upstream: {
+        repo: 'Supertone/supertonic-3',
+        revision: '3cadd1ee6394adea1bd021217a0e650ede09a323',
+      },
+    });
+    if (SUPERTONIC_3_INT8.source.kind !== 'download') throw new Error('download attendu');
+    expect(SUPERTONIC_3_INT8.source).toMatchObject({
+      archiveName: 'sherpa-onnx-supertonic-3-tts-int8-2026-05-11.tar.bz2',
+      sha256: '82fa96f91c4ef8abaae3a14a3f4153facf88bed821d1f7331cec2700f432c427',
+      bytes: 128_774_318,
+      rootDir: 'sherpa-onnx-supertonic-3-tts-int8-2026-05-11',
+    });
+    expect(SUPERTONIC_3_INT8.source.url).toMatch(/\/releases\/download\/tts-models\//);
+    // Chaque voix porte un modèle du catalogue ; aucune ne dépend d'un phonémiseur.
+    for (const v of TTS_VOICES) expect(findCatalogEntry(v.modelId)?.role).toBe('tts');
+  });
+
+  it('livre l’attribution OpenRAIL-M de Supertonic, voix signalée synthétique', () => {
+    const st = voiceModelLicenses().find((l) => l.id === SUPERTONIC_3_INT8.id);
+    expect(st?.license).toBe('OpenRAIL-M');
+    expect(st?.attribution).toMatch(/Supertone/);
+    expect(st?.attribution).toMatch(/3cadd1ee6394adea1bd021217a0e650ede09a323/);
+    expect(st?.attribution).toMatch(/fichiers modifiés/);
+    expect(st?.attribution).toMatch(/[Vv]oix synthétique/);
   });
 
   it('Silero est embarqué dans l’app', () => {

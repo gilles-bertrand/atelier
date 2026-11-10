@@ -1,6 +1,6 @@
 /**
- * Déclaration minimale de `sherpa-onnx-node` 2.0.1, limitée à ce qu'utilise
- * `sherpa.ts` et le test réel : le paquet ne publie que du JavaScript annoté en JSDoc
+ * Déclaration minimale de `sherpa-onnx-node` 2.0.1, limitée à ce qu'utilisent
+ * `sherpa.ts`, `sherpa-tts.ts` et les tests réels : le paquet ne publie que du JavaScript annoté en JSDoc
  * (`types.js`), sans fichier `.d.ts`.
  *
  * Même démarche que `jsdom.d.ts` (`packages/web`) : on ne déclare que la
@@ -104,4 +104,69 @@ declare module 'sherpa-onnx-node' {
   }
 
   export function readWave(filename: string, enableExternalBuffer?: boolean): Waveform;
+
+  /** Supertonic (vérifié contre le spike S2, `synth.cjs`) : fichiers du modèle. */
+  export interface OfflineTtsSupertonicModelConfig {
+    durationPredictor: string;
+    textEncoder: string;
+    vectorEstimator: string;
+    vocoder: string;
+    ttsJson: string;
+    unicodeIndexer: string;
+    voiceStyle: string;
+  }
+
+  export interface OfflineTtsModelConfig {
+    supertonic?: OfflineTtsSupertonicModelConfig;
+    numThreads?: number;
+    provider?: 'cpu' | 'coreml';
+    debug?: boolean;
+  }
+
+  export interface OfflineTtsConfig {
+    model: OfflineTtsModelConfig;
+    /** Phrases synthétisées d'un coup ; 1 : le texte reçu est déjà une phrase. */
+    maxNumSentences?: number;
+  }
+
+  /** Réglages d'une génération (`non-streaming-tts.js`, `types.js`). */
+  export interface GenerationConfigOptions {
+    sid?: number;
+    speed?: number;
+    numSteps?: number;
+    silenceScale?: number;
+    /** Supertonic : `{ lang: 'fr' }`. */
+    extra?: Record<string, number | string>;
+  }
+
+  /** Les options sont recopiées sur l'instance (`Object.assign`). */
+  export class GenerationConfig implements GenerationConfigOptions {
+    constructor(options?: GenerationConfigOptions);
+    sid?: number;
+    speed?: number;
+    numSteps?: number;
+    silenceScale?: number;
+    extra?: Record<string, number | string>;
+  }
+
+  export interface GeneratedAudio {
+    samples: Float32Array;
+    sampleRate: number;
+  }
+
+  export interface TtsRequest {
+    text: string;
+    sid?: number;
+    speed?: number;
+    enableExternalBuffer?: boolean;
+    generationConfig?: GenerationConfig;
+  }
+
+  export class OfflineTts {
+    constructor(config: OfflineTtsConfig);
+    static createAsync(config: OfflineTtsConfig): Promise<OfflineTts>;
+    readonly sampleRate: number;
+    readonly numSpeakers: number;
+    generateAsync(request: TtsRequest): Promise<GeneratedAudio>;
+  }
 }

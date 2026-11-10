@@ -5,6 +5,9 @@
  * atomique, reprise, contrôle SHA-256, miroir, import hors ligne).
  * L2 : interface de moteur, adaptateur sherpa-onnx, pipeline de dictée,
  * protocole main ↔ worker et superviseur du worker.
+ * L7 : synthèse vocale (Supertonic 3, voix M4), filtre « prononçable » en
+ * français, découpage en phrases au fil du flux et `AgentSpeech`, qui produit
+ * les `VoiceAudioOut`.
  */
 export * from './catalog.js';
 export * from './archive.js';
@@ -14,6 +17,8 @@ export type {
   SpeechAudioSegment,
   SpeechEngine,
   SpeechSegmenter,
+  SpeechSynthesizer,
+  SynthesisOptions,
 } from './engine.js';
 export {
   NBSP,
@@ -43,6 +48,10 @@ export {
   type ParseResult,
   type ParsedMainToWorkerMessage,
   type WorkerToMainMessage,
+  MAX_SPEAK_CHARS,
+  ttsLoadConfigSchema,
+  type TtsLoadConfig,
+  type TtsLoadConfigInput,
 } from './protocol.js';
 export { runVoiceWorker, type VoiceWorkerOptions, type WorkerPort } from './worker.js';
 export {
@@ -59,3 +68,34 @@ export {
   type SherpaEngineDeps,
   type SherpaModule,
 } from './sherpa.js';
+export {
+  SHERPA_TTS_MODELS,
+  createSherpaSynthesizer,
+  resolveTtsModel,
+  type SherpaTtsDeps,
+  type SherpaTtsModule,
+} from './sherpa-tts.js';
+export {
+  amountToFrench,
+  endWithPunctuation,
+  numberToFrench,
+  speakableFrench,
+  speakableLine,
+} from './speakable.js';
+export { dateToFrench, integerToFrench, ordinalToFrench, timeToFrench } from './french-numbers.js';
+export {
+  FIRST_CLAUSE_MIN_CHARS,
+  MAX_CHUNK_CHARS,
+  SpeechChunker,
+  splitSpeech,
+  type SpeechChunkerOptions,
+} from './sentences.js';
+export {
+  AgentSpeech,
+  CLAUSE_GAP_MS,
+  SENTENCE_GAP_MS,
+  clampTtsRate,
+  type AgentSpeechOptions,
+  type SpeechSynthesisPort,
+  type SynthesizedSpeech,
+} from './speech.js';

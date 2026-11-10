@@ -1,6 +1,6 @@
 /** Worker en mémoire : `runVoiceWorker` derrière un faux `WorkerHandle`. */
-import type { SpeechEngine } from '../src/engine.js';
-import type { EngineLoadConfig, WorkerToMainMessage } from '../src/protocol.js';
+import type { SpeechEngine, SpeechSynthesizer } from '../src/engine.js';
+import type { EngineLoadConfig, TtsLoadConfig, WorkerToMainMessage } from '../src/protocol.js';
 import type { WorkerHandle } from '../src/supervisor.js';
 import { runVoiceWorker } from '../src/worker.js';
 
@@ -17,6 +17,7 @@ export interface FakeWorker extends WorkerHandle {
 
 export function createFakeWorker(
   createEngine: (config: EngineLoadConfig) => Promise<SpeechEngine>,
+  createSynthesizer?: (config: TtsLoadConfig) => Promise<SpeechSynthesizer>,
 ): FakeWorker {
   const toMain: ((data: unknown) => void)[] = [];
   const toWorker: ((data: unknown) => void)[] = [];
@@ -47,6 +48,7 @@ export function createFakeWorker(
       onMessage: (listener) => toWorker.push(listener),
     },
     createEngine,
+    ...(createSynthesizer !== undefined ? { createSynthesizer } : {}),
     exit: () => {
       exit(0);
     },

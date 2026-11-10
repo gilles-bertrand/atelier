@@ -62,6 +62,11 @@ export interface VoiceCatalogEntry {
   attribution?: string;
   /** Page du modèle (licence, auteurs). */
   homepage: string;
+  /**
+   * Modèle d'origine dont l'archive est dérivée (dépôt et révision exacte),
+   * épinglé comme l'empreinte : la licence s'applique à cette révision.
+   */
+  upstream?: { repo: string; revision: string };
   source: BundledVoiceModelSource | DownloadedVoiceModelSource;
 }
 
@@ -95,6 +100,7 @@ const PARAKEET_V3_LANGUAGES = [
 ] as const;
 
 const SHERPA_ASR_RELEASE = 'https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models';
+const SHERPA_TTS_RELEASE = 'https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models';
 
 /** Détection de parole, embarquée (ADR-004 §3.6, exception à M1). */
 export const SILERO_VAD: VoiceCatalogEntry = {
@@ -152,8 +158,108 @@ export const PARAKEET_TDT_V3_INT8: VoiceCatalogEntry = {
   },
 };
 
-/** Catalogue de l'app, phase 1. */
-export const VOICE_MODEL_CATALOG: readonly VoiceCatalogEntry[] = [SILERO_VAD, PARAKEET_TDT_V3_INT8];
+/**
+ * Synthèse vocale (phase 2, S2) : Supertonic 3 en int8. Le modèle est sous
+ * BigScience OpenRAIL-M (usages restreints, annexe A transmise aux
+ * utilisateurs : ADR-004 D5, charte #43) ; le code de Supertone est sous MIT.
+ * Aucun phonémiseur : le modèle lit le texte brut (pas de module GPL).
+ */
+export const SUPERTONIC_3_INT8: VoiceCatalogEntry = {
+  id: 'supertonic-3-tts-int8',
+  role: 'tts',
+  label: 'Supertonic 3 (voix de synthèse française)',
+  version: '2026-05-11',
+  languages: ['fr'],
+  // S2 : 0,52 Gio de RSS pour le process Node complet, modèle chargé.
+  memoryEstimateBytes: 560_000_000,
+  license: 'OpenRAIL-M',
+  attribution:
+    'Supertonic 3, © Supertone Inc., modèle sous licence BigScience OpenRAIL-M ' +
+    '(https://huggingface.co/Supertone/supertonic-3, révision 3cadd1ee6394adea1bd021217a0e650ede09a323), ' +
+    'code sous licence MIT. Converti au format ONNX et quantifié en int8 par le projet sherpa-onnx ' +
+    '(k2-fsa) : fichiers modifiés. Voix synthétique ; restrictions d’usage de l’annexe A de la licence, ' +
+    'reprises dans la charte d’utilisation.',
+  homepage: 'https://huggingface.co/Supertone/supertonic-3',
+  upstream: {
+    repo: 'Supertone/supertonic-3',
+    revision: '3cadd1ee6394adea1bd021217a0e650ede09a323',
+  },
+  source: {
+    kind: 'download',
+    archiveName: 'sherpa-onnx-supertonic-3-tts-int8-2026-05-11.tar.bz2',
+    url: `${SHERPA_TTS_RELEASE}/sherpa-onnx-supertonic-3-tts-int8-2026-05-11.tar.bz2`,
+    sha256: '82fa96f91c4ef8abaae3a14a3f4153facf88bed821d1f7331cec2700f432c427',
+    bytes: 128_774_318,
+    rootDir: 'sherpa-onnx-supertonic-3-tts-int8-2026-05-11',
+    files: [
+      { path: 'duration_predictor.int8.onnx', bytes: 3_700_147 },
+      { path: 'text_encoder.int8.onnx', bytes: 36_416_150 },
+      { path: 'vector_estimator.int8.onnx', bytes: 78_400_833 },
+      { path: 'vocoder.int8.onnx', bytes: 25_991_073 },
+      { path: 'tts.json', bytes: 8_253 },
+      { path: 'unicode_indexer.bin', bytes: 262_144 },
+      { path: 'voice.bin', bytes: 517_168 },
+      { path: 'LICENSE', bytes: 1_070 },
+      { path: 'README.md', bytes: 19_518 },
+    ],
+  },
+};
+
+/** Catalogue de l'app : dictée (phase 1), puis synthèse (phase 2). */
+export const VOICE_MODEL_CATALOG: readonly VoiceCatalogEntry[] = [
+  SILERO_VAD,
+  PARAKEET_TDT_V3_INT8,
+  SUPERTONIC_3_INT8,
+];
+
+/**
+ * Voix de synthèse : un style d'un modèle du catalogue (`VoiceSettings.ttsVoice`).
+ * Plusieurs voix peuvent partager le même modèle téléchargé.
+ */
+export interface TtsVoice {
+  /** Identifiant stable, ex. `supertonic-3-m4` (`DEFAULT_TTS_VOICE`). */
+  id: string;
+  label: string;
+  /** Modèle du catalogue qui porte la voix. */
+  modelId: string;
+  /** Style dans `voice.bin` (identifiant de locuteur de sherpa-onnx). */
+  sid: number;
+  /** Langue de la synthèse (BCP 47). */
+  lang: string;
+  /** Étapes de débruitage (qualité contre délai). */
+  numSteps: number;
+}
+
+/** Étapes de Supertonic retenues en S2 : 8 (premier son médian 0,54 s, première phrase coupée). */
+export const SUPERTONIC_NUM_STEPS = 8;
+/**
+ * Repli à 5 étapes (0,36 s) si L11 mesure un budget de latence dépassé (ADR-004
+ * D7). Constante interne, pas un réglage de l'utilisateur.
+ */
+export const SUPERTONIC_FALLBACK_NUM_STEPS = 5;
+
+/** Styles de Supertonic 3 dans `voice.bin`, dans l'ordre des identifiants (S2). */
+const SUPERTONIC_STYLES = ['F1', 'F2', 'F3', 'F4', 'F5', 'M1', 'M2', 'M3', 'M4', 'M5'] as const;
+
+/** Voix de l'app. Seule M4, choisie à l'écoute en S2, est proposée. */
+export const TTS_VOICES: readonly TtsVoice[] = [
+  {
+    id: 'supertonic-3-m4',
+    label: 'Supertonic 3, voix M4 (français)',
+    modelId: SUPERTONIC_3_INT8.id,
+    sid: SUPERTONIC_STYLES.indexOf('M4'),
+    lang: 'fr',
+    numSteps: SUPERTONIC_NUM_STEPS,
+  },
+];
+
+/** Voix de synthèse, ou `undefined` si l'identifiant est inconnu. */
+export function findTtsVoice(
+  id: string,
+  voices: readonly TtsVoice[] = TTS_VOICES,
+): TtsVoice | undefined {
+  return voices.find((voice) => voice.id === id);
+}
 
 /** Entrée du catalogue, ou `undefined` si l'identifiant est inconnu. */
 export function findCatalogEntry(

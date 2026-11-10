@@ -360,6 +360,8 @@ Exception à M1 : le modèle Silero (0,6 à 2,2 Mo) est embarqué dans `Contents
 
 Somme en médiane : environ 2,4 s avec ce premier son de 0,55 s (0,7 + 0,2 + 0,65 + 0,3 + 0,55), pour une cible de 2,5 s. La marge est faible : si L11 la dépasse, le repli est de passer à 5 étapes (0,36 s).
 
+**Mesure de L7 (#35, 10/11/2026)** : premier son médian 0,53 s, max 0,70 s, sur les 10 réponses types de S2 écrites comme l'agent les écrit (chiffres, montants, heures, markdown, chemin), à travers le découpage, le filtre « prononçable » et la synthèse (M4, 8 étapes, 2 threads, CPU). MacBook Pro M4 Max, charge de 3,1 à 3,5 sur 16 cœurs ; RTF 0,19. Le budget de D7 est tenu ; le repli à 5 étapes reste une constante interne (`SUPERTONIC_FALLBACK_NUM_STEPS`).
+
 ### D8. Permissions macOS et Electron
 
 - **Info.plist** : `mac.extendInfo.NSMicrophoneUsageDescription` dans `electron-builder.yml`, avec le texte « Atelier utilise le micro pour transcrire votre voix sur ce Mac. L'audio n'est ni envoyé ni conservé. »
