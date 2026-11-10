@@ -9,7 +9,7 @@
 import { mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
-import type { ChatMessage, MessagePart, SessionSummary } from '@atelier/shared';
+import type { ChatMessage, MessagePart, SessionSummary, VoiceInputMode } from '@atelier/shared';
 import type { ModelMessage } from 'ai';
 import {
   applySessionPatch,
@@ -158,6 +158,9 @@ export const MIGRATIONS: readonly string[] = [
      created_at TEXT NOT NULL,
      PRIMARY KEY (artifact_id, version)
    );`,
+  // 6 : origine d'un message de l'utilisateur (ADR-004, L9) : `dictation` ou
+  // `voice` (tour du mode conversation) ; NULL : texte tapé.
+  `ALTER TABLE messages ADD COLUMN input_mode TEXT;`,
 ];
 
 /** Version de schéma courante. */
@@ -241,6 +244,12 @@ interface MessageRow {
   parts: string;
   created_at: string;
   model: string | null;
+  input_mode: string | null;
+}
+
+/** Origine relue d'un message ; une valeur inconnue est ignorée (texte tapé). */
+function withInputMode(value: string | null): { inputMode?: VoiceInputMode } {
+  return value === 'dictation' || value === 'voice' ? { inputMode: value } : {};
 }
 
 function toSummary(row: SessionRow): SessionSummary {
@@ -352,6 +361,7 @@ export class SqliteSessionStore implements SessionStore {
       parts: parseParts(row.parts),
       createdAt: row.created_at,
       ...(row.model !== null ? { model: row.model } : {}),
+      ...withInputMode(row.input_mode),
     }));
   }
 
@@ -359,8 +369,8 @@ export class SqliteSessionStore implements SessionStore {
     if (!this.get(message.sessionId)) throw sessionNotFound(message.sessionId);
     this.#db
       .prepare(
-        `INSERT INTO messages (id, session_id, seq, role, parts, created_at, model)
-         VALUES (?, ?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM messages WHERE session_id = ?), ?, ?, ?, ?)
+        `INSERT INTO messages (id, session_id, seq, role, parts, created_at, model, input_mode)
+         VALUES (?, ?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM messages WHERE session_id = ?), ?, ?, ?, ?, ?)
          ON CONFLICT (id) DO UPDATE SET parts = excluded.parts, model = excluded.model`,
       )
       .run(
@@ -371,6 +381,7 @@ export class SqliteSessionStore implements SessionStore {
         JSON.stringify(message.parts),
         message.createdAt,
         message.model ?? null,
+        message.inputMode ?? null,
       );
   }
 

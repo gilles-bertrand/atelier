@@ -135,6 +135,10 @@ speech.interrupt(); // bouton « Interrompre », Stop, fin du mode : aucun morce
 
 La synthèse se charge à la demande dans le worker déjà lancé pour la reconnaissance (`ensureSpeechLoaded`) : le mode conversation a besoin des deux. Un worker en train de parler n'est pas déchargé pour inactivité ; un crash fait échouer les synthèses en cours, et la voix est rechargée au morceau suivant.
 
+### Fin de tour du mode conversation (L9)
+
+`start` accepte `endOfTurnSilenceMs` (300 à 3 000 ms, `VoiceSettings.endOfTurnSilenceMs`). La session de dictée devient une session d'écoute d'un tour : le worker signale `speech-start` quand l'utilisateur se met à parler, puis `turn-end` quand ce silence suit un segment fermé et que plus personne ne parle (`SpeechSegmenter.speaking`, `isDetected` de Silero). Le main arrête alors la session (`stop`) et reçoit le texte final du tour. Le silence est compté depuis la fin du dernier segment ; Silero ne ferme un segment qu'après 600 ms de silence (`minSilenceDuration`), qui borne donc le délai par le bas. Sans `endOfTurnSilenceMs`, rien ne change pour la dictée.
+
 ### Confidentialité (D9)
 
 - Aucun fichier audio écrit. Chaque tampon de segment est mis à zéro après sa transcription ; l'historique du pré-roll (30 s au plus, en mémoire) est effacé à la fin de la session.

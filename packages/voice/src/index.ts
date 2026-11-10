@@ -56,6 +56,7 @@ export {
 export { runVoiceWorker, type VoiceWorkerOptions, type WorkerPort } from './worker.js';
 export {
   VoiceWorkerSupervisor,
+  type SessionStartOptions,
   type SupervisorEvents,
   type SupervisorOptions,
   type WorkerHandle,

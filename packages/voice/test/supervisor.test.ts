@@ -232,7 +232,7 @@ describe('VoiceWorkerSupervisor', () => {
 
   it('relaie l’arrêt automatique à la durée maximale', async () => {
     const { supervisor, autoStops } = setup();
-    const start = supervisor.start('v1', 1000);
+    const start = supervisor.start('v1', { maxDurationMs: 1000 });
     await tick();
     await start;
     for (let seq = 0; seq < 10; seq += 1) supervisor.audio('v1', seq, speechFrame());
@@ -250,5 +250,35 @@ describe('VoiceWorkerSupervisor', () => {
     await expect(supervisor.stop('v2')).rejects.toMatchObject({ code: 'voice/engine_failed' });
     await tick(10);
     expect(workers[0]?.sent.filter((m) => m.type === 'state')).toHaveLength(1);
+  });
+});
+
+describe('VoiceWorkerSupervisor, mode conversation (L9)', () => {
+  // Le faux worker ne signale `turn-end` que s'il a reçu `endOfTurnSilenceMs`.
+  it('transmet le silence de fin de tour et relaie turn-end et speech-start', async () => {
+    const turnEnds: string[] = [];
+    const speechStarts: string[] = [];
+    const workers: FakeWorker[] = [];
+    const supervisor = new VoiceWorkerSupervisor({
+      spawn: () => {
+        const w = createFakeWorker(() =>
+          Promise.resolve(new FakeEngine({ script: ['Bonjour.', 'Bonjour.'] })),
+        );
+        workers.push(w);
+        return w;
+      },
+      loadConfig: () => loadConfig,
+      onTurnEnd: (id) => turnEnds.push(id),
+      onSpeechStart: (id) => speechStarts.push(id),
+    });
+    const start = supervisor.start('v1', { endOfTurnSilenceMs: 300 });
+    await tick();
+    await start;
+    expect(workers).toHaveLength(1);
+    supervisor.audio('v1', 0, speechFrame());
+    for (let seq = 1; seq <= 3; seq += 1) supervisor.audio('v1', seq, silenceFrame());
+    await tick();
+    expect(speechStarts).toEqual(['v1']);
+    expect(turnEnds).toEqual(['v1']);
   });
 });

@@ -19,6 +19,7 @@ import { randomUUID } from 'node:crypto';
 import {
   chatMessagesToModelMessages,
   type PromptProject,
+  type ToolWaitPhrase,
   type TurnResult,
 } from '@atelier/agent-core';
 import {
@@ -36,6 +37,7 @@ import {
   type SessionSummary,
   type TokenUsage,
   type ToolDisplay,
+  type VoiceInputMode,
   type WorkspaceFolder,
 } from '@atelier/shared';
 import type { ModelMessage } from 'ai';
@@ -64,8 +66,23 @@ export interface AgentSessionLike {
     input: string,
     emit: AgentEventSink,
     abortSignal?: AbortSignal,
-    options?: { turnId?: string },
+    options?: {
+      turnId?: string;
+      voice?: boolean;
+      onToolWaitPhrase?: (phrase: ToolWaitPhrase) => void;
+    },
   ): Promise<TurnResult>;
+}
+
+/** Options d'un message envoyé par {@link ChatManager.send}. */
+export interface ChatSendOptions {
+  /**
+   * Message dicté ou parlé (`ChatMessage.inputMode`, persisté). `voice` : tour
+   * du mode conversation (consignes du mode vocal, thinking coupé, L8).
+   */
+  inputMode?: VoiceInputMode;
+  /** Tour vocal : phrases d'attente des outils longs, envoyées à la synthèse (L9). */
+  onToolWaitPhrase?: (phrase: ToolWaitPhrase) => void;
 }
 
 /** Paramètres d'une nouvelle session agent. */
@@ -174,6 +191,11 @@ export interface ChangeTracker {
 interface PendingInput {
   text: string;
   attachments: readonly Attachment[];
+}
+
+/** Tour vocal (ADR-004 D7) : consignes du mode vocal et phrases d'attente. */
+interface VoiceTurn {
+  onToolWaitPhrase?: (phrase: ToolWaitPhrase) => void;
 }
 
 /** Tour sans témoin d'un run planifié (ADR-002 D3, D4). */
@@ -332,6 +354,20 @@ export class ChatManager {
     return this.#runtimes.get(sessionId)?.running !== undefined;
   }
 
+  /** Vrai si la conversation existe. */
+  has(sessionId: string): boolean {
+    return this.#o.store.get(sessionId) !== undefined;
+  }
+
+  /**
+   * Résolue quand le tour en cours de la session est entièrement terminé
+   * (message enregistré, session de nouveau libre) ; tout de suite sans tour.
+   * L'événement `done` part avant : un nouvel `send` y échouerait (`agent/busy`).
+   */
+  async whenIdle(sessionId: string): Promise<void> {
+    await this.#runtimes.get(sessionId)?.running?.done.catch(() => undefined);
+  }
+
   async delete(sessionId: string): Promise<void> {
     await this.stop(sessionId);
     this.#o.permissions.forget(sessionId);
@@ -348,6 +384,7 @@ export class ChatManager {
     sessionId: string,
     text: string,
     attachments: readonly Attachment[] = [],
+    options: ChatSendOptions = {},
   ): { turnId: string } {
     const session = this.#session(sessionId);
     if (text.trim() === '' && attachments.length === 0) {
@@ -355,10 +392,21 @@ export class ChatManager {
     }
     const runtime = this.#runtime(sessionId);
     this.#assertIdle(runtime);
-    this.#saveUserMessage(session, text, attachments, true);
-    const { turnId } = this.#start(session, runtime, { text, attachments }, undefined, {
-      kind: 'interactive',
-    });
+    this.#saveUserMessage(session, text, attachments, true, options.inputMode);
+    const voice: VoiceTurn | undefined =
+      options.inputMode === 'voice'
+        ? options.onToolWaitPhrase
+          ? { onToolWaitPhrase: options.onToolWaitPhrase }
+          : {}
+        : undefined;
+    const { turnId } = this.#start(
+      session,
+      runtime,
+      { text, attachments },
+      undefined,
+      { kind: 'interactive' },
+      voice,
+    );
     return { turnId };
   }
 
@@ -403,6 +451,7 @@ export class ChatManager {
     text: string,
     attachments: readonly Attachment[],
     deriveTitle: boolean,
+    inputMode?: VoiceInputMode,
   ): void {
     const at = this.#now();
     const user = createUserMessage({
@@ -411,6 +460,7 @@ export class ChatManager {
       text,
       attachments,
       createdAt: at,
+      ...(inputMode !== undefined ? { inputMode } : {}),
     });
     this.#o.store.saveMessage(user);
     const isFirst =
@@ -463,11 +513,12 @@ export class ChatManager {
     input: PendingInput,
     resetHistory: readonly ModelMessage[] | undefined,
     mode: TurnMode,
+    voice?: VoiceTurn,
   ): { turnId: string; done: Promise<TurnReport> } {
     const turnId = this.#id();
     const controller = new AbortController();
     runtime.retryable = undefined;
-    const done = this.#run(session, runtime, turnId, input, resetHistory, controller, mode);
+    const done = this.#run(session, runtime, turnId, input, resetHistory, controller, mode, voice);
     runtime.running = { turnId, controller, done };
     return { turnId, done };
   }
@@ -480,6 +531,7 @@ export class ChatManager {
     resetHistory: readonly ModelMessage[] | undefined,
     controller: AbortController,
     mode: TurnMode,
+    voice?: VoiceTurn,
   ): Promise<TurnReport> {
     // Laisse `send` renvoyer le turnId avant le premier événement.
     await Promise.resolve();
@@ -552,7 +604,11 @@ export class ChatManager {
           userModelText(input.text, input.attachments),
           emit,
           controller.signal,
-          { turnId },
+          {
+            turnId,
+            ...(voice ? { voice: true } : {}),
+            ...(voice?.onToolWaitPhrase ? { onToolWaitPhrase: voice.onToolWaitPhrase } : {}),
+          },
         );
         outcome = result.reason;
         turnError = result.error;

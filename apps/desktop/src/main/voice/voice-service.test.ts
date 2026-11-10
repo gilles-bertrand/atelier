@@ -13,6 +13,7 @@ import {
 import {
   PARAKEET_TDT_V3_INT8,
   SILERO_VAD,
+  SUPERTONIC_3_INT8,
   toModelInfo,
   type MainToWorkerMessage,
   type ResolvedVoiceModel,
@@ -56,6 +57,17 @@ class FakeWorker implements WorkerHandle {
             voiceSessionId: message.voiceSessionId,
             text: 'Bonjour.',
             reason: 'stopped',
+          });
+          return;
+        case 'tts-load':
+          this.reply({ type: 'tts-loaded', loadMs: 5, sampleRate: 44_100 });
+          return;
+        case 'speak':
+          this.reply({
+            type: 'speech',
+            requestId: message.requestId,
+            sampleRate: 44_100,
+            pcm: new Float32Array(441).fill(0.1),
           });
           return;
         case 'shutdown':
@@ -113,10 +125,12 @@ function harness(overrides: Partial<VoiceServiceOptions> = {}): Harness {
   const events: Harness['events'] = [];
   const settings: VoiceSettings = { ...DEFAULT_VOICE_SETTINGS, enabled: true };
   const mic = { access: 'granted' as MicAccess, requested: 0 };
-  const installed = new Set([SILERO_VAD.id, PARAKEET_TDT_V3_INT8.id]);
+  const installed = new Set([SILERO_VAD.id, PARAKEET_TDT_V3_INT8.id, SUPERTONIC_3_INT8.id]);
   const resolve = (id: string): Promise<ResolvedVoiceModel> => {
     if (!installed.has(id)) {
-      return Promise.reject(new AtelierError('voice/model_missing', `Modèle non installé : ${id}`));
+      return Promise.reject(
+        new AtelierError('voice/model_missing', `Modèle non installé : ${id}`, { details: { id } }),
+      );
     }
     const files: Record<string, string> =
       id === SILERO_VAD.id ? { 'silero_vad.onnx': '/res/voice/silero_vad.onnx' } : {};
@@ -447,5 +461,133 @@ describe('VoiceService : modèles et micro', () => {
     expect(h.mic.requested).toBe(0);
     await h.service.requestMic();
     expect(h.mic.requested).toBe(1);
+  });
+});
+
+/** Agent factice du mode conversation : une conversation `chat-1`, un tour à la fois. */
+function fakeAgent() {
+  const sent: string[] = [];
+  let running = false;
+  return {
+    sent,
+    has: (sessionId: string) => sessionId === 'chat-1',
+    send: (_sessionId: string, text: string) => {
+      sent.push(text);
+      running = true;
+      return { turnId: `t${String(sent.length)}` };
+    },
+    stop: () => Promise.resolve(),
+    isRunning: () => running,
+    // Le tour ne se termine pas dans ces tests.
+    whenIdle: () => new Promise<void>(() => undefined),
+    pendingPermissions: () => 0,
+  };
+}
+
+async function settle(): Promise<void> {
+  for (let i = 0; i < 20; i += 1) await new Promise((r) => setTimeout(r, 0));
+}
+
+describe('VoiceService : mode conversation (L9)', () => {
+  it('exige une conversation existante et un agent', async () => {
+    const h = harness({ agent: fakeAgent() });
+    await expectCode(h.service.start(MAIN, { mode: 'conversation' }), 'session/not_found');
+    await expectCode(
+      h.service.start(MAIN, { mode: 'conversation', sessionId: 'inconnue' }),
+      'session/not_found',
+    );
+    const without = harness();
+    await expectCode(
+      without.service.start(MAIN, { mode: 'conversation', sessionId: 'chat-1' }),
+      'voice/engine_failed',
+    );
+    expect(h.workers).toHaveLength(0);
+  });
+
+  it('modèles absents : voice/model_missing avec l’identifiant à télécharger', async () => {
+    for (const missing of [SUPERTONIC_3_INT8.id, PARAKEET_TDT_V3_INT8.id]) {
+      const h = harness({ agent: fakeAgent() });
+      h.installed.delete(missing);
+      try {
+        await h.service.start(MAIN, { mode: 'conversation', sessionId: 'chat-1' });
+        throw new Error('voice/model_missing attendu');
+      } catch (error) {
+        expect(isAtelierError(error) && error.code).toBe('voice/model_missing');
+        expect(isAtelierError(error) && error.details).toEqual({ id: missing });
+      }
+      expect(h.workers).toHaveLength(0);
+      expect(h.service.activeSessionId).toBeUndefined();
+    }
+  });
+
+  it('charge reconnaissance et synthèse, écoute, envoie le tour et fait parler l’agent', async () => {
+    const agent = fakeAgent();
+    const h = harness({ agent });
+    h.settings.endOfTurnSilenceMs = 900;
+    const { voiceSessionId } = await h.service.start(MAIN, {
+      mode: 'conversation',
+      sessionId: 'chat-1',
+    });
+    await settle();
+    const worker = h.workers[0];
+    expect(worker?.received.map((m) => m.type)).toEqual(['load', 'tts-load', 'start']);
+    expect(worker?.received[2]).toMatchObject({
+      type: 'start',
+      voiceSessionId: `${voiceSessionId}#1`,
+      endOfTurnSilenceMs: 900,
+    });
+    expect(h.events.find((e) => e.channel === 'voice:state')?.payload).toEqual({
+      voiceSessionId,
+      state: 'starting',
+    });
+
+    h.service.audio(MAIN, voiceSessionId, 0, frame());
+    expect(worker?.audioSeqs()).toEqual([0]);
+    worker?.reply({ type: 'turn-end', voiceSessionId: `${voiceSessionId}#1` });
+    await settle();
+    expect(agent.sent).toEqual(['Bonjour.']);
+
+    h.service.agentEvent({
+      sessionId: 'chat-1',
+      turnId: 't1',
+      type: 'text_delta',
+      delta: 'Salut.',
+    });
+    h.service.agentEvent({ sessionId: 'chat-1', turnId: 't1', type: 'done', reason: 'stop' });
+    await settle();
+    const out = h.events.filter((e) => e.channel === 'voice:audio-out');
+    expect(out.length).toBeGreaterThan(0);
+    expect(out.at(-1)?.payload).toMatchObject({ voiceSessionId, turnId: 't1', final: true });
+    // L'agent parle : le micro ne va plus au worker.
+    h.service.audio(MAIN, voiceSessionId, 1, frame());
+    expect(worker?.audioSeqs()).toEqual([0]);
+
+    expect(await h.service.stop(MAIN, voiceSessionId)).toEqual({ text: '' });
+    expect(h.service.activeSessionId).toBeUndefined();
+    expect(h.events.at(-1)).toEqual({
+      channel: 'voice:state',
+      payload: { voiceSessionId, state: 'idle' },
+    });
+  });
+
+  it('interruption, fin de lecture et annulation passent par la conversation de la fenêtre', async () => {
+    const h = harness({ agent: fakeAgent() });
+    const { voiceSessionId } = await h.service.start(MAIN, {
+      mode: 'conversation',
+      sessionId: 'chat-1',
+    });
+    await expectCode(() => {
+      h.service.interrupt(OTHER_WINDOW, voiceSessionId);
+    }, 'voice/busy');
+    await expectCode(() => {
+      h.service.playbackEnded(MAIN, voiceSessionId, 't1', -1);
+    }, 'internal');
+    h.service.interrupt(MAIN, voiceSessionId);
+    h.service.playbackEnded(MAIN, voiceSessionId, 't1', 0);
+    h.service.senderGone(MAIN.senderId);
+    expect(h.service.activeSessionId).toBeUndefined();
+    // Messages en vol après la fin : ignorés.
+    h.service.playbackEnded(MAIN, voiceSessionId, 't1', 0);
+    h.service.interrupt(MAIN, voiceSessionId);
   });
 });

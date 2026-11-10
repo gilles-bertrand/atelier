@@ -292,6 +292,8 @@ describe('canaux voice:*', () => {
       stop: record('stop', Promise.resolve({ text: 'Bonjour.' })),
       cancel: record('cancel'),
       audio: record('audio'),
+      interrupt: record('interrupt'),
+      playbackEnded: record('playbackEnded'),
     };
     const handlers = createHandlers({ voice } as unknown as HandlerServices);
     return { handlers, calls };
@@ -309,12 +311,34 @@ describe('canaux voice:*', () => {
       text: 'Bonjour.',
     });
     await handlers['voice:cancel']?.({ voiceSessionId: 'v1' }, caller);
+    await handlers['voice:interrupt']?.({ voiceSessionId: 'v1' }, caller);
+    await handlers['voice:playback-ended']?.(
+      { voiceSessionId: 'v1', turnId: 't1', lastSeq: 4 },
+      caller,
+    );
     expect(calls).toEqual([
-      { method: 'start', args: [caller] },
+      { method: 'start', args: [caller, { mode: 'dictation' }] },
       { method: 'audio', args: [caller, 'v1', 0, pcm] },
       { method: 'stop', args: [caller, 'v1'] },
       { method: 'cancel', args: [caller, 'v1'] },
+      { method: 'interrupt', args: [caller, 'v1'] },
+      { method: 'playbackEnded', args: [caller, 'v1', 't1', 4] },
     ]);
+  });
+
+  it('mode conversation : transmet la conversation, refuse un mode inconnu', async () => {
+    const { handlers, calls } = setup();
+    const caller = { senderId: 7, fromMainFrame: true };
+    await handlers['voice:start']?.({ mode: 'conversation', sessionId: 'chat-1' }, caller);
+    expect(calls[0]).toEqual({
+      method: 'start',
+      args: [caller, { mode: 'conversation', sessionId: 'chat-1' }],
+    });
+    await expect(
+      Promise.resolve().then(() =>
+        handlers['voice:start']?.({ mode: 'duplex' as 'dictation' }, caller),
+      ),
+    ).rejects.toMatchObject({ code: 'tool/invalid_input' });
   });
 
   it('sans appelant connu, rien n’est accordé (cadre principal refusé par défaut)', async () => {

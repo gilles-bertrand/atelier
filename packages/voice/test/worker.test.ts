@@ -160,3 +160,28 @@ describe('runVoiceWorker', () => {
     expect(JSON.stringify(sent)).not.toContain('protobuf');
   });
 });
+
+describe('runVoiceWorker, mode conversation (L9)', () => {
+  it('signale la reprise de parole et la fin du tour', async () => {
+    const { sent, send } = setup(new FakeEngine({ script: ['Bonjour.', 'Bonjour.'] }));
+    await send({ type: 'load', config: loadConfig });
+    await send({ type: 'start', voiceSessionId: 'v1', endOfTurnSilenceMs: 300 });
+    await send({ type: 'audio', voiceSessionId: 'v1', seq: 0, pcm: speechFrame() });
+    for (let seq = 1; seq <= 3; seq += 1) {
+      await send({ type: 'audio', voiceSessionId: 'v1', seq, pcm: silenceFrame() });
+    }
+    expect(sent.filter((m) => m.type === 'speech-start')).toEqual([
+      { type: 'speech-start', voiceSessionId: 'v1' },
+    ]);
+    expect(sent.filter((m) => m.type === 'turn-end')).toEqual([
+      { type: 'turn-end', voiceSessionId: 'v1' },
+    ]);
+  });
+
+  it('refuse un silence de fin de tour hors bornes', async () => {
+    const { sent, send } = setup();
+    await send({ type: 'load', config: loadConfig });
+    await send({ type: 'start', voiceSessionId: 'v1', endOfTurnSilenceMs: 50 });
+    expect(sent.at(-1)).toEqual({ type: 'rejected', issue: 'endOfTurnSilenceMs' });
+  });
+});

@@ -9,6 +9,8 @@
 import { z } from 'zod';
 import {
   ATELIER_ERROR_CODES,
+  MAX_END_OF_TURN_SILENCE_MS,
+  MIN_END_OF_TURN_SILENCE_MS,
   VOICE_SAMPLE_RATE,
   VOICE_TTS_RATE_MAX,
   VOICE_TTS_RATE_MIN,
@@ -82,6 +84,15 @@ export const mainToWorkerSchema = z.discriminatedUnion('type', [
     voiceSessionId: sessionId,
     /** Durée maximale de la dictée ; `MAX_DICTATION_MS` par défaut. */
     maxDurationMs: z.int().min(1000).max(MAX_PROTOCOL_DURATION_MS).optional(),
+    /**
+     * Mode conversation (L9) : silence qui termine un tour de parole. Le worker
+     * signale alors `turn-end` ; absent : dictée.
+     */
+    endOfTurnSilenceMs: z
+      .int()
+      .min(MIN_END_OF_TURN_SILENCE_MS)
+      .max(MAX_END_OF_TURN_SILENCE_MS)
+      .optional(),
   }),
   z.strictObject({
     type: z.literal('audio'),
@@ -150,6 +161,10 @@ export const workerToMainSchema = z.discriminatedUnion('type', [
     /** `max_duration` : arrêt automatique au bout de `MAX_DICTATION_MS`. */
     reason: z.enum(['stopped', 'max_duration']),
   }),
+  /** Mode conversation : fin du tour de parole ; le main arrête la session (`stop`). */
+  z.strictObject({ type: z.literal('turn-end'), voiceSessionId: sessionId }),
+  /** Mode conversation : l'utilisateur se met à parler (sans audio ni texte). */
+  z.strictObject({ type: z.literal('speech-start'), voiceSessionId: sessionId }),
   z.strictObject({
     type: z.literal('error'),
     voiceSessionId: sessionId.optional(),

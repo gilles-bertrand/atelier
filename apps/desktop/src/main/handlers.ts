@@ -208,12 +208,17 @@ export function createHandlers(s: HandlerServices): IpcHandlers {
     ...(s.voice ? voiceHandlers(s.voice) : {}),
 
     // --- Agent
-    'agent:send': ({ sessionId, text, attachments }) => s.chats.send(sessionId, text, attachments),
+    'agent:send': ({ sessionId, text, attachments, inputMode }) =>
+      s.chats.send(sessionId, text, attachments, {
+        // Requête venue du renderer : une valeur inconnue vaut « tapé ».
+        ...(inputMode === 'dictation' || inputMode === 'voice' ? { inputMode } : {}),
+      }),
     'agent:stop': async ({ sessionId }) => {
       await s.chats.stop(sessionId);
       return undefined;
     },
     'agent:retry': ({ sessionId }) => s.chats.retry(sessionId),
+    // La voix n'autorise rien (ADR-004 §7) : seule la modale répond, par ce canal.
     'permission:respond': ({ requestId, decision }) => {
       s.permissions.respond(requestId, decision);
       return undefined;
@@ -403,7 +408,18 @@ function voiceHandlers(voice: VoiceService): IpcHandlers {
       await voice.importModel(id);
       return undefined;
     },
-    'voice:start': (_request, context) => voice.start(caller(context)),
+    'voice:start': (request, context) => {
+      // Requête venue du renderer : validée avant usage.
+      const mode = (request as { mode?: unknown } | undefined)?.mode;
+      const sessionId = (request as { sessionId?: unknown } | undefined)?.sessionId;
+      if (mode !== undefined && mode !== 'dictation' && mode !== 'conversation') {
+        throw new AtelierError('tool/invalid_input', 'Mode vocal inconnu.');
+      }
+      return voice.start(caller(context), {
+        ...(mode !== undefined ? { mode } : {}),
+        ...(typeof sessionId === 'string' ? { sessionId } : {}),
+      });
+    },
     'voice:stop': ({ voiceSessionId }, context) => voice.stop(caller(context), voiceSessionId),
     'voice:cancel': ({ voiceSessionId }, context) => {
       voice.cancel(caller(context), voiceSessionId);
@@ -411,6 +427,14 @@ function voiceHandlers(voice: VoiceService): IpcHandlers {
     },
     'voice:audio': ({ voiceSessionId, seq, pcm }, context) => {
       voice.audio(caller(context), voiceSessionId, seq, pcm);
+      return undefined;
+    },
+    'voice:interrupt': ({ voiceSessionId }, context) => {
+      voice.interrupt(caller(context), voiceSessionId);
+      return undefined;
+    },
+    'voice:playback-ended': ({ voiceSessionId, turnId, lastSeq }, context) => {
+      voice.playbackEnded(caller(context), voiceSessionId, turnId, lastSeq);
       return undefined;
     },
   };

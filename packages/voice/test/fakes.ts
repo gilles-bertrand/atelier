@@ -47,6 +47,10 @@ class FakeSegmenter implements SpeechSegmenter {
     return this.start >= 0 ? [this.close()] : [];
   }
 
+  speaking(): boolean {
+    return this.start >= 0;
+  }
+
   dispose(): void {
     this.disposed = true;
   }
