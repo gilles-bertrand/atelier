@@ -8,6 +8,7 @@
  * montages de la VM) et le renderer (formulaires, aperçu des chemins) partagent
  * les mêmes règles. Les chemins sont des chemins POSIX absolus (macOS).
  */
+import type { SessionSummary } from './messages.js';
 import { GUEST_FOLDERS } from './sandbox.js';
 
 /** Accès de l'agent à un dossier du projet. */
@@ -345,4 +346,37 @@ export function validateProjectInput(input: ProjectInput): ProjectValidationIssu
     };
   }
   return input.folders !== undefined ? validateFolders(input.folders) : undefined;
+}
+
+/**
+ * Déplacement d'une conversation par glisser-déposer (#21) : vers un projet,
+ * d'un projet à l'autre, ou hors projet (`target` absent).
+ *
+ * Règle : le dossier de travail d'une conversation ne change jamais. Son
+ * historique cite des chemins relatifs à ce dossier, et la VM le monte sur
+ * `/workspace`. Une conversation n'entre donc dans un projet que si son
+ * dossier est le **dossier principal** de ce projet (ADR-003 : `workspace` d'une
+ * conversation de projet = dossier principal). Pour regrouper les conversations
+ * d'un dossier, on crée le projet depuis ce dossier (`project:from-folder`).
+ *
+ * Les consignes, la mémoire et les dossiers rattachés du projet s'appliquent à
+ * partir du tour suivant. Renvoie le motif du refus (français, affiché tel
+ * quel), ou `undefined` si le déplacement est permis ou sans effet.
+ */
+export function checkSessionMove(
+  session: Pick<SessionSummary, 'workspace' | 'projectId' | 'scheduledTaskId'>,
+  target: Pick<Project, 'id' | 'name' | 'folders' | 'archivedAt'> | undefined,
+): string | undefined {
+  if (session.scheduledTaskId !== undefined) {
+    return 'Le run d’une tâche planifiée reste rattaché à sa tâche : il ne change pas de projet.';
+  }
+  if (target === undefined || target.id === session.projectId) return undefined;
+  if (target.archivedAt !== undefined) {
+    return `Le projet « ${target.name} » est archivé : désarchivez-le d’abord.`;
+  }
+  const principal = target.folders[0]?.path;
+  if (principal === undefined || trimSlashes(principal) !== trimSlashes(session.workspace)) {
+    return `Cette conversation travaille dans un autre dossier que celui du projet « ${target.name} ». Démarrez une nouvelle conversation dans le projet, ou créez un projet depuis le dossier de la conversation.`;
+  }
+  return undefined;
 }

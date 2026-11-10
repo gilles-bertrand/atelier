@@ -20,6 +20,7 @@ const MESSAGES: Record<AtelierErrorCode, string> = {
   'agent/invalid_tool_call': 'L’assistant a mal formulé une action. Réessayez.',
   'agent/busy': 'L’assistant travaille déjà sur une demande. Attendez la fin ou arrêtez-la.',
   'session/not_found': 'Cette conversation n’existe plus.',
+  'session/move_refused': 'Cette conversation ne peut pas être déplacée ici.',
   'settings/invalid': 'Ce réglage n’est pas valide.',
   'schedule/invalid': 'Cette tâche planifiée n’est pas valide.',
   'schedule/not_found': 'Cette tâche planifiée n’existe plus.',

@@ -511,7 +511,7 @@ ToolDefinition.precheck?(input: I, context: ToolPrecheckContext): Promise<ToolPr
 ## 9. Suites possibles (hors ticket)
 
 - Artefacts « vivants » qui relisent un fichier de données du projet (`connect-src` limité aux fichiers de l'artefact), sans republier la page.
-- Déplacer une conversation d'un projet à l'autre par glisser-déposer (#21).
+- ~~Déplacer une conversation d'un projet à l'autre par glisser-déposer (#21).~~ Repris le 2026-11-10 (canal `session:set-project`, règle `checkSessionMove`) : une conversation n'entre dans un projet que si son dossier en est le dossier principal ; son dossier de travail ne change jamais.
 - Export d'un artefact : HTML autonome ou PDF.
 - Mémoire structurée et recherche sémantique (embeddings locaux).
 - Fichiers de connaissance du projet, indexés et cités.
