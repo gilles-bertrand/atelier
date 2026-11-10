@@ -38,6 +38,8 @@ import type { UsagePeriod, UsageSummary } from './usage.js';
 import type {
   MicAccess,
   TranscriptSegment,
+  VoiceAudioOut,
+  VoiceInputMode,
   VoiceInputWarning,
   VoiceMode,
   VoiceModelInfo,
@@ -122,7 +124,13 @@ export interface IpcInvokeContract {
 
   // --- Agent
   'agent:send': {
-    request: { sessionId: string; text: string; attachments?: Attachment[] };
+    request: {
+      sessionId: string;
+      text: string;
+      attachments?: Attachment[];
+      /** Message dicté ou parlé (icône dans le fil, `ChatMessage.inputMode`). Absent : tapé. */
+      inputMode?: VoiceInputMode;
+    };
     response: { turnId: string };
   };
   'agent:stop': { request: { sessionId: string }; response: undefined };
@@ -246,7 +254,10 @@ export interface IpcInvokeContract {
   /**
    * Ouvre une session vocale ; `voice/busy` si une autre est en cours (une seule
    * à la fois). La session démarre en `starting` et passe en `listening` à la
-   * première trame reçue.
+   * première trame reçue. Mode `conversation` (phase 2) : `sessionId` est
+   * requis ; chaque fin de tour envoie le transcript à cette conversation
+   * (`inputMode: 'voice'`), la session ne se termine que par `voice:stop`,
+   * `voice:cancel` ou `VOICE_CONVERSATION_IDLE_MS` sans parole.
    */
   'voice:start': {
     request: { mode: VoiceMode; sessionId?: string };
@@ -265,6 +276,24 @@ export interface IpcInvokeContract {
    */
   'voice:audio': {
     request: { voiceSessionId: string; seq: number; pcm: Float32Array };
+    response: undefined;
+  };
+  /**
+   * Mode conversation : l'utilisateur interrompt l'agent (bouton
+   * « Interrompre » ou raccourci, jamais à la voix en v1 : S3). Le main arrête
+   * la synthèse et le tour (sémantique de `agent:stop`), puis l'écoute reprend
+   * après `VOICE_ECHO_GUARD_MS`. Sans effet si l'agent ne parle ni ne
+   * travaille.
+   */
+  'voice:interrupt': { request: { voiceSessionId: string }; response: undefined };
+  /**
+   * Mode conversation : le renderer a fini de jouer la voix du tour `turnId`
+   * jusqu'au morceau `lastSeq` (le `final`, ou le dernier joué avant une
+   * coupure). Le main ignore encore les trames du micro pendant
+   * `VOICE_ECHO_GUARD_MS` (semi-duplex), puis repasse en `listening`.
+   */
+  'voice:playback-ended': {
+    request: { voiceSessionId: string; turnId: string; lastSeq: number };
     response: undefined;
   };
 }
@@ -311,6 +340,8 @@ export interface IpcEventContract {
     state: VoiceSessionState;
     warning?: VoiceInputWarning;
   };
+  /** Voix de l'agent en mode conversation (phase 2), morceau par morceau. */
+  'voice:audio-out': VoiceAudioOut;
 }
 
 /** Canal d'événement. */
@@ -385,6 +416,8 @@ export const IPC_INVOKE_CHANNELS = [
   'voice:stop',
   'voice:cancel',
   'voice:audio',
+  'voice:interrupt',
+  'voice:playback-ended',
 ] as const satisfies readonly IpcInvokeChannel[];
 
 /** Liste exhaustive des canaux d'événements. */
@@ -402,6 +435,7 @@ export const IPC_EVENT_CHANNELS = [
   'voice:model',
   'voice:transcript',
   'voice:state',
+  'voice:audio-out',
 ] as const satisfies readonly IpcEventChannel[];
 
 // Vérifications à la compilation : les listes couvrent exactement les contrats.
