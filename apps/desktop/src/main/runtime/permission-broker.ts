@@ -5,6 +5,9 @@
  * appelle le gestionnaire : on garde la promesse en attente jusqu'à la réponse
  * `permission:respond`. Un tour annulé (bouton stop) répond `deny`.
  * Les `allow_session` sont mémorisés par session (`withSessionMemory`).
+ * `onSettled` prévient de chaque demande close, quelle qu'en soit la cause
+ * (réponse à l'écran, stop, abandon) : le mode conversation y reprend l'écoute
+ * (ADR-004 D7). La décision n'est pas transmise : la voix n'en fait rien.
  */
 import { withSessionMemory } from '@atelier/agent-core';
 import type { PermissionDecision, PermissionHandler, PermissionRequest } from '@atelier/shared';
@@ -17,6 +20,15 @@ interface Pending {
 export class PermissionBroker {
   readonly #pending = new Map<string, Pending>();
   readonly #handlers = new Map<string, PermissionHandler>();
+  readonly #settled = new Set<(request: PermissionRequest) => void>();
+
+  /** Écoute la clôture des demandes ; rend la fonction de désabonnement. */
+  onSettled(listener: (request: PermissionRequest) => void): () => void {
+    this.#settled.add(listener);
+    return () => {
+      this.#settled.delete(listener);
+    };
+  }
 
   /** Gestionnaire d'une session (mémoire « toujours pour cette session » incluse). */
   handlerFor(sessionId: string): PermissionHandler {
@@ -70,6 +82,7 @@ export class PermissionBroker {
         resolve: (decision) => {
           signal?.removeEventListener('abort', onAbort);
           resolve(decision);
+          for (const listener of this.#settled) listener(request);
         },
       });
       signal?.addEventListener('abort', onAbort, { once: true });

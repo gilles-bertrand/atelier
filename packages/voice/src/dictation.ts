@@ -15,6 +15,10 @@
  *   sont ignorées.
  * - Au bout de `maxDurationMs` (5 min), la dictée s'arrête d'elle-même
  *   (`onAutoStop`).
+ * - Mode conversation (L9) : avec `endOfTurnSilenceMs`, la session signale la
+ *   fin du tour de parole (`onEndOfTurn`) quand ce silence suit un segment
+ *   fermé et que plus personne ne parle, et chaque reprise de parole
+ *   (`onSpeechStart`). C'est le main qui arrête alors la session (`stop`).
  *
  * Confidentialité (D9) : rien n'est écrit sur le disque ; chaque tampon est mis
  * à zéro et relâché après sa transcription, l'historique à la fin de la
@@ -66,6 +70,14 @@ export interface DictationOptions {
   finalBlockBudgetMs?: number;
   /** Horloge en millisecondes, `performance.now` par défaut (injectable en test). */
   now?: () => number;
+  /**
+   * Mode conversation (L9) : silence, en millisecondes, qui termine un tour de
+   * parole. Compté depuis la fin du dernier segment fermé ; le détecteur ne
+   * ferme un segment qu'après son propre silence minimal (600 ms pour
+   * Silero), qui borne donc le délai par le bas. Absent : dictée, pas de fin
+   * de tour.
+   */
+  endOfTurnSilenceMs?: number;
 }
 
 /**
@@ -103,6 +115,10 @@ export interface DictationCallbacks {
   onAutoStop?: (text: string) => void;
   /** Échec du moteur pendant la session (la session est terminée). */
   onError?: (error: AtelierError) => void;
+  /** Mode conversation : fin du tour de parole (silence de `endOfTurnSilenceMs`). */
+  onEndOfTurn?: () => void;
+  /** Mode conversation : l'utilisateur se met à parler. */
+  onSpeechStart?: () => void;
 }
 
 /** Fin de session : texte assemblé, ou échec du moteur. */
@@ -177,6 +193,14 @@ export class DictationSession {
   private readonly blockBudgetMs: number;
   private readonly postRollSamples: number;
   private readonly now: () => number;
+  /** Silence de fin de tour, en échantillons ; `undefined` hors conversation. */
+  private readonly endOfTurnSamples: number | undefined;
+  /** Fin (position absolue) du dernier segment fermé. */
+  private lastSpeechEnd = 0;
+  /** Un segment fermé attend sa fin de tour. */
+  private turnPending = false;
+  /** Le détecteur entendait de la parole à la trame précédente. */
+  private wasSpeaking = false;
 
   private segmenter: SpeechSegmenter | undefined;
   private readonly history: AudioHistory;
@@ -220,6 +244,10 @@ export class DictationSession {
     this.blockBudgetMs = options.finalBlockBudgetMs ?? FINAL_BLOCK_BUDGET_MS;
     this.postRollSamples = msToSamples(FINAL_BLOCK_POST_ROLL_MS);
     this.now = options.now ?? (() => performance.now());
+    this.endOfTurnSamples =
+      options.endOfTurnSilenceMs !== undefined
+        ? msToSamples(options.endOfTurnSilenceMs)
+        : undefined;
     if (this.blockMaxSamples <= 0) this.blockAudio = undefined;
     this.segmenter = this.engine.createSegmenter();
   }
@@ -247,7 +275,9 @@ export class DictationSession {
     if (frame.length > 0) {
       this.watchSilence(frame);
       this.history.push(frame);
-      this.enqueue(this.segmenter.accept(frame));
+      const closed = this.segmenter.accept(frame);
+      this.enqueue(closed);
+      this.watchTurn(closed);
     }
     if (this.history.totalSamples >= this.maxSamples) {
       void this.end('max_duration');
@@ -470,6 +500,33 @@ export class DictationSession {
       this.fail(cause);
     } finally {
       audio.fill(0);
+    }
+  }
+
+  /**
+   * Fin de tour du mode conversation : un segment s'est fermé, personne ne
+   * parle et le silence depuis sa fin atteint `endOfTurnSamples`. Signalée une
+   * fois par tour ; une reprise de parole relance l'attente.
+   */
+  private watchTurn(closed: SpeechAudioSegment[]): void {
+    if (this.endOfTurnSamples === undefined || this.segmenter === undefined) return;
+    const speaking = this.segmenter.speaking?.() ?? false;
+    if (speaking && !this.wasSpeaking) this.callbacks.onSpeechStart?.();
+    this.wasSpeaking = speaking;
+    for (const segment of closed) {
+      this.lastSpeechEnd = Math.max(
+        this.lastSpeechEnd,
+        segment.startSample + segment.samples.length,
+      );
+      this.turnPending = true;
+    }
+    if (
+      this.turnPending &&
+      !speaking &&
+      this.history.totalSamples - this.lastSpeechEnd >= this.endOfTurnSamples
+    ) {
+      this.turnPending = false;
+      this.callbacks.onEndOfTurn?.();
     }
   }
 

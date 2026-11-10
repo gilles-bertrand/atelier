@@ -112,7 +112,11 @@ export function runVoiceWorker(options: VoiceWorkerOptions): { dispose: () => vo
     }
   }
 
-  function start(voiceSessionId: string, maxDurationMs: number | undefined): void {
+  function start(
+    voiceSessionId: string,
+    maxDurationMs: number | undefined,
+    endOfTurnSilenceMs: number | undefined,
+  ): void {
     if (session !== undefined) {
       sessionError(voiceSessionId, new AtelierError('voice/busy', 'Une dictée est déjà en cours.'));
       return;
@@ -127,8 +131,19 @@ export function runVoiceWorker(options: VoiceWorkerOptions): { dispose: () => vo
       return;
     }
     const current: DictationSession = new DictationSession(
-      { voiceSessionId, engine, ...(maxDurationMs !== undefined ? { maxDurationMs } : {}) },
       {
+        voiceSessionId,
+        engine,
+        ...(maxDurationMs !== undefined ? { maxDurationMs } : {}),
+        ...(endOfTurnSilenceMs !== undefined ? { endOfTurnSilenceMs } : {}),
+      },
+      {
+        onEndOfTurn: () => {
+          post({ type: 'turn-end', voiceSessionId });
+        },
+        onSpeechStart: () => {
+          post({ type: 'speech-start', voiceSessionId });
+        },
         onSegment: (segment) => {
           post({ type: 'transcript', segment });
         },
@@ -256,7 +271,7 @@ export function runVoiceWorker(options: VoiceWorkerOptions): { dispose: () => vo
         await load(message.config);
         return;
       case 'start':
-        start(message.voiceSessionId, message.maxDurationMs);
+        start(message.voiceSessionId, message.maxDurationMs, message.endOfTurnSilenceMs);
         return;
       case 'audio':
         // Hors session : ignorée (le main filtre déjà, D3).

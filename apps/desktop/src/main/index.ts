@@ -503,12 +503,15 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
   });
 
   const permissions = new PermissionBroker();
+  // Voix locale (ADR-004) : créée plus bas ; le mode conversation suit les tours de l'agent.
+  const voiceRef: { voice?: VoiceService } = {};
   const chats = new ChatManager({
     store,
     permissions,
     agents,
     emit: (event) => {
       broadcast('agent:event', event);
+      voiceRef.voice?.agentEvent(event);
     },
     onLlmError: () => {
       void monitor.check();
@@ -597,7 +600,6 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
   );
 
   // Voix locale (ADR-004) : modèles dans <userData>/models/voice, moteur en utilityProcess.
-  const voiceRef: { voice?: VoiceService } = {};
   const voiceModels = new VoiceModelManager({
     rootDir: voiceModelsDir(paths.userData),
     bundledDir: paths.voiceModels,
@@ -615,8 +617,21 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
     log: (message, data) => {
       log(message, data);
     },
+    // Mode conversation (L9) : tours vocaux dans la conversation ouverte.
+    agent: {
+      has: (sessionId) => chats.has(sessionId),
+      send: (sessionId, text, { onToolWaitPhrase }) =>
+        chats.send(sessionId, text, [], { inputMode: 'voice', onToolWaitPhrase }),
+      stop: (sessionId) => chats.stop(sessionId),
+      isRunning: (sessionId) => chats.isRunning(sessionId),
+      whenIdle: (sessionId) => chats.whenIdle(sessionId),
+      pendingPermissions: (sessionId) => permissions.pending(sessionId).length,
+    },
   });
   voiceRef.voice = voice;
+  permissions.onSettled((request) => {
+    voice.permissionSettled(request);
+  });
   try {
     await voiceModels.init();
   } catch (error) {
@@ -626,7 +641,7 @@ async function bootstrap(): Promise<{ shutdown: () => Promise<void> }> {
   settings.onChange((next, previous) => {
     voice.settingsChanged(voiceSettingsOf(next), voiceSettingsOf(previous));
   });
-  // Mise en veille : la dictée en cours est abandonnée.
+  // Mise en veille : la dictée ou la conversation vocale en cours est abandonnée.
   powerMonitor.on('suspend', () => {
     voice.suspend();
   });

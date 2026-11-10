@@ -24,6 +24,12 @@ export interface SpeechSegmenter {
   accept(pcm: Float32Array): SpeechAudioSegment[];
   /** Fin du flux : rend le segment en cours, s'il y en a un. */
   flush(): SpeechAudioSegment[];
+  /**
+   * Vrai pendant une parole en cours, segment pas encore fermé (Silero :
+   * `isDetected`). Sert à la fin de tour du mode conversation : aucun tour ne
+   * se termine pendant que l'utilisateur parle. Absent : jamais en cours.
+   */
+  speaking?(): boolean;
   /** Libère l'état natif. Le découpeur n'est plus utilisable ensuite. */
   dispose(): void;
 }

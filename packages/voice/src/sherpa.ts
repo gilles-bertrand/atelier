@@ -127,6 +127,10 @@ class SileroSegmenter implements SpeechSegmenter {
     return this.drain();
   }
 
+  speaking(): boolean {
+    return this.vad?.isDetected() ?? false;
+  }
+
   dispose(): void {
     this.vad?.clear();
     this.vad = undefined;

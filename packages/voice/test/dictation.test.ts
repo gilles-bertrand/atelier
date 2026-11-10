@@ -381,3 +381,54 @@ describe('DictationSession', () => {
     });
   });
 });
+
+describe('DictationSession, fin de tour (mode conversation, L9)', () => {
+  /** Trames de 100 ms : 700 ms de silence = 7 trames. */
+  function conversation(engine = new FakeEngine({ script: ['Bonjour.', 'Et ensuite ?'] })) {
+    const events: string[] = [];
+    const session = new DictationSession(
+      { voiceSessionId: 'v1', engine, endOfTurnSilenceMs: 700, finalBlockMaxMs: 0 },
+      {
+        onEndOfTurn: () => events.push('turn-end'),
+        onSpeechStart: () => events.push('speech-start'),
+      },
+    );
+    return { session, events };
+  }
+
+  it('signale la fin du tour après le silence réglé, une seule fois', () => {
+    const { session, events } = conversation();
+    session.accept(speechFrame());
+    session.accept(speechFrame());
+    expect(events).toEqual(['speech-start']);
+    // La première trame de silence ferme le segment ; 700 ms depuis sa fin.
+    for (let i = 0; i < 6; i += 1) session.accept(silenceFrame());
+    expect(events).toEqual(['speech-start']);
+    session.accept(silenceFrame());
+    expect(events).toEqual(['speech-start', 'turn-end']);
+    for (let i = 0; i < 20; i += 1) session.accept(silenceFrame());
+    expect(events).toEqual(['speech-start', 'turn-end']);
+  });
+
+  it('ne termine pas le tour quand la parole reprend avant le délai', () => {
+    const { session, events } = conversation();
+    session.accept(speechFrame());
+    for (let i = 0; i < 4; i += 1) session.accept(silenceFrame());
+    session.accept(speechFrame());
+    for (let i = 0; i < 6; i += 1) session.accept(speechFrame());
+    expect(events).toEqual(['speech-start', 'speech-start']);
+    for (let i = 0; i < 7; i += 1) session.accept(silenceFrame());
+    expect(events).toEqual(['speech-start', 'speech-start', 'turn-end']);
+  });
+
+  it('ne signale rien sans parole, ni en dictée', () => {
+    const { session, events } = conversation();
+    for (let i = 0; i < 30; i += 1) session.accept(silenceFrame());
+    expect(events).toEqual([]);
+
+    const dictation = collect(new FakeEngine({ script: ['Bonjour.'] }));
+    dictation.session.accept(speechFrame());
+    for (let i = 0; i < 30; i += 1) dictation.session.accept(silenceFrame());
+    expect(dictation.states).toEqual(['listening']);
+  });
+});

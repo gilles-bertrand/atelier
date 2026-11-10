@@ -49,6 +49,18 @@ export interface SupervisorEvents {
   onAutoStop?: (voiceSessionId: string, text: string) => void;
   /** Échec pendant une session (moteur, crash du worker). */
   onSessionError?: (voiceSessionId: string, error: AtelierError) => void;
+  /** Mode conversation : fin du tour de parole de la session (`endOfTurnSilenceMs`). */
+  onTurnEnd?: (voiceSessionId: string) => void;
+  /** Mode conversation : l'utilisateur se met à parler. */
+  onSpeechStart?: (voiceSessionId: string) => void;
+}
+
+/** Options d'une session (`start`). */
+export interface SessionStartOptions {
+  /** Durée maximale ; `MAX_DICTATION_MS` par défaut. */
+  maxDurationMs?: number;
+  /** Mode conversation : silence de fin de tour (`turn-end`). Absent : dictée. */
+  endOfTurnSilenceMs?: number;
 }
 
 export interface SupervisorOptions extends SupervisorEvents {
@@ -98,6 +110,7 @@ export class VoiceWorkerSupervisor implements SpeechSynthesisPort {
   /** Chargement de la voix de synthèse : fréquence de l'audio rendu. */
   private ttsLoading: Pending<number> | undefined;
   private ttsLoaded: Promise<number> | undefined;
+  private ttsReady = false;
   /** Morceaux en cours de synthèse, par numéro de requête. */
   private readonly speeches = new Map<number, Pending<SynthesizedSpeech>>();
   private nextRequestId = 0;
@@ -115,6 +128,11 @@ export class VoiceWorkerSupervisor implements SpeechSynthesisPort {
   /** Session en cours, s'il y en a une. */
   get activeSessionId(): string | undefined {
     return this.sessionId;
+  }
+
+  /** Vrai quand la voix de synthèse est chargée dans le worker. */
+  get speechReady(): boolean {
+    return this.ttsReady;
   }
 
   /** Change le délai d'inactivité (Réglages › Voix) ; s'applique tout de suite. */
@@ -162,7 +180,7 @@ export class VoiceWorkerSupervisor implements SpeechSynthesisPort {
   }
 
   /** Ouvre une session de dictée ; `voice/busy` si une autre est en cours. */
-  async start(voiceSessionId: string, maxDurationMs?: number): Promise<void> {
+  async start(voiceSessionId: string, options: SessionStartOptions = {}): Promise<void> {
     if (this.sessionId !== undefined) {
       throw new AtelierError('voice/busy', 'Une dictée est déjà en cours.');
     }
@@ -180,7 +198,10 @@ export class VoiceWorkerSupervisor implements SpeechSynthesisPort {
     this.post({
       type: 'start',
       voiceSessionId,
-      ...(maxDurationMs !== undefined ? { maxDurationMs } : {}),
+      ...(options.maxDurationMs !== undefined ? { maxDurationMs: options.maxDurationMs } : {}),
+      ...(options.endOfTurnSilenceMs !== undefined
+        ? { endOfTurnSilenceMs: options.endOfTurnSilenceMs }
+        : {}),
     });
   }
 
@@ -319,6 +340,14 @@ export class VoiceWorkerSupervisor implements SpeechSynthesisPort {
         if (message.segment.voiceSessionId !== this.sessionId) return;
         this.options.onTranscript?.(message.segment);
         return;
+      case 'turn-end':
+        if (message.voiceSessionId !== this.sessionId || this.stopping !== undefined) return;
+        this.options.onTurnEnd?.(message.voiceSessionId);
+        return;
+      case 'speech-start':
+        if (message.voiceSessionId !== this.sessionId) return;
+        this.options.onSpeechStart?.(message.voiceSessionId);
+        return;
       case 'final':
         if (message.voiceSessionId !== this.sessionId) return;
         if (message.reason === 'max_duration' && this.stopping === undefined) {
@@ -333,6 +362,7 @@ export class VoiceWorkerSupervisor implements SpeechSynthesisPort {
           this.ttsLoading.resolve(message.sampleRate);
           this.ttsLoading = undefined;
         }
+        this.ttsReady = true;
         return;
       case 'speech':
         this.settleSpeech(message.requestId, {
@@ -435,6 +465,7 @@ export class VoiceWorkerSupervisor implements SpeechSynthesisPort {
       this.ttsLoading = undefined;
     }
     this.ttsLoaded = undefined;
+    this.ttsReady = false;
     for (const pending of this.speeches.values()) {
       clearTimeout(pending.timer);
       pending.reject(error);

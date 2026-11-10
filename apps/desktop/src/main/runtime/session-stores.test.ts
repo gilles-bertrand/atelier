@@ -145,7 +145,17 @@ describe('SqliteSessionStore', () => {
     expect(store.update('s1', { model: 'qwen3.5:9b' }).model).toBe('qwen3.5:9b');
     expect(store.get('s1')?.model).toBe('qwen3.5:9b');
     store.close();
-    expect(SCHEMA_VERSION).toBe(5);
+    expect(SCHEMA_VERSION).toBe(6);
+  });
+
+  it('persiste l’origine d’un message de l’utilisateur (dictée, conversation vocale)', async () => {
+    const store = await SqliteSessionStore.open(':memory:');
+    store.create(session('s', '2026-11-10T09:00:00.000Z'));
+    store.saveMessage({ ...message('m1', 's', 'Bonjour'), inputMode: 'voice' });
+    store.saveMessage({ ...message('m2', 's', 'Merci'), inputMode: 'dictation' });
+    store.saveMessage(message('m3', 's', 'Tapé'));
+    expect(store.messages('s').map((m) => m.inputMode)).toEqual(['voice', 'dictation', undefined]);
+    store.close();
   });
 
   it('refuse une base créée par une version plus récente', async () => {

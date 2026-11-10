@@ -25,6 +25,8 @@ interface SentTurn {
   input: string;
   turnId: string | undefined;
   history: readonly ModelMessage[];
+  voice?: boolean;
+  onToolWaitPhrase?: unknown;
 }
 
 /** Session agent factice (même contrat que l'AgentSession d'agent-core). */
@@ -43,10 +45,18 @@ class FakeAgentSession implements AgentSessionLike {
     input: string,
     emit: AgentEventSink,
     abortSignal?: AbortSignal,
-    options?: { turnId?: string },
+    options?: { turnId?: string; voice?: boolean; onToolWaitPhrase?: unknown },
   ): Promise<TurnResult> {
     const turnId = options?.turnId ?? 'x';
-    this.sent.push({ input, turnId: options?.turnId, history: this.history });
+    this.sent.push({
+      input,
+      turnId: options?.turnId,
+      history: this.history,
+      ...(options?.voice !== undefined ? { voice: options.voice } : {}),
+      ...(options?.onToolWaitPhrase !== undefined
+        ? { onToolWaitPhrase: options.onToolWaitPhrase }
+        : {}),
+    });
     const ev = { sessionId: this.options.sessionId, turnId };
     const withUser: ModelMessage[] = [...this.history, { role: 'user', content: input }];
     const mode = this.mode();
@@ -294,6 +304,30 @@ describe('ChatManager', () => {
     chats.send(session.id, 'Fais le classeur');
     await wait(session.id);
     expect(events.map((e) => e.type)).toEqual(['tool_start', 'tool_result', 'text_delta', 'done']);
+  });
+
+  it('tour vocal (L9) : inputMode persisté, consignes vocales et phrases d’attente transmises', async () => {
+    const { chats, sent, wait } = setup(() => 'ok');
+    const session = chats.create('/w');
+    const onToolWaitPhrase = vi.fn();
+    expect(chats.has(session.id)).toBe(true);
+    expect(chats.has('inconnue')).toBe(false);
+    chats.send(session.id, 'Quelle heure est-il ?', [], { inputMode: 'voice', onToolWaitPhrase });
+    const idle = chats.whenIdle(session.id);
+    await idle;
+    expect(chats.isRunning(session.id)).toBe(false);
+    chats.send(session.id, 'Relu avant envoi', [], { inputMode: 'dictation' });
+    await wait(session.id);
+    chats.send(session.id, 'Tapé');
+    await wait(session.id);
+    expect(sent.map((t) => [t.voice, t.onToolWaitPhrase])).toEqual([
+      [true, onToolWaitPhrase],
+      [undefined, undefined],
+      [undefined, undefined],
+    ]);
+    const users = chats.open(session.id).messages.filter((m) => m.role === 'user');
+    expect(users.map((m) => m.inputMode)).toEqual(['voice', 'dictation', undefined]);
+    await chats.whenIdle(session.id); // sans tour : résolue tout de suite
   });
 
   it('garde la session agent entre deux tours et la recrée quand le runtime change', async () => {

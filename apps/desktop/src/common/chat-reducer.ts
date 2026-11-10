@@ -13,6 +13,7 @@ import type {
   SerializedAtelierError,
   TodoItem,
   ToolCallPart,
+  VoiceInputMode,
   WebSearchResult,
 } from '@atelier/shared';
 
@@ -23,6 +24,8 @@ export function createUserMessage(options: {
   text: string;
   attachments?: readonly Attachment[];
   createdAt: string;
+  /** Message dicté ou parlé (icône dans le fil). Absent : tapé. */
+  inputMode?: VoiceInputMode;
 }): ChatMessage {
   const parts: MessagePart[] = [];
   if (options.text.trim().length > 0) parts.push({ type: 'text', text: options.text });
@@ -34,6 +37,7 @@ export function createUserMessage(options: {
     role: 'user',
     parts,
     createdAt: options.createdAt,
+    ...(options.inputMode !== undefined ? { inputMode: options.inputMode } : {}),
   };
 }
 
