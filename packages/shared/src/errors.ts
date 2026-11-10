@@ -26,6 +26,8 @@ export const ATELIER_ERROR_CODES = [
   // Sessions et réglages
   /** Session inconnue (supprimée, identifiant invalide). */
   'session/not_found',
+  /** Déplacement de conversation refusé (#21) : message français de `checkSessionMove`. */
+  'session/move_refused',
   /** Réglage refusé (valeur hors bornes, URL invalide…). */
   'settings/invalid',
   // Tâches planifiées

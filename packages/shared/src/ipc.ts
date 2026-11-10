@@ -117,6 +117,16 @@ export interface IpcInvokeContract {
    * Change le modèle de la conversation (pris en compte au tour suivant).
    * `null` : revenir au modèle par défaut des Réglages.
    */
+  /**
+   * Déplace une conversation par glisser-déposer (#21) : vers le projet
+   * `projectId`, ou hors projet (`null`), sans changer son dossier de travail.
+   * Refus en `session/move_refused` (motif de `checkSessionMove`), ou en
+   * `agent/busy` pendant un tour. Pris en compte au tour suivant.
+   */
+  'session:set-project': {
+    request: { sessionId: string; projectId: string | null };
+    response: SessionSummary;
+  };
   'session:set-model': {
     request: { sessionId: string; model: string | null };
     response: SessionSummary;
@@ -366,6 +376,7 @@ export const IPC_INVOKE_CHANNELS = [
   'session:open',
   'session:delete',
   'session:set-model',
+  'session:set-project',
   'agent:send',
   'agent:stop',
   'agent:retry',
