@@ -45,6 +45,12 @@ export interface ToolRuntime {
    * par étape) : appliquée au contenu vu par le modèle et par l'UI.
    */
   limitOutput?: (toolName: string, output: ToolOutput) => ToolOutput;
+  /**
+   * Exécution effective d'un outil, permission accordée (le temps d'attente de
+   * la modale n'en fait pas partie) : rappel au début, puis fonction de fin
+   * appelée quoi qu'il arrive. Sert aux phrases d'attente du mode vocal.
+   */
+  onExecution?: (toolCallId: string, toolName: string, input: unknown) => () => void;
 }
 
 /** Garde de type pour la sortie d'un outil Atelier. */
@@ -91,7 +97,12 @@ export async function executeTool(
     const decision = await askPermission(context, definition.name, input, description);
     if (!isAllowed(decision)) return deniedOutput(description.title);
   }
-  return limit(await definition.execute(input, context));
+  const finish = runtime.onExecution?.(toolCallId, definition.name, input);
+  try {
+    return limit(await definition.execute(input, context));
+  } finally {
+    finish?.();
+  }
 }
 
 /**

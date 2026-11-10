@@ -49,6 +49,13 @@ import { sourceText, unverifiedAmounts, verificationPrompt } from './numbers.js'
 import { createToolCallRepair } from './repair.js';
 import { skillAutoloadMessages } from './skill-autoload.js';
 import { TurnUsageMeter } from './usage.js';
+import {
+  THINKING_OFF_PROVIDER_OPTIONS,
+  ToolWaitAnnouncer,
+  voiceTurnMessages,
+  type ToolWaitPhrase,
+  type VoiceTimers,
+} from './voice.js';
 
 /** Nombre maximal d'étapes par tour (brief §1). */
 export const MAX_STEPS = 50;
@@ -104,18 +111,36 @@ export interface AgentOptions {
   now?: () => Date;
   /** Horloge monotone en ms pour mesurer la génération (défaut `performance.now`, tests). */
   clock?: () => number;
+  /** Minuterie des phrases d'attente du mode vocal (défaut : horloge réelle, tests). */
+  voiceTimers?: VoiceTimers;
   /** Journal de diagnostic (réparations, compaction…). */
   log?: (message: string, data?: Record<string, unknown>) => void;
 }
 
-/** Paramètres d'un tour. */
+/** Mode vocal d'un tour (ADR-004, D7) : commun à {@link SendOptions} et {@link RunTurnOptions}. */
+export interface VoiceTurnOptions {
+  /**
+   * Tour vocal : message de l'utilisateur avec `inputMode: 'voice'` (pas la
+   * dictée, relue avant l'envoi). Ajoute les consignes du mode vocal au tour et
+   * coupe le thinking, quels que soient les réglages.
+   */
+  voice?: boolean;
+  /**
+   * Phrase d'attente à prononcer pendant un outil long (tour vocal seulement) :
+   * plus de 1,5 s d'exécution, au plus une toutes les 5 s. Événement local à
+   * agent-core, pas un `AgentEvent` : le main l'envoie à la synthèse (L9).
+   */
+  onToolWaitPhrase?: (phrase: ToolWaitPhrase) => void;
+}
+
 /** Options de {@link AgentSession.send}. */
-export interface SendOptions {
+export interface SendOptions extends VoiceTurnOptions {
   /** Identifiant du tour (défaut : `<sessionId>-<n>`). */
   turnId?: string;
 }
 
-export interface RunTurnOptions {
+/** Paramètres d'un tour. */
+export interface RunTurnOptions extends VoiceTurnOptions {
   sessionId: string;
   turnId: string;
   /** Historique modèle avant ce tour (sans raisonnement). */
@@ -237,11 +262,28 @@ export class Agent {
       onLoad: (info) => o.log?.('skill-autoload', info),
       onError: (info) => o.log?.('skill-autoload:error', info),
     });
+    const voice = turn.voice === true;
     let base: ModelMessage[] = [
       ...stripReasoning(turn.history),
       { role: 'user', content: turn.input },
       ...skillMessages,
+      // Consignes du tour vocal (ou fin du mode vocal), hors du prompt système en cache.
+      ...voiceTurnMessages(turn.history, voice),
     ];
+    // Phrases d'attente des outils longs : tour vocal seulement.
+    const onPhrase = turn.onToolWaitPhrase;
+    const announcer =
+      voice && onPhrase
+        ? new ToolWaitAnnouncer({
+            onPhrase,
+            ...(o.voiceTimers ? { timers: o.voiceTimers } : {}),
+            onError: (error) => {
+              o.log?.('voice:wait-phrase:error', {
+                message: error instanceof Error ? error.message : String(error),
+              });
+            },
+          })
+        : undefined;
     let responseOffset = 0;
     const meter = new TurnUsageMeter(o.contextWindow, o.clock ?? (() => performance.now()));
     const sources = new Map<string, WebSearchResult>();
@@ -311,6 +353,16 @@ export class Agent {
             o.log?.('tool-output:truncated', { toolName, stepLimit: budget.stepLimit });
             return { ...output, content: fitted.content };
           },
+          ...(announcer
+            ? {
+                onExecution: (toolCallId: string, toolName: string, input: unknown) => {
+                  announcer.start(toolCallId, toolName, input);
+                  return () => {
+                    announcer.end(toolCallId);
+                  };
+                },
+              }
+            : {}),
         };
         const tools: ToolSet = toAiSdkTools(o.registry, runtime);
         const lazy = o.lazyTools
@@ -341,7 +393,10 @@ export class Agent {
         let messages: ModelMessage[] = base;
         for (;;) {
           const result = streamText({
-            model: o.model,
+            // Tour vocal : thinking coupé (modèle rapide et options du fournisseur),
+            // pour tenir le premier token dans le budget de latence de D7.
+            model: voice ? (o.fastModel ?? o.model) : o.model,
+            ...(voice ? { providerOptions: THINKING_OFF_PROVIDER_OPTIONS } : {}),
             instructions: this.systemPrompt(sandbox, project),
             messages: base,
             tools,
@@ -617,6 +672,7 @@ export class Agent {
           error: serialized,
         };
       } finally {
+        announcer?.dispose();
         turn.abortSignal?.removeEventListener('abort', onAbort);
       }
     });
@@ -860,6 +916,8 @@ export class AgentSession {
       emit,
       ...(abortSignal ? { abortSignal } : {}),
       ...(this.#lastInputTokens !== undefined ? { lastInputTokens: this.#lastInputTokens } : {}),
+      ...(options.voice === true ? { voice: true } : {}),
+      ...(options.onToolWaitPhrase ? { onToolWaitPhrase: options.onToolWaitPhrase } : {}),
     });
     this.#history = result.messages;
     if (result.usage) this.#lastInputTokens = result.usage.inputTokens;
