@@ -103,7 +103,8 @@ function detail(error: Pick<SerializedAtelierError, 'details'>, key: string): st
  * que lorsqu'il est rédigé en français pour l'utilisateur :
  * - `llm/bad_response` à cause connue sans message dédié ici (agent-core) ;
  * - `schedule/invalid` : message de `validateSchedule` (« au moins 15 minutes »…) ;
- * - `project/invalid` : message de `validateProjectInput` ou du main (dossier refusé…).
+ * - `project/invalid` : message de `validateProjectInput` ou du main (dossier refusé…) ;
+ * - `session/move_refused` : motif de `checkSessionMove` (#21).
  */
 export function errorMessage(
   error: Pick<SerializedAtelierError, 'code' | 'details'> & { message?: string },
@@ -116,7 +117,11 @@ export function errorMessage(
     const message = error.message?.trim();
     return message ? message : BAD_RESPONSE_WITH_REASON;
   }
-  if (error.code === 'schedule/invalid' || error.code === 'project/invalid') {
+  if (
+    error.code === 'schedule/invalid' ||
+    error.code === 'project/invalid' ||
+    error.code === 'session/move_refused'
+  ) {
     const message = error.message?.trim();
     if (message) return message;
   }

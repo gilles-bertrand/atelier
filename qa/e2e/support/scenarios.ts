@@ -330,6 +330,23 @@ export const voiceScenario: MockScenario = {
   steps: [{ text: VOICE_REPLY }],
 };
 
+/**
+ * Déplacement d'une conversation (#21) : une conversation du dossier, puis une
+ * autre avant et après son entrée dans le projet créé depuis ce dossier.
+ */
+export const MOVE_PROMPTS = {
+  first: 'Fais l’inventaire du dossier',
+  before: 'Prépare les relances clients',
+  after: 'Rappelle-moi le contexte du projet',
+} as const;
+
+/** Un scénario par demande : `RecordedRequest.scenario` dit de quel tour vient la requête. */
+export const moveScenarios: MockScenario[] = Object.entries(MOVE_PROMPTS).map(([key, prompt]) => ({
+  name: `déplacement : ${key}`,
+  match: (t) => t === prompt,
+  steps: [{ text: 'C’est noté.' }],
+}));
+
 export const ALL_SCENARIOS: MockScenario[] = [
   excelScenario,
   nodeScenario,
@@ -342,4 +359,5 @@ export const ALL_SCENARIOS: MockScenario[] = [
   projectFollowupScenario,
   projectTaskScenario,
   voiceScenario,
+  ...moveScenarios,
 ];

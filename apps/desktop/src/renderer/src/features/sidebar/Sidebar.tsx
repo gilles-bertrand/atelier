@@ -1,9 +1,10 @@
 /**
  * Colonne de gauche : nouvelle conversation, recherche par titre, conversations
  * récentes, projets (ADR-003) et dossiers dépliables, puis en pied les tâches
- * planifiées, l'environnement et les réglages.
+ * planifiées, l'environnement et les réglages. Une conversation se glisse sur
+ * un projet ou sur « Dossiers » pour changer de projet (#21).
  */
-import { useId, useMemo, useState, type RefObject } from 'react';
+import { useId, useMemo, useState, type ReactNode, type RefObject } from 'react';
 import {
   Archive,
   ChevronRight,
@@ -29,6 +30,14 @@ import { ActionMenu } from './ActionMenu';
 import type { SessionActivity } from './activity';
 import { ConversationList } from './ConversationList';
 import { EnvironmentStatus } from './EnvironmentStatus';
+import {
+  dropTarget,
+  RefusalTooltip,
+  targetKey,
+  type DropTargetProps,
+  type MoveTarget,
+  type SessionMoveState,
+} from './session-move';
 
 /** Conversations affichées dans « Récentes ». */
 export const RECENT_COUNT = 5;
@@ -73,6 +82,44 @@ function SectionTitle({ id, children }: { id: string; children: string }) {
   );
 }
 
+/** Cible de dépôt vue par la colonne : gestionnaires, mise en évidence, motif d'un refus. */
+interface DropView {
+  props: DropTargetProps & { 'aria-describedby'?: string };
+  /** Dépôt permis sous le pointeur : la cible est mise en évidence. */
+  allowed: boolean;
+  /** Infobulle du motif d'un refus (`null` sinon). */
+  tooltip: ReactNode;
+}
+
+/**
+ * Section « Dossiers » : déposer une conversation de projet ici la sort de son
+ * projet (#21), sans changer son dossier.
+ */
+function FoldersSection({
+  target,
+  labelledBy,
+  children,
+}: {
+  target: DropView;
+  labelledBy: string;
+  children: ReactNode;
+}) {
+  return (
+    <section
+      aria-labelledby={labelledBy}
+      data-drop-target={target.allowed ? 'allowed' : undefined}
+      {...target.props}
+      className={cn(
+        'relative -mx-1 space-y-1.5 rounded-md px-1 py-0.5',
+        target.allowed ? 'bg-brand-soft/60 ring-2 ring-inset ring-brand' : undefined,
+      )}
+    >
+      {children}
+      {target.tooltip}
+    </section>
+  );
+}
+
 export function Sidebar({
   sessions,
   current,
@@ -98,6 +145,7 @@ export function Sidebar({
   onArchiveProject,
   onRevealProject,
   onProjectFromFolder,
+  onMoveSession,
 }: {
   /** `undefined` pendant le chargement. */
   sessions: readonly SessionSummary[] | undefined;
@@ -130,6 +178,11 @@ export function Sidebar({
   onRevealProject?: (project: ProjectSummary) => void;
   /** « Créer un projet à partir de ce dossier ». */
   onProjectFromFolder?: (workspace: string) => void;
+  /**
+   * Déplace une conversation vers un projet ou hors projet (`null`, #21) ;
+   * `true` si c'est fait. Absent : ni glisser-déposer ni « Déplacer vers le projet… ».
+   */
+  onMoveSession?: (session: SessionSummary, projectId: string | null) => Promise<boolean>;
 }) {
   const { state } = useApp();
   const [query, setQuery] = useState('');
@@ -139,6 +192,10 @@ export function Sidebar({
   const projectsId = useId();
   const foldersId = useId();
   const resultsId = useId();
+  const refusalId = useId();
+  // Glisser-déposer d'une conversation (#21) : conversation glissée, cible survolée.
+  const [dragging, setDragging] = useState<SessionSummary | undefined>();
+  const [hover, setHover] = useState<string | undefined>();
   const currentId =
     settingsActive || scheduleActive || projectActiveId !== undefined ? undefined : current?.id;
 
@@ -161,6 +218,46 @@ export function Sidebar({
 
   const toggleFolder = (workspace: string): void => {
     setUnfolded((map) => new Map(map).set(workspace, !isUnfolded(workspace)));
+  };
+
+  const moveState: SessionMoveState | undefined =
+    onMoveSession && projects
+      ? {
+          projects,
+          dragging,
+          hover,
+          startDrag: (session) => {
+            setDragging(session);
+            setHover(undefined);
+          },
+          setHover,
+          endDrag: () => {
+            setDragging(undefined);
+            setHover(undefined);
+          },
+          move: (session, target) => {
+            void onMoveSession(session, target?.id ?? null).then((moved) => {
+              // La conversation reste visible à sa nouvelle place.
+              if (moved) {
+                setUnfolded((map) =>
+                  new Map(map).set(target ? projectKey(target.id) : session.workspace, true),
+                );
+              }
+            });
+          },
+        }
+      : undefined;
+
+  /** Cible de dépôt : props, mise en évidence si permis, motif en infobulle sinon. */
+  const drop = (target: MoveTarget): DropView => {
+    const { verdict, props } = dropTarget(moveState, target);
+    const reason = verdict.kind === 'refused' ? verdict.reason : undefined;
+    const tooltipId = `${refusalId}-${targetKey(target)}`;
+    return {
+      props: { ...props, ...(reason ? { 'aria-describedby': tooltipId } : {}) },
+      allowed: verdict.kind === 'allowed',
+      tooltip: reason ? <RefusalTooltip id={tooltipId} reason={reason} /> : null,
+    };
   };
 
   return (
@@ -235,6 +332,7 @@ export function Sidebar({
                 onOpen={onOpen}
                 onDelete={onDelete}
                 activity={activity}
+                move={moveState}
                 showFolder
               />
             ) : (
@@ -255,6 +353,7 @@ export function Sidebar({
                   onOpen={onOpen}
                   onDelete={onDelete}
                   activity={activity}
+                  move={moveState}
                   showFolder
                 />
               ) : (
@@ -290,12 +389,18 @@ export function Sidebar({
                       const open = isProjectUnfolded(project.id);
                       const active = projectActiveId === project.id;
                       const conversations = sessions.filter((s) => s.projectId === project.id);
+                      const target = drop(project);
                       return (
-                        <li key={project.id}>
+                        <li
+                          key={project.id}
+                          data-drop-target={target.allowed ? 'allowed' : undefined}
+                          {...target.props}
+                        >
                           <div
                             className={cn(
-                              'group flex items-center gap-1 rounded-md pr-1',
-                              active ? 'bg-brand-soft' : 'hover:bg-accent/60',
+                              'group relative flex items-center gap-1 rounded-md pr-1',
+                              active || target.allowed ? 'bg-brand-soft' : 'hover:bg-accent/60',
+                              target.allowed ? 'ring-2 ring-inset ring-brand' : undefined,
                             )}
                           >
                             <button
@@ -381,6 +486,7 @@ export function Sidebar({
                                   : []),
                               ]}
                             />
+                            {target.tooltip}
                           </div>
                           {open ? (
                             <div className="ml-4 border-l pl-1.5">
@@ -392,6 +498,7 @@ export function Sidebar({
                                   onOpen={onOpen}
                                   onDelete={onDelete}
                                   activity={activity}
+                                  move={moveState}
                                 />
                               ) : (
                                 <p className="px-2 py-1 text-xs text-muted-foreground">
@@ -408,7 +515,7 @@ export function Sidebar({
               </section>
             ) : null}
 
-            <section aria-labelledby={foldersId} className="space-y-1.5">
+            <FoldersSection target={drop(null)} labelledBy={foldersId}>
               <div className="flex items-center justify-between pr-1">
                 <SectionTitle id={foldersId}>Dossiers</SectionTitle>
                 <button
@@ -493,6 +600,7 @@ export function Sidebar({
                               onOpen={onOpen}
                               onDelete={onDelete}
                               activity={activity}
+                              move={moveState}
                             />
                           </div>
                         ) : null}
@@ -501,7 +609,7 @@ export function Sidebar({
                   })}
                 </ul>
               )}
-            </section>
+            </FoldersSection>
           </>
         )}
       </div>

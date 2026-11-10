@@ -10,7 +10,7 @@ import { importAttachments } from '@atelier/documents';
 import { parseMcpConfigText, type McpManager } from '@atelier/mcp-bridge';
 import { testConnection, type FetchFunction } from '@atelier/agent-core';
 import { loadSkills } from '@atelier/skills';
-import { AtelierError, type AppHealth, type SecretId } from '@atelier/shared';
+import { AtelierError, checkSessionMove, type AppHealth, type SecretId } from '@atelier/shared';
 import type { IpcCallContext, IpcHandlers } from './ipc.js';
 import type { ModelCatalog } from './llm/model-catalog.js';
 import type { ServerMonitor } from './llm/server-monitor.js';
@@ -204,6 +204,7 @@ export function createHandlers(s: HandlerServices): IpcHandlers {
 
     // --- Projets et artefacts (ADR-003)
     ...(s.projects ? projectHandlers(s.projects) : {}),
+    ...(s.projects ? sessionMoveHandlers(s.chats, s.projects) : {}),
     ...(s.voice ? voiceHandlers(s.voice) : {}),
 
     // --- Agent
@@ -334,6 +335,39 @@ function projectHandlers(projects: ProjectService): IpcHandlers {
     'artifact:delete': ({ id }) => {
       projects.deleteArtifact(id);
       return undefined;
+    },
+  };
+}
+
+/**
+ * Déplacement d'une conversation par glisser-déposer (#21) : vers un projet,
+ * d'un projet à l'autre, ou hors projet (`projectId: null`). Son dossier de
+ * travail ne change jamais (`checkSessionMove`) ; le projet s'applique au tour
+ * suivant. Refus : `session/move_refused` avec le motif, `agent/busy` pendant
+ * un tour.
+ */
+function sessionMoveHandlers(
+  chats: Pick<ChatManager, 'get' | 'setProject'>,
+  projects: Pick<ProjectService, 'get' | 'notifyChanged'>,
+): IpcHandlers {
+  return {
+    'session:set-project': ({ sessionId, projectId }) => {
+      const session = chats.get(sessionId);
+      const target = projectId === null ? undefined : projects.get(projectId);
+      const refusal = checkSessionMove(session, target);
+      if (refusal !== undefined) {
+        throw new AtelierError('session/move_refused', refusal, {
+          details: { sessionId, projectId },
+        });
+      }
+      // Déjà à sa place : rien à changer ni à signaler.
+      if ((session.projectId ?? null) === projectId) return session;
+      const moved = chats.setProject(sessionId, projectId);
+      // Compteurs et listes des deux projets (colonne de gauche, page du projet).
+      for (const id of [session.projectId, projectId]) {
+        if (id !== undefined && id !== null) projects.notifyChanged(id);
+      }
+      return moved;
     },
   };
 }

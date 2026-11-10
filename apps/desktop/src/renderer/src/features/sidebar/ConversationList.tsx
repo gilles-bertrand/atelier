@@ -1,17 +1,19 @@
 /**
  * Liste de conversations de la colonne de gauche : un clic ouvre la
- * conversation, le menu « … » propose Supprimer (avec confirmation). Une pastille
- * signale l'activité : jade qui pulse quand l'assistant travaille, ambre quand il
- * attend votre accord.
+ * conversation, le menu « … » propose Déplacer vers le projet… et Supprimer
+ * (avec confirmation). Une ligne se glisse sur un projet ou sur « Dossiers »
+ * (#21, voir `session-move.tsx`). Une pastille signale l'activité : jade qui
+ * pulse quand l'assistant travaille, ambre quand il attend votre accord.
  */
-import { useState } from 'react';
-import { Trash2 } from 'lucide-react';
+import { useState, type KeyboardEvent } from 'react';
+import { Folder, FolderInput, FolderKanban, Trash2 } from 'lucide-react';
 import type { SessionSummary } from '@atelier/shared';
 import { Button } from '@renderer/components/ui/button';
 import { fileName, relativeTime } from '@renderer/lib/tool-labels';
 import { cn } from '@renderer/lib/utils';
 import { ActionMenu } from './ActionMenu';
 import { ACTIVITY_LABELS, type SessionActivity } from './activity';
+import { canMove, compatibleProjects, dragSource, type SessionMoveState } from './session-move';
 
 function ActivityDot({ activity }: { activity: SessionActivity }) {
   return (
@@ -34,6 +36,92 @@ function ActivityDot({ activity }: { activity: SessionActivity }) {
   );
 }
 
+/**
+ * « Déplacer vers le projet… » : projets où la conversation peut entrer, et
+ * « Hors projet » si elle est dans un projet. Même règle que le glisser-déposer.
+ */
+function MovePanel({
+  session,
+  move,
+  onClose,
+}: {
+  session: SessionSummary;
+  move: SessionMoveState;
+  onClose: () => void;
+}) {
+  const targets = compatibleProjects(session, move.projects);
+  const canLeave = session.projectId !== undefined;
+  const onKeyDown = (event: KeyboardEvent<HTMLLIElement>): void => {
+    if (event.key !== 'Escape') return;
+    event.preventDefault();
+    event.stopPropagation();
+    onClose();
+  };
+  const option =
+    'flex w-full items-center gap-2 rounded-sm px-2 py-1 text-left text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none';
+  return (
+    <li
+      className="space-y-1.5 rounded-md border bg-background px-2 py-2"
+      onKeyDown={onKeyDown}
+      aria-label={`Déplacer « ${session.title} »`}
+    >
+      <p className="text-xs">
+        Déplacer « <span className="font-medium">{session.title}</span> » vers :
+      </p>
+      {targets.length > 0 || canLeave ? (
+        <ul aria-label="Destinations" className="space-y-0.5">
+          {targets.map((project, index) => (
+            <li key={project.id}>
+              <button
+                type="button"
+                className={option}
+                autoFocus={index === 0}
+                onClick={() => {
+                  onClose();
+                  move.move(session, project);
+                }}
+              >
+                <FolderKanban className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                <span className="truncate">{project.name}</span>
+              </button>
+            </li>
+          ))}
+          {canLeave ? (
+            <li>
+              <button
+                type="button"
+                className={option}
+                autoFocus={targets.length === 0}
+                onClick={() => {
+                  onClose();
+                  move.move(session, null);
+                }}
+              >
+                <Folder className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                Hors projet
+              </button>
+            </li>
+          ) : null}
+        </ul>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          Aucun projet ne travaille dans le dossier « {fileName(session.workspace)} ». Pour y ranger
+          cette conversation, créez un projet à partir de ce dossier.
+        </p>
+      )}
+      <Button
+        size="sm"
+        variant="ghost"
+        className="h-7"
+        autoFocus={targets.length === 0 && !canLeave}
+        onClick={onClose}
+      >
+        Annuler
+      </Button>
+    </li>
+  );
+}
+
 export function ConversationList({
   sessions,
   currentId,
@@ -42,6 +130,7 @@ export function ConversationList({
   showFolder = false,
   label,
   activity,
+  move,
 }: {
   sessions: readonly SessionSummary[];
   currentId: string | undefined;
@@ -53,9 +142,15 @@ export function ConversationList({
   label: string;
   /** Conversations où l'assistant travaille ou attend un accord. */
   activity?: ReadonlyMap<string, SessionActivity>;
+  /**
+   * Déplacement entre projets (#21) : lignes glissables et « Déplacer vers le
+   * projet… ». Absent : ni l'un ni l'autre.
+   */
+  move?: SessionMoveState | undefined;
 }) {
   const [confirming, setConfirming] = useState<string | undefined>();
   const [deleting, setDeleting] = useState(false);
+  const [moving, setMoving] = useState<string | undefined>();
 
   const confirmDelete = async (session: SessionSummary): Promise<void> => {
     setDeleting(true);
@@ -106,13 +201,29 @@ export function ConversationList({
             </li>
           );
         }
+        if (moving === session.id && move) {
+          return (
+            <MovePanel
+              key={session.id}
+              session={session}
+              move={move}
+              onClose={() => {
+                setMoving(undefined);
+              }}
+            />
+          );
+        }
         const busy = activity?.get(session.id);
+        const drag = dragSource(move, session);
         return (
           <li
             key={session.id}
+            draggable={drag.draggable || undefined}
+            {...drag.props}
             className={cn(
               'group flex items-center gap-1 rounded-md pr-1',
               current ? 'bg-brand-soft' : 'hover:bg-accent/60',
+              drag.dragging ? 'opacity-50' : undefined,
             )}
           >
             <button
@@ -140,6 +251,17 @@ export function ConversationList({
               label={`Actions pour « ${session.title} »`}
               className="opacity-0 focus-within:opacity-100 group-hover:opacity-100 has-[[aria-expanded=true]]:opacity-100"
               items={[
+                ...(move && canMove(session)
+                  ? [
+                      {
+                        label: 'Déplacer vers le projet…',
+                        icon: FolderInput,
+                        onSelect: () => {
+                          setMoving(session.id);
+                        },
+                      },
+                    ]
+                  : []),
                 {
                   label: 'Supprimer',
                   icon: Trash2,
