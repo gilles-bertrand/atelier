@@ -5,7 +5,7 @@
  * (#21, voir `session-move.tsx`). Une pastille signale l'activité : jade qui
  * pulse quand l'assistant travaille, ambre quand il attend votre accord.
  */
-import { useState, type KeyboardEvent } from 'react';
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { Folder, FolderInput, FolderKanban, Trash2 } from 'lucide-react';
 import type { SessionSummary } from '@atelier/shared';
 import { Button } from '@renderer/components/ui/button';
@@ -49,6 +49,7 @@ function MovePanel({
   move: SessionMoveState;
   onClose: () => void;
 }) {
+  const titleId = useId();
   const targets = compatibleProjects(session, move.projects);
   const canLeave = session.projectId !== undefined;
   const onKeyDown = (event: KeyboardEvent<HTMLLIElement>): void => {
@@ -60,64 +61,62 @@ function MovePanel({
   const option =
     'flex w-full items-center gap-2 rounded-sm px-2 py-1 text-left text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none';
   return (
-    <li
-      className="space-y-1.5 rounded-md border bg-background px-2 py-2"
-      onKeyDown={onKeyDown}
-      aria-label={`Déplacer « ${session.title} »`}
-    >
-      <p className="text-xs">
-        Déplacer « <span className="font-medium">{session.title}</span> » vers :
-      </p>
-      {targets.length > 0 || canLeave ? (
-        <ul aria-label="Destinations" className="space-y-0.5">
-          {targets.map((project, index) => (
-            <li key={project.id}>
-              <button
-                type="button"
-                className={option}
-                autoFocus={index === 0}
-                onClick={() => {
-                  onClose();
-                  move.move(session, project);
-                }}
-              >
-                <FolderKanban className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-                <span className="truncate">{project.name}</span>
-              </button>
-            </li>
-          ))}
-          {canLeave ? (
-            <li>
-              <button
-                type="button"
-                className={option}
-                autoFocus={targets.length === 0}
-                onClick={() => {
-                  onClose();
-                  move.move(session, null);
-                }}
-              >
-                <Folder className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-                Hors projet
-              </button>
-            </li>
-          ) : null}
-        </ul>
-      ) : (
-        <p className="text-xs text-muted-foreground">
-          Aucun projet ne travaille dans le dossier « {fileName(session.workspace)} ». Pour y ranger
-          cette conversation, créez un projet à partir de ce dossier.
+    <li className="rounded-md border bg-background px-2 py-2" onKeyDown={onKeyDown}>
+      <div role="group" aria-labelledby={titleId} className="space-y-1.5">
+        <p id={titleId} className="text-xs">
+          Déplacer « <span className="font-medium">{session.title}</span> » vers :
         </p>
-      )}
-      <Button
-        size="sm"
-        variant="ghost"
-        className="h-7"
-        autoFocus={targets.length === 0 && !canLeave}
-        onClick={onClose}
-      >
-        Annuler
-      </Button>
+        {targets.length > 0 || canLeave ? (
+          <ul aria-label="Destinations" className="space-y-0.5">
+            {targets.map((project, index) => (
+              <li key={project.id}>
+                <button
+                  type="button"
+                  className={option}
+                  autoFocus={index === 0}
+                  onClick={() => {
+                    onClose();
+                    move.move(session, project);
+                  }}
+                >
+                  <FolderKanban className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                  <span className="truncate">{project.name}</span>
+                </button>
+              </li>
+            ))}
+            {canLeave ? (
+              <li>
+                <button
+                  type="button"
+                  className={option}
+                  autoFocus={targets.length === 0}
+                  onClick={() => {
+                    onClose();
+                    move.move(session, null);
+                  }}
+                >
+                  <Folder className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                  Hors projet
+                </button>
+              </li>
+            ) : null}
+          </ul>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            Aucun projet ne travaille dans le dossier « {fileName(session.workspace)} ». Pour y
+            ranger cette conversation, créez un projet à partir de ce dossier.
+          </p>
+        )}
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-7"
+          autoFocus={targets.length === 0 && !canLeave}
+          onClick={onClose}
+        >
+          Annuler
+        </Button>
+      </div>
     </li>
   );
 }
@@ -151,6 +150,19 @@ export function ConversationList({
   const [confirming, setConfirming] = useState<string | undefined>();
   const [deleting, setDeleting] = useState(false);
   const [moving, setMoving] = useState<string | undefined>();
+  const listRef = useRef<HTMLUListElement>(null);
+  // Panneau en ligne refermé (déplacement, suppression annulée) : le focus revient
+  // au bouton « … » de sa ligne, comme à la fermeture d'ActionMenu.
+  const focusActionsOf = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const id = focusActionsOf.current;
+    if (id === undefined) return;
+    focusActionsOf.current = undefined;
+    const row = Array.from(
+      listRef.current?.querySelectorAll<HTMLElement>('[data-session-id]') ?? [],
+    ).find((el) => el.dataset['sessionId'] === id);
+    row?.querySelector<HTMLElement>('[aria-haspopup="menu"]')?.focus();
+  });
 
   const confirmDelete = async (session: SessionSummary): Promise<void> => {
     setDeleting(true);
@@ -163,7 +175,7 @@ export function ConversationList({
   };
 
   return (
-    <ul aria-label={label} className="space-y-0.5">
+    <ul ref={listRef} aria-label={label} className="space-y-0.5">
       {sessions.map((session) => {
         const current = session.id === currentId;
         if (confirming === session.id) {
@@ -192,6 +204,7 @@ export function ConversationList({
                   className="h-7"
                   autoFocus
                   onClick={() => {
+                    focusActionsOf.current = session.id;
                     setConfirming(undefined);
                   }}
                 >
@@ -208,6 +221,7 @@ export function ConversationList({
               session={session}
               move={move}
               onClose={() => {
+                focusActionsOf.current = session.id;
                 setMoving(undefined);
               }}
             />
@@ -218,6 +232,7 @@ export function ConversationList({
         return (
           <li
             key={session.id}
+            data-session-id={session.id}
             draggable={drag.draggable || undefined}
             {...drag.props}
             className={cn(

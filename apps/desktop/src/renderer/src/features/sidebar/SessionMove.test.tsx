@@ -4,7 +4,7 @@
  * un projet ou sur « Dossiers », refus avec motif, menu « Déplacer vers le
  * projet… » au clavier.
  */
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { ProjectSummary, SessionSummary } from '@atelier/shared';
@@ -173,6 +173,23 @@ describe('glisser-déposer une conversation (#21)', () => {
     expect(api.callsTo('session:set-project')).toEqual([]);
   });
 
+  it('d’une cible à l’autre : dragenter(B) avant dragleave(A) laisse B en évidence', async () => {
+    await start();
+    const dt = dataTransfer();
+    fireEvent.dragStart(recentRow('Notes ventes'), { dataTransfer: dt });
+    const refused = projectRow('Compta 2026');
+    const allowed = projectRow('Ventes 2026');
+    fireEvent.dragOver(refused, { dataTransfer: dt });
+    expect(screen.getByRole('tooltip')).toBeInTheDocument();
+    // Ordre de Chromium, dans un même rendu : la closure de A lit encore « A survolé ».
+    act(() => {
+      fireEvent.dragEnter(allowed, { dataTransfer: dt });
+      fireEvent.dragLeave(refused, { dataTransfer: dt, relatedTarget: allowed });
+    });
+    expect(allowed).toHaveAttribute('data-drop-target', 'allowed');
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+  });
+
   it('sur « Dossiers » : sort la conversation de son projet ; sans effet hors projet', async () => {
     await start();
     const folders = screen.getByRole('region', { name: 'Dossiers' });
@@ -228,7 +245,7 @@ describe('menu « Déplacer vers le projet… » (#21)', () => {
     const recent = screen.getByRole('list', { name: 'Conversations récentes' });
     await user.click(within(recent).getByRole('button', { name: `Actions pour « ${title} »` }));
     await user.click(screen.getByRole('menuitem', { name: 'Déplacer vers le projet…' }));
-    return screen.getByRole('listitem', { name: `Déplacer « ${title} »` });
+    return screen.getByRole('group', { name: `Déplacer « ${title} » vers :` });
   }
 
   it('propose les projets compatibles ; Entrée déplace la conversation ouverte', async () => {
@@ -261,6 +278,12 @@ describe('menu « Déplacer vers le projet… » (#21)', () => {
     await user.keyboard('{Escape}');
     expect(panel).not.toBeInTheDocument();
     expect(api.callsTo('session:set-project')).toEqual([]);
+    // Le focus revient au bouton « … » de la ligne, comme à la fermeture du menu.
+    expect(
+      within(screen.getByRole('list', { name: 'Conversations récentes' })).getByRole('button', {
+        name: 'Actions pour « Analyse compta »',
+      }),
+    ).toHaveFocus();
 
     panel = await openMove(user, 'Analyse compta');
     const leave = within(panel).getByRole('button', { name: 'Hors projet' });
@@ -307,6 +330,7 @@ describe('règle côté renderer (sans IPC)', () => {
       hover: undefined,
       startDrag: () => undefined,
       setHover: () => undefined,
+      clearHover: () => undefined,
       endDrag: () => undefined,
       move: () => undefined,
     };

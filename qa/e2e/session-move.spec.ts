@@ -127,7 +127,7 @@ test('une conversation du dossier entre dans le projet créé depuis ce dossier'
     .click();
   await page.getByRole('menuitem', { name: 'Déplacer vers le projet…' }).click();
   await nav
-    .getByRole('listitem', { name: `Déplacer « ${MOVE_PROMPTS.before} »` })
+    .getByRole('group', { name: `Déplacer « ${MOVE_PROMPTS.before} » vers :` })
     .getByRole('button', { name: 'Hors projet' })
     .click();
   await expect(inFolder.getByText(MOVE_PROMPTS.before)).toBeVisible();

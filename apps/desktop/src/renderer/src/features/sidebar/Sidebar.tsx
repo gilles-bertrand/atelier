@@ -231,6 +231,10 @@ export function Sidebar({
             setHover(undefined);
           },
           setHover,
+          // Fonctionnel : la closure de A peut dater d'avant le `dragenter` de B.
+          clearHover: (key) => {
+            setHover((current) => (current === key ? undefined : current));
+          },
           endDrag: () => {
             setDragging(undefined);
             setHover(undefined);

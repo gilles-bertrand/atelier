@@ -57,7 +57,13 @@ export interface SessionMoveState {
   /** Cible survolée ({@link targetKey}). */
   hover: string | undefined;
   startDrag: (session: SessionSummary) => void;
-  setHover: (key: string | undefined) => void;
+  /** Le pointeur entre dans la cible `key`. */
+  setHover: (key: string) => void;
+  /**
+   * Le pointeur quitte la cible `key` : sans effet si une autre cible a déjà
+   * pris le survol (Chromium envoie `dragenter` sur B avant `dragleave` sur A).
+   */
+  clearHover: (key: string) => void;
   /** Fin du glissement (dépôt, Échap, lâcher ailleurs). */
   endDrag: () => void;
   /** Appelle `session:set-project` ; l'appelant affiche le motif d'un refus. */
@@ -132,7 +138,7 @@ export function dropTarget(
         // Passage sur un élément de la cible : on la survole toujours.
         const next = event.relatedTarget;
         if (next instanceof Node && event.currentTarget.contains(next)) return;
-        if (ctx.hover === key) ctx.setHover(undefined);
+        ctx.clearHover(key);
       },
       onDrop: (event) => {
         event.preventDefault();
