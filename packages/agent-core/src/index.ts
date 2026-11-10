@@ -44,7 +44,9 @@ export {
   VOICE_MODE_INSTRUCTIONS,
   voiceEndMessage,
   voiceInstructionsMessage,
+  VOICE_RETRY_REMINDER,
   voiceTurnMessages,
+  withVoiceReminder,
 } from './loop/voice.js';
 export type { ToolWaitAnnouncerOptions, ToolWaitPhrase, VoiceTimers } from './loop/voice.js';
 export {

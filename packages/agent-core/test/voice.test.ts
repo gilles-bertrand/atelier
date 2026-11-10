@@ -15,8 +15,12 @@ import {
   THINKING_OFF_PROVIDER_OPTIONS,
   ToolWaitAnnouncer,
   toolWaitPhrase,
+  injectedMessage,
+  SUMMARY_PREFIX,
   VOICE_MODE_END,
   VOICE_MODE_INSTRUCTIONS,
+  VOICE_RETRY_REMINDER,
+  voiceTurnMessages,
   type ToolWaitPhrase,
   type VoiceTimers,
 } from '../src/index.js';
@@ -156,6 +160,50 @@ describe('mode vocal : consignes du tour', () => {
       // Quatrième tour : rien de nouveau (l'historique contient déjà la fin).
       const fourth = model.doStreamCalls[3]?.prompt ?? [];
       expect(JSON.stringify(fourth.at(-1))).toContain('Quatre');
+    });
+  });
+});
+
+describe('mode vocal : compaction et relances', () => {
+  it('pas de fin du mode vocal quand la compaction a résumé les tours vocaux', () => {
+    const history: ModelMessage[] = [
+      injectedMessage('summary', `${SUMMARY_PREFIX}\nL'utilisateur a demandé la météo.`),
+      { role: 'user', content: 'Merci' },
+      { role: 'assistant', content: [{ type: 'text', text: 'Avec plaisir.' }] },
+    ];
+    expect(voiceTurnMessages(history, false)).toEqual([]);
+  });
+
+  it('ajoute le rappel vocal à une relance de pas vide, pas en tour écrit', async () => {
+    await withTempDir(async (ws) => {
+      const steps = [
+        { toolCalls: [{ name: 'list_dir', input: { path: '.' } }] },
+        { text: '' },
+        { text: 'Le dossier est vide.' },
+      ];
+      const voiceModel = scriptedModel(steps);
+      const { emit } = collect();
+      await agentFor(ws, { model: voiceModel }).runTurn({
+        sessionId: 's',
+        turnId: 'v',
+        history: [],
+        input: 'Quoi dans le dossier ?',
+        emit,
+        voice: true,
+      });
+      expect(voiceModel.doStreamCalls).toHaveLength(3);
+      expect(promptText(voiceModel, 2)).toContain(VOICE_RETRY_REMINDER);
+
+      const textModel = scriptedModel(steps);
+      await agentFor(ws, { model: textModel }).runTurn({
+        sessionId: 's',
+        turnId: 't',
+        history: [],
+        input: 'Quoi dans le dossier ?',
+        emit,
+      });
+      expect(textModel.doStreamCalls).toHaveLength(3);
+      expect(promptText(textModel, 2)).not.toContain(VOICE_RETRY_REMINDER);
     });
   });
 });
@@ -369,6 +417,34 @@ describe('phrases d’attente dans un tour', () => {
     registry.register(slowTool(timers, 'web_search', 2_000, 'never'));
     registry.register(slowTool(timers, 'quick_read', 1_000, 'never'));
     registry.register(slowTool(timers, 'guarded_read', 1_000, 'always'));
+    // Outil « conditional » qui demande la permission dans `execute` (comme `bash`).
+    for (const [name, ms] of [
+      ['ask_then_slow', 2_000],
+      ['ask_then_quick', 1_000],
+    ] as const) {
+      registry.register(
+        defineTool({
+          name,
+          description: `Outil ${name}`,
+          inputSchema: z.object({ path: z.string().optional() }),
+          permission: 'conditional',
+          source: 'native',
+          execute: async (_input, context) => {
+            await context.requestPermission({
+              id: `p-${name}`,
+              sessionId: context.sessionId,
+              toolCallId: context.toolCallId,
+              toolName: name,
+              kind: 'command',
+              title: 'Lancer la commande',
+              input: {},
+            });
+            timers.advance(ms);
+            return { ok: true, content: 'fait' };
+          },
+        }),
+      );
+    }
     const requestPermission = (): Promise<PermissionDecision> => {
       // L'utilisateur met 3 s à répondre à la modale : ce temps ne compte pas.
       timers.advance(3_000);
@@ -426,6 +502,33 @@ describe('phrases d’attente dans un tour', () => {
         onToolWaitPhrase: (p) => phrases.push(p),
       });
       expect(phrases).toEqual([]);
+    });
+  });
+
+  it('suspend la minuterie quand l’outil demande lui-même la permission', async () => {
+    await withTempDir(async (ws) => {
+      const timers = new FakeTimers();
+      const model = scriptedModel([
+        { toolCalls: [{ name: 'ask_then_quick', input: {} }] },
+        { toolCalls: [{ name: 'ask_then_slow', input: {} }] },
+        { text: 'Fait.' },
+      ]);
+      const spoken: [string, number][] = [];
+      const agent = agentFor(ws, { model, voiceTimers: timers, ...setup(timers) });
+      const { emit } = collect();
+      await agent.runTurn({
+        sessionId: 's',
+        turnId: 't',
+        history: [],
+        input: 'Lance',
+        emit,
+        voice: true,
+        onToolWaitPhrase: (p) => spoken.push([p.toolName, timers.now()]),
+      });
+      // 3 s de modale puis 1 s d'exécution : rien. 3 s de modale puis 2 s : une phrase,
+      // 1,5 s après l'accord (t = 4 s + 3 s + 1,5 s).
+      expect(spoken).toEqual([['ask_then_slow', 8_500]]);
+      expect(timers.pending).toBe(0);
     });
   });
 

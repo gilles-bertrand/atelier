@@ -160,7 +160,9 @@ _Dernière mise à jour : 2026-10-29, Lead._
   - Pour **L9** : `AgentSession.send(input, emit, signal, { turnId, voice: inputMode === 'voice', onToolWaitPhrase })`. La dictée (`'dictation'`) reste un tour normal.
   - Consignes : texte exact de D7, injecté comme message de l'app (`injectedKind` `voice`) juste après le message de l'utilisateur. Le prompt système ne change pas, et l'historique n'est jamais réécrit : le cache de préfixe d'Ollama reste chaud. Au premier tour écrit qui suit un tour vocal, une consigne `voice_end` (« Fin du mode vocal… ») rétablit la présentation habituelle.
   - Thinking coupé pendant le tour vocal, quel que soit le réglage : `fastModel` et `providerOptions.ollama` (`reasoning_effort: "none"`, `enable_thinking: false`).
-  - Phrases d'attente (`ToolWaitPhrase` : `toolCallId`, `toolName`, `text`), tirées du libellé natif de l'outil, sans URL, chemin complet ni commande : « Je lis ventes.csv. », « Je cherche sur le web. ». Elles partent après 1,5 s d'exécution, une par appel au plus et une toutes les 5 s au plus (un outil retenu par l'écart parle à la fin de l'écart s'il tourne encore). L'attente d'une permission ne compte pas. Ce n'est pas un `AgentEvent`.
+  - Phrases d'attente (`ToolWaitPhrase` : `toolCallId`, `toolName`, `text`), tirées du libellé natif de l'outil, sans URL, chemin complet ni commande : « Je lis ventes.csv. », « Je cherche sur le web. ». Elles partent après 1,5 s d'exécution, une par appel au plus et une toutes les 5 s au plus (un outil retenu par l'écart parle à la fin de l'écart s'il tourne encore). L'attente d'une permission ne compte pas, y compris quand l'outil la demande lui-même dans `execute` (`bash`, `web_fetch`). Ce n'est pas un `AgentEvent`.
+  - Relances de l'app pendant un tour vocal (pas vide, annonce sans action, montants) : complétées d'un rappel vocal (`VOICE_RETRY_REMINDER`).
+  - Suggestion de Core pour L9 : dire « Il me faut votre accord à l'écran. » sur l'événement `permission_request` d'un tour vocal.
 
 ## Demandes d'évolution de `packages/shared`
 

@@ -97,9 +97,25 @@ export async function executeTool(
     const decision = await askPermission(context, definition.name, input, description);
     if (!isAllowed(decision)) return deniedOutput(description.title);
   }
-  const finish = runtime.onExecution?.(toolCallId, definition.name, input);
+  let finish = runtime.onExecution?.(toolCallId, definition.name, input);
+  // Permission demandée par l'outil lui-même (`bash` hors liste blanche, `web_fetch`
+  // au premier accès d'un domaine) : la minuterie s'arrête pendant la modale.
+  const executionContext: ToolExecutionContext = finish
+    ? {
+        ...context,
+        requestPermission: async (request, signal) => {
+          finish?.();
+          finish = undefined;
+          try {
+            return await context.requestPermission(request, signal);
+          } finally {
+            finish = runtime.onExecution?.(toolCallId, definition.name, input);
+          }
+        },
+      }
+    : context;
   try {
-    return limit(await definition.execute(input, context));
+    return limit(await definition.execute(input, executionContext));
   } finally {
     finish?.();
   }

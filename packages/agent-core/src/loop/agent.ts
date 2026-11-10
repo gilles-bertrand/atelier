@@ -53,6 +53,7 @@ import {
   THINKING_OFF_PROVIDER_OPTIONS,
   ToolWaitAnnouncer,
   voiceTurnMessages,
+  withVoiceReminder,
   type ToolWaitPhrase,
   type VoiceTimers,
 } from './voice.js';
@@ -589,7 +590,7 @@ export class Agent {
               o.log?.('empty-final', { attempt: stallRetries });
               base = [
                 ...withoutEmptyAssistant(messages),
-                injectedMessage('empty_final', emptyFinalPrompt()),
+                injectedMessage('empty_final', withVoiceReminder(emptyFinalPrompt(), voice)),
               ];
               responseOffset = 0;
               continue;
@@ -605,7 +606,10 @@ export class Agent {
             meter.relaunch('announce_only');
             o.log?.('announce-only', { attempt: stallRetries, tail: lastText.trim().slice(-120) });
             emit({ type: 'text_delta', delta: '\n\n' });
-            base = [...messages, injectedMessage('announce_only', announceOnlyPrompt())];
+            base = [
+              ...messages,
+              injectedMessage('announce_only', withVoiceReminder(announceOnlyPrompt(), voice)),
+            ];
             responseOffset = 0;
             continue;
           }
@@ -618,7 +622,13 @@ export class Agent {
               meter.relaunch('verification');
               o.log?.('verification', { amounts: missing });
               emit({ type: 'text_delta', delta: '\n\n' });
-              base = [...messages, injectedMessage('verification', verificationPrompt(missing))];
+              base = [
+                ...messages,
+                injectedMessage(
+                  'verification',
+                  withVoiceReminder(verificationPrompt(missing), voice),
+                ),
+              ];
               responseOffset = 0;
               continue;
             }

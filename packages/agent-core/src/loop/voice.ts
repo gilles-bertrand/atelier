@@ -17,6 +17,15 @@ export const VOICE_MODE_INSTRUCTIONS =
 export const VOICE_MODE_END =
   "Fin du mode vocal : l'utilisateur lit de nouveau tes réponses à l'écran. Reprends ta présentation habituelle.";
 
+/** Rappel ajouté aux relances de l'app (pas vide, annonce, montants) d'un tour vocal. */
+export const VOICE_RETRY_REMINDER =
+  'Rappel : mode vocal, réponds en français parlé, en une à trois phrases courtes, sans markdown.';
+
+/** Texte d'une relance de l'app, complété du rappel vocal pendant un tour vocal. */
+export function withVoiceReminder(prompt: string, voice: boolean): string {
+  return voice ? `${prompt} ${VOICE_RETRY_REMINDER}` : prompt;
+}
+
 /** Message injecté après le message de l'utilisateur d'un tour vocal. */
 export function voiceInstructionsMessage(): ModelMessage {
   return injectedMessage('voice', `${APP_MESSAGE_PREFIX} ${VOICE_MODE_INSTRUCTIONS}`);
@@ -124,7 +133,7 @@ export function toolWaitPhrase(toolName: string, input: unknown): string {
     case 'present_file':
       return name ? `Je prépare ${name}.` : 'Je prépare le fichier.';
     case 'look_at':
-      return "J'analyse l'image.";
+      return "J'examine le document.";
     case 'web_search':
       return 'Je cherche sur le web.';
     case 'web_fetch':
