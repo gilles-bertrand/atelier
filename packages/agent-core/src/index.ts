@@ -31,7 +31,24 @@ export type {
   SendOptions,
   StreamCutReason,
   TurnResult,
+  VoiceTurnOptions,
 } from './loop/agent.js';
+export {
+  systemVoiceTimers,
+  THINKING_OFF_PROVIDER_OPTIONS,
+  TOOL_WAIT_DELAY_MS,
+  TOOL_WAIT_MIN_INTERVAL_MS,
+  ToolWaitAnnouncer,
+  toolWaitPhrase,
+  VOICE_MODE_END,
+  VOICE_MODE_INSTRUCTIONS,
+  voiceEndMessage,
+  voiceInstructionsMessage,
+  VOICE_RETRY_REMINDER,
+  voiceTurnMessages,
+  withVoiceReminder,
+} from './loop/voice.js';
+export type { ToolWaitAnnouncerOptions, ToolWaitPhrase, VoiceTimers } from './loop/voice.js';
 export {
   estimateTokens,
   MIN_TOOL_OUTPUT_TOKENS,

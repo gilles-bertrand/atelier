@@ -61,7 +61,9 @@ export type InjectedKind =
   | 'empty_final'
   | 'announce_only'
   | 'skill'
-  | 'verification';
+  | 'verification'
+  | 'voice'
+  | 'voice_end';
 
 const INJECTED_KINDS: ReadonlySet<string> = new Set<InjectedKind>([
   'summary',
@@ -72,6 +74,8 @@ const INJECTED_KINDS: ReadonlySet<string> = new Set<InjectedKind>([
   'announce_only',
   'skill',
   'verification',
+  'voice',
+  'voice_end',
 ]);
 
 /**
