@@ -168,6 +168,13 @@ _Dernière mise à jour : 2026-10-29, Lead._
 
 _Format : date, agent, type proposé, raison, packages impactés._
 
+- **À livrer par le Lead (L12, #45).** **2026-11-10, architect (personnage « vieux maître », [ADR-004](adr/ADR-004-voix.md) D11, ticket #23)** (impact : `shared`, `agent-core`, renderer). Raison : façon de parler en option du mode conversation, avec une voix inventée choisie par `ttsVoice`. Demandes :
+  - `VoicePersona = 'none' | 'old-master'` ;
+  - `VoiceSettings.persona?` (absent = `'none'`) et `DEFAULT_VOICE_PERSONA` ;
+  - contrôle dans `validateVoiceSettings`.
+
+  Aucun `AgentEvent`, aucun canal.
+
 - ✅ **Livrée (PR `feat/lead-shared-session-move`), branchée par fullstack (#21, PR `feat/ui-session-move`) : main (`session:set-project`) et colonne de gauche (glisser-déposer, menu « … › Déplacer vers le projet… »).** **2026-11-10, Lead (#21, décision de Gilles : « le faire maintenant »)** (impact : `shared`, main, renderer). Canal `session:set-project` (`{ sessionId, projectId: string | null }` → `SessionSummary`), code `session/move_refused`, règle pure `checkSessionMove` : le dossier de travail ne change jamais, donc une conversation n'entre dans un projet que si son dossier en est le dossier principal ; runs planifiés et projets archivés refusés.
 - ✅ **Livrée (PR `feat/lead-shared-settings-patch`) : `AppSettingsPatch.voice` accepte un `Partial<VoiceSettings>`.** **2026-11-02, fullstack (voix, L3)** : `AppSettingsPatch.voice` est un `VoiceSettings` complet, car `voice?` est optionnel et `VoiceSettings | undefined extends object` est faux dans le type mappé. Proposition : `NonNullable<AppSettings[K]> extends object ? Partial<NonNullable<AppSettings[K]>>` (impact : renderer L4, qui pourra envoyer un patch partiel ; le main accepte déjà un patch partiel). En attendant, le renderer envoie la voix complète.
 
