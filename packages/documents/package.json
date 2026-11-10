@@ -1,6 +1,7 @@
 {
   "name": "@atelier/documents",
   "version": "0.1.0",
+  "license": "FSL-1.1-ALv2",
   "private": true,
   "description": "Lecture multi-format (texte, PDF, images, office) et sous-modèle vision.",
   "type": "module",

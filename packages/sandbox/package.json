@@ -1,6 +1,7 @@
 {
   "name": "@atelier/sandbox",
   "version": "0.1.0",
+  "license": "FSL-1.1-ALv2",
   "private": true,
   "description": "Pilotage de la VM Lima (cycle de vie, exec, mounts, réseau).",
   "type": "module",

@@ -1,6 +1,7 @@
 {
   "name": "@atelier/mcp-bridge",
   "version": "0.1.0",
+  "license": "FSL-1.1-ALv2",
   "private": true,
   "description": "Client MCP exposé comme outils AI SDK, avec tool_search.",
   "type": "module",

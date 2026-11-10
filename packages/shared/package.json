@@ -1,6 +1,7 @@
 {
   "name": "@atelier/shared",
   "version": "0.1.0",
+  "license": "FSL-1.1-ALv2",
   "private": true,
   "description": "Types et contrats partagés (messages, outils, events, IPC, interfaces Sandbox/Search/Permission). Toute modification passe par le Lead.",
   "type": "module",

@@ -1,6 +1,7 @@
 {
   "name": "@atelier/qa",
   "version": "0.1.0",
+  "license": "FSL-1.1-ALv2",
   "private": true,
   "description": "QA d'Atelier : e2e Playwright (critères d'acceptation 2 à 5), campagne de robustesse avec Qwen, mesures de performance.",
   "type": "module",

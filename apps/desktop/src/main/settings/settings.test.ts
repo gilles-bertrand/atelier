@@ -2,7 +2,12 @@ import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_VOICE_SETTINGS, isAtelierError } from '@atelier/shared';
+import {
+  CHARTER_VERSION,
+  DEFAULT_VOICE_SETTINGS,
+  isAtelierError,
+  isCharterAccepted,
+} from '@atelier/shared';
 import { SecretsStore, type SecretCipher } from './secrets-store.js';
 import {
   applySettingsPatch,
@@ -27,6 +32,25 @@ describe('réglages', () => {
     expect(on.openAtLogin).toBe(true);
     expect(mergeWithDefaults(base, { ...on }).openAtLogin).toBe(true);
     expect(mergeWithDefaults(base, { openAtLogin: 'oui' }).openAtLogin).toBeUndefined();
+  });
+
+  it('charte d’usage (#43) : acceptation enregistrée et relue ; version ancienne = à représenter', () => {
+    const base = defaultSettings('/h');
+    expect(isCharterAccepted(base)).toBe(false);
+    const accepted = applySettingsPatch(base, {
+      charterAcceptedVersion: CHARTER_VERSION,
+      charterAcceptedAt: '2026-11-10T12:00:00.000Z',
+    });
+    expect(isCharterAccepted(accepted)).toBe(true);
+    const reread = mergeWithDefaults(base, { ...accepted });
+    expect(reread.charterAcceptedAt).toBe('2026-11-10T12:00:00.000Z');
+    expect(isCharterAccepted(reread)).toBe(true);
+    expect(
+      isCharterAccepted(mergeWithDefaults(base, { charterAcceptedVersion: '2020-01-01' })),
+    ).toBe(false);
+    expect(mergeWithDefaults(base, { charterAcceptedVersion: 3 }).charterAcceptedVersion).toBe(
+      undefined,
+    );
   });
 
   it('refuse une URL http hors localhost / Tailscale', () => {

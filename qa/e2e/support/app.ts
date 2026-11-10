@@ -21,6 +21,8 @@ import {
   type ElectronApplication,
   type Page,
 } from '@playwright/test';
+// Module de types seulement (aucune dépendance) : chargeable tel quel par Playwright.
+import { CHARTER_VERSION } from '../../../packages/shared/src/settings.js';
 
 export type E2eMode = 'mock' | 'real';
 export const MODE: E2eMode = process.env['ATELIER_E2E_MODE'] === 'real' ? 'real' : 'mock';
@@ -103,6 +105,9 @@ export async function launchAtelier(options: LaunchOptions): Promise<AtelierApp>
           projectsDir: join(root, 'Projets'),
           onboardingCompleted: true,
           privacyAcceptedAt: new Date().toISOString(),
+          // Charte d'usage (#43) : sans elle, l'app s'ouvre sur la charte.
+          charterAcceptedVersion: CHARTER_VERSION,
+          charterAcceptedAt: new Date().toISOString(),
           ...options.extraSettings,
         },
         null,

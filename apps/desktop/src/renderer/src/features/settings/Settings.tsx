@@ -5,6 +5,7 @@ import {
   Box,
   CalendarClock,
   FolderKanban,
+  Scale,
   ChartColumn,
   Globe,
   Mic,
@@ -17,6 +18,7 @@ import { Button } from '@renderer/components/ui/button';
 import { cn } from '@renderer/lib/utils';
 import { headerInset, SidebarOpenButton, useShellChrome } from '../sidebar/shell-chrome';
 import { useApp } from '@renderer/state/app-state';
+import { AboutSettings } from './AboutSettings';
 import { McpSettings, SkillsSettings } from './ExtensionsSettings';
 import { SandboxSettings } from './SandboxSettings';
 import { ProjectsSettings } from './ProjectsSettings';
@@ -36,6 +38,7 @@ const SECTIONS = [
   { id: 'voice', label: 'Voix', icon: Mic },
   { id: 'skills', label: 'Skills', icon: Sparkles },
   { id: 'mcp', label: 'Connecteurs', icon: Plug },
+  { id: 'about', label: 'À propos et licences', icon: Scale },
 ] as const;
 
 type SectionId = (typeof SECTIONS)[number]['id'];
@@ -117,6 +120,7 @@ export function Settings({ onClose }: { onClose: () => void }) {
             {section === 'voice' ? <VoiceSettings /> : null}
             {section === 'skills' ? <SkillsSettings /> : null}
             {section === 'mcp' ? <McpSettings /> : null}
+            {section === 'about' ? <AboutSettings /> : null}
           </div>
         </main>
       </div>

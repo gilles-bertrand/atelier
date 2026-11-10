@@ -215,3 +215,21 @@ describe('réglages : recherche, skills, connecteurs', () => {
     expect(jsonError('{"mcpServers":{}}')).toBeUndefined();
   });
 });
+
+describe('réglages : à propos et licences (#43)', () => {
+  it('montre la licence FSL, la charte et les licences des composants tiers', async () => {
+    setup();
+    const user = await openSettings('À propos et licences');
+    expect(screen.getByRole('heading', { name: 'Licence de YodAI' })).toBeInTheDocument();
+    expect(screen.getAllByText(/Functional Source License 1\.1/).length).toBeGreaterThan(0);
+    expect(screen.getByRole('region', { name: 'Charte d’usage' })).toHaveTextContent(
+      /Usages interdits/,
+    );
+    expect(screen.getByText('Parakeet TDT 0.6B v3 (NVIDIA)')).toBeInTheDocument();
+    expect(screen.getByText('CC-BY-4.0')).toBeInTheDocument();
+    await user.click(screen.getByText(/Licence BigScience OpenRAIL-M de Supertonic 3/));
+    expect(
+      screen.getByRole('region', { name: 'Licence OpenRAIL-M de Supertonic 3' }),
+    ).toHaveTextContent(/Attachment A/);
+  });
+});

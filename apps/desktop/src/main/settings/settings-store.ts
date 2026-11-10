@@ -52,6 +52,12 @@ export function applySettingsPatch(current: AppSettings, patch: AppSettingsPatch
     ...(patch.privacyAcceptedAt !== undefined
       ? { privacyAcceptedAt: patch.privacyAcceptedAt }
       : {}),
+    ...(patch.charterAcceptedVersion !== undefined
+      ? { charterAcceptedVersion: patch.charterAcceptedVersion }
+      : {}),
+    ...(patch.charterAcceptedAt !== undefined
+      ? { charterAcceptedAt: patch.charterAcceptedAt }
+      : {}),
     ...(patch.openAtLogin !== undefined ? { openAtLogin: patch.openAtLogin } : {}),
     llm: clearOptionalLlm({ ...current.llm, ...stripUndefined(patch.llm) }),
     sandbox: { ...current.sandbox, ...stripUndefined(patch.sandbox) },
@@ -175,6 +181,12 @@ export function mergeWithDefaults(defaults: AppSettings, raw: unknown): AppSetti
     onboardingCompleted: raw['onboardingCompleted'] === true,
     ...(typeof raw['privacyAcceptedAt'] === 'string'
       ? { privacyAcceptedAt: raw['privacyAcceptedAt'] }
+      : {}),
+    ...(typeof raw['charterAcceptedVersion'] === 'string'
+      ? { charterAcceptedVersion: raw['charterAcceptedVersion'] }
+      : {}),
+    ...(typeof raw['charterAcceptedAt'] === 'string'
+      ? { charterAcceptedAt: raw['charterAcceptedAt'] }
       : {}),
     ...(raw['openAtLogin'] === true ? { openAtLogin: true } : {}),
     ...(typeof raw['projectsDir'] === 'string' && raw['projectsDir'] !== ''

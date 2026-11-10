@@ -3,7 +3,7 @@
  * journal des appels et émission d'événements du main.
  */
 import { act } from '@testing-library/react';
-import { DEFAULT_VOICE_SETTINGS } from '@atelier/shared';
+import { CHARTER_VERSION, DEFAULT_VOICE_SETTINGS } from '@atelier/shared';
 import type {
   AppSettings,
   AtelierApi,
@@ -35,6 +35,9 @@ export function defaultTestSettings(overrides: Partial<AppSettings> = {}): AppSe
     skillsDir: '/Users/test/Atelier/skills',
     mcpConfigPath: '/Users/test/Atelier/mcp.json',
     onboardingCompleted: false,
+    // Charte d'usage (#43) : acceptée dans l'onboarding, donc acceptée dès que
+    // l'onboarding est fait ; ses propres tests la retirent.
+    ...(overrides.onboardingCompleted === true ? { charterAcceptedVersion: CHARTER_VERSION } : {}),
     ...overrides,
   };
 }
