@@ -5,6 +5,11 @@
  *
  * Le `VoiceService` du main (L3) l'utilise avec `utilityProcess.fork` ; les
  * tests, avec un faux worker. Aucune dépendance à Electron.
+ *
+ * Phase 2 (L7) : la synthèse se charge à la demande dans le même worker
+ * ({@link VoiceWorkerSupervisor.ensureSpeechLoaded}) et le superviseur sert de
+ * {@link SpeechSynthesisPort} à `AgentSpeech`. Elle suppose le worker lancé,
+ * donc la reconnaissance chargée : le mode conversation a besoin des deux.
  */
 import {
   AtelierError,
@@ -18,8 +23,10 @@ import {
   parseWorkerToMain,
   type EngineLoadConfigInput,
   type MainToWorkerMessage,
+  type TtsLoadConfigInput,
   type WorkerToMainMessage,
 } from './protocol.js';
+import type { SpeechSynthesisPort, SynthesizedSpeech } from './speech.js';
 
 /** Process du worker, vu du main (`UtilityProcess` d'Electron, adapté). */
 export interface WorkerHandle {
@@ -57,6 +64,13 @@ export interface SupervisorOptions extends SupervisorEvents {
   stopTimeoutMs?: number;
   /** Délai laissé au worker pour sortir après `shutdown`, avant `kill` (2 s par défaut). */
   exitGraceMs?: number;
+  /**
+   * Voix de synthèse à charger, lue au moment du chargement (réglage
+   * `ttsVoice`, modèle installé). Absent : la synthèse n'est pas disponible.
+   */
+  ttsLoadConfig?: () => TtsLoadConfigInput;
+  /** Délai maximal de synthèse d'un morceau (30 s par défaut). */
+  speakTimeoutMs?: number;
 }
 
 interface Pending<T> {
@@ -69,7 +83,7 @@ const engineFailed = (message: string): AtelierError =>
   new AtelierError('voice/engine_failed', message, { retryable: true });
 
 /** Superviseur du worker : un seul worker, une seule session à la fois. */
-export class VoiceWorkerSupervisor {
+export class VoiceWorkerSupervisor implements SpeechSynthesisPort {
   private readonly options: SupervisorOptions;
   private idleMinutes: number;
   private worker: WorkerHandle | undefined;
@@ -81,6 +95,12 @@ export class VoiceWorkerSupervisor {
   private idleTimer: ReturnType<typeof setTimeout> | undefined;
   /** Workers arrêtés volontairement : leur sortie n'est pas un crash. */
   private readonly retiring = new WeakSet<WorkerHandle>();
+  /** Chargement de la voix de synthèse : fréquence de l'audio rendu. */
+  private ttsLoading: Pending<number> | undefined;
+  private ttsLoaded: Promise<number> | undefined;
+  /** Morceaux en cours de synthèse, par numéro de requête. */
+  private readonly speeches = new Map<number, Pending<SynthesizedSpeech>>();
+  private nextRequestId = 0;
 
   constructor(options: SupervisorOptions) {
     this.options = options;
@@ -197,6 +217,63 @@ export class VoiceWorkerSupervisor {
     this.endSession();
   }
 
+  /**
+   * Charge la voix de synthèse dans le worker (en le lançant au besoin, avec la
+   * reconnaissance), si ce n'est déjà fait. Rend la fréquence de l'audio.
+   */
+  async ensureSpeechLoaded(): Promise<number> {
+    if (this.ttsLoaded !== undefined) return this.ttsLoaded;
+    const read = this.options.ttsLoadConfig;
+    if (read === undefined) {
+      throw engineFailed('La synthèse vocale n’est pas disponible.');
+    }
+    // Modèle absent (`voice/model_missing`) : rien n'est envoyé au worker.
+    const config = read();
+    await this.ensureLoaded();
+    return this.loadSpeech(config);
+  }
+
+  /** Envoie `tts-load` au worker lancé, sauf si un chargement est déjà en cours ou fait. */
+  private loadSpeech(config: TtsLoadConfigInput): Promise<number> {
+    if (this.ttsLoaded !== undefined) return this.ttsLoaded;
+    const worker = this.worker;
+    if (worker === undefined) return Promise.reject(engineFailed('Le moteur vocal s’est arrêté.'));
+    const promise = new Promise<number>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.fail(worker, engineFailed('Le chargement de la voix de synthèse a expiré.'));
+      }, this.options.loadTimeoutMs ?? 60_000);
+      this.ttsLoading = { resolve, reject, timer };
+    });
+    this.ttsLoaded = promise;
+    // Un échec de chargement n'est pas définitif : le prochain appel réessaie.
+    promise.catch(() => {
+      if (this.ttsLoaded === promise) this.ttsLoaded = undefined;
+    });
+    this.post({ type: 'tts-load', config });
+    return promise;
+  }
+
+  /**
+   * Synthétise un morceau de texte déjà filtré ({@link SpeechSynthesisPort}).
+   * Le texte n'apparaît dans aucun journal ni message d'erreur.
+   */
+  async synthesize(text: string, speed: number): Promise<SynthesizedSpeech> {
+    await this.ensureSpeechLoaded();
+    const worker = this.worker;
+    if (worker === undefined) throw engineFailed('Le moteur vocal s’est arrêté.');
+    const requestId = this.nextRequestId;
+    this.nextRequestId += 1;
+    this.disarmIdle();
+    const promise = new Promise<SynthesizedSpeech>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.fail(worker, engineFailed('La synthèse vocale a expiré.'));
+      }, this.options.speakTimeoutMs ?? 30_000);
+      this.speeches.set(requestId, { resolve, reject, timer });
+    });
+    this.post({ type: 'speak', requestId, text, speed });
+    return promise;
+  }
+
   /** Arrête le worker (fermeture de l'app, voix désactivée). */
   shutdown(): void {
     const worker = this.worker;
@@ -250,6 +327,33 @@ export class VoiceWorkerSupervisor {
         this.settleStop(message.text);
         this.endSession();
         return;
+      case 'tts-loaded':
+        if (this.ttsLoading !== undefined) {
+          clearTimeout(this.ttsLoading.timer);
+          this.ttsLoading.resolve(message.sampleRate);
+          this.ttsLoading = undefined;
+        }
+        return;
+      case 'speech':
+        this.settleSpeech(message.requestId, {
+          sampleRate: message.sampleRate,
+          pcm: message.pcm,
+        });
+        return;
+      case 'tts-error': {
+        const error = new AtelierError(message.error.code, message.error.message, {
+          retryable: message.error.retryable,
+        });
+        if (message.requestId !== undefined) {
+          this.settleSpeech(message.requestId, undefined, error);
+        } else if (this.ttsLoading !== undefined) {
+          // La voix n'a pas pu charger : la reconnaissance, elle, reste utilisable.
+          clearTimeout(this.ttsLoading.timer);
+          this.ttsLoading.reject(error);
+          this.ttsLoading = undefined;
+        }
+        return;
+      }
       case 'error': {
         const error = new AtelierError(message.error.code, message.error.message, {
           retryable: message.error.retryable,
@@ -282,6 +386,7 @@ export class VoiceWorkerSupervisor {
       this.settleStop(undefined, error);
       this.sessionId = undefined;
     }
+    this.rejectSpeech(error);
     this.retiring.add(worker);
     this.worker = undefined;
     this.loaded = undefined;
@@ -308,6 +413,35 @@ export class VoiceWorkerSupervisor {
     this.armIdle();
   }
 
+  private settleSpeech(
+    requestId: number,
+    speech: SynthesizedSpeech | undefined,
+    error?: AtelierError,
+  ): void {
+    const pending = this.speeches.get(requestId);
+    if (pending === undefined) return;
+    this.speeches.delete(requestId);
+    clearTimeout(pending.timer);
+    if (speech !== undefined) pending.resolve(speech);
+    else pending.reject(error ?? engineFailed('La synthèse vocale a échoué.'));
+    if (this.speeches.size === 0 && this.sessionId === undefined) this.armIdle();
+  }
+
+  /** Worker perdu : la voix est à recharger et tout ce qui attend échoue. */
+  private rejectSpeech(error: AtelierError): void {
+    if (this.ttsLoading !== undefined) {
+      clearTimeout(this.ttsLoading.timer);
+      this.ttsLoading.reject(error);
+      this.ttsLoading = undefined;
+    }
+    this.ttsLoaded = undefined;
+    for (const pending of this.speeches.values()) {
+      clearTimeout(pending.timer);
+      pending.reject(error);
+    }
+    this.speeches.clear();
+  }
+
   /** Arrêt volontaire : `shutdown`, puis `kill` si le worker ne sort pas à temps. */
   private retire(worker: WorkerHandle): void {
     this.retiring.add(worker);
@@ -319,6 +453,7 @@ export class VoiceWorkerSupervisor {
         this.loading.reject(engineFailed('Le moteur de reconnaissance a été arrêté.'));
         this.loading = undefined;
       }
+      this.rejectSpeech(engineFailed('Le moteur vocal a été arrêté.'));
     }
     this.disarmIdle();
     let exited = false;
@@ -349,7 +484,9 @@ export class VoiceWorkerSupervisor {
     const worker = this.worker;
     this.idleTimer = setTimeout(() => {
       this.idleTimer = undefined;
-      if (this.worker === worker && this.sessionId === undefined) this.retire(worker);
+      if (this.worker === worker && this.sessionId === undefined && this.speeches.size === 0) {
+        this.retire(worker);
+      }
     }, this.idleMinutes * 60_000);
     this.idleTimer.unref();
   }

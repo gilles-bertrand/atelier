@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { VOICE_FRAME_SAMPLES, VOICE_SAMPLE_RATE } from '@atelier/shared';
-import { parseMainToWorker, parseWorkerToMain } from '../src/protocol.js';
+import { MAX_SPEAK_CHARS, parseMainToWorker, parseWorkerToMain } from '../src/protocol.js';
 
 const load = {
   type: 'load',
@@ -94,5 +94,70 @@ describe('parseWorkerToMain', () => {
     expect(parseWorkerToMain({ type: 'state', voiceSessionId: 'v1', state: 'dancing' }).ok).toBe(
       false,
     );
+  });
+});
+
+describe('protocole de la synthèse (L7)', () => {
+  const ttsLoad = { type: 'tts-load', config: { voice: 'supertonic-3-m4', dir: '/models/st' } };
+
+  it('accepte tts-load et speak, avec les valeurs par défaut', () => {
+    const parsed = parseMainToWorker(ttsLoad);
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok && parsed.message.type === 'tts-load') {
+      expect(parsed.message.config.numThreads).toBe(2);
+      expect(parsed.message.config.numSteps).toBeUndefined();
+    }
+    expect(parseMainToWorker({ type: 'speak', requestId: 0, text: 'Bonjour.', speed: 1 }).ok).toBe(
+      true,
+    );
+  });
+
+  it.each([
+    ['dossier relatif', { ...ttsLoad, config: { ...ttsLoad.config, dir: 'models/st' } }],
+    ['dossier avec ..', { ...ttsLoad, config: { ...ttsLoad.config, dir: '/models/../etc' } }],
+    ['texte vide', { type: 'speak', requestId: 0, text: '', speed: 1 }],
+    [
+      'texte trop long',
+      { type: 'speak', requestId: 0, text: 'a'.repeat(MAX_SPEAK_CHARS + 1), speed: 1 },
+    ],
+    ['vitesse hors bornes', { type: 'speak', requestId: 0, text: 'Bonjour.', speed: 2 }],
+    ['requestId négatif', { type: 'speak', requestId: -1, text: 'Bonjour.', speed: 1 }],
+  ])('rejette : %s', (_label, message) => {
+    expect(parseMainToWorker(message).ok).toBe(false);
+  });
+
+  it('ne recopie jamais le texte refusé', () => {
+    const parsed = parseMainToWorker({
+      type: 'speak',
+      requestId: 0,
+      text: 'x'.repeat(5000),
+      speed: 1,
+    });
+    expect(parsed).toEqual({ ok: false, issue: 'text' });
+  });
+
+  it('valide les réponses du worker', () => {
+    expect(parseWorkerToMain({ type: 'tts-loaded', loadMs: 250, sampleRate: 44_100 }).ok).toBe(
+      true,
+    );
+    expect(
+      parseWorkerToMain({
+        type: 'speech',
+        requestId: 0,
+        sampleRate: 44_100,
+        pcm: new Float32Array(4),
+      }).ok,
+    ).toBe(true);
+    expect(
+      parseWorkerToMain({ type: 'speech', requestId: 0, sampleRate: 44_100, pcm: [0, 0] }).ok,
+    ).toBe(false);
+    expect(
+      parseWorkerToMain({
+        type: 'tts-error',
+        requestId: 1,
+        error: { code: 'voice/engine_failed', message: 'x', retryable: true },
+      }).ok,
+    ).toBe(true);
+    expect(parseWorkerToMain({ type: 'tts-loaded', loadMs: 1, sampleRate: 1 }).ok).toBe(false);
   });
 });

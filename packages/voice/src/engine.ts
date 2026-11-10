@@ -47,3 +47,23 @@ export interface SpeechEngine {
   /** Libère les modèles. */
   dispose(): void;
 }
+
+/** Options d'une synthèse. */
+export interface SynthesisOptions {
+  /** Vitesse : 1 = normale (`VoiceSettings.ttsRate`, de 0,8 à 1,3). */
+  speed: number;
+}
+
+/**
+ * Moteur de synthèse chargé (ADR-004 D4, phase 2). Il rend l'audio d'un
+ * morceau de texte d'un bloc (Supertonic n'a pas de streaming interne).
+ * Le texte reçu est déjà filtré (`speakableLine`).
+ */
+export interface SpeechSynthesizer {
+  /** Fréquence de l'audio rendu (44,1 kHz pour Supertonic 3). */
+  readonly sampleRate: number;
+  /** PCM mono à `sampleRate` Hz. */
+  synthesize(text: string, options: SynthesisOptions): Promise<Float32Array>;
+  /** Libère le modèle. */
+  dispose(): void;
+}

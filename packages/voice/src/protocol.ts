@@ -10,6 +10,8 @@ import { z } from 'zod';
 import {
   ATELIER_ERROR_CODES,
   VOICE_SAMPLE_RATE,
+  VOICE_TTS_RATE_MAX,
+  VOICE_TTS_RATE_MIN,
   type SerializedAtelierError,
   type TranscriptSegment,
   type VoiceInputWarning,
@@ -44,6 +46,28 @@ export const engineLoadConfigSchema = z.strictObject({
 export type EngineLoadConfig = z.infer<typeof engineLoadConfigSchema>;
 export type EngineLoadConfigInput = z.input<typeof engineLoadConfigSchema>;
 
+/**
+ * Synthèse à charger (phase 2, L7), à la demande, dans le même worker. La voix
+ * vient des réglages (`ttsVoice`), le dossier du gestionnaire de modèles.
+ */
+export const ttsLoadConfigSchema = z.strictObject({
+  /** Voix du catalogue (`TTS_VOICES`), ex. `supertonic-3-m4`. */
+  voice: z.string().min(1).max(128),
+  /** Dossier installé du modèle de la voix. */
+  dir: absolutePath,
+  /** Threads de calcul (S2 : 4 n'apportent rien par rapport à 2). */
+  numThreads: z.int().min(1).max(8).default(2),
+  /** Étapes de débruitage ; absent : celles de la voix (8, repli interne à 5). */
+  numSteps: z.int().min(1).max(32).optional(),
+});
+export type TtsLoadConfig = z.infer<typeof ttsLoadConfigSchema>;
+export type TtsLoadConfigInput = z.input<typeof ttsLoadConfigSchema>;
+
+/** Longueur maximale d'un morceau à synthétiser (le découpeur coupe à 300). */
+export const MAX_SPEAK_CHARS = 1_000;
+/** Audio rendu pour un morceau : au plus 2 minutes à 48 kHz. */
+const MAX_SPEECH_SAMPLES = 48_000 * 120;
+
 /** Trame PCM : `Float32Array` non vide, au plus une seconde, valeurs finies. */
 const pcmFrame = z
   .custom<Float32Array>((v) => v instanceof Float32Array, 'Float32Array attendu')
@@ -67,6 +91,14 @@ export const mainToWorkerSchema = z.discriminatedUnion('type', [
   }),
   z.strictObject({ type: z.literal('stop'), voiceSessionId: sessionId }),
   z.strictObject({ type: z.literal('cancel'), voiceSessionId: sessionId }),
+  z.strictObject({ type: z.literal('tts-load'), config: ttsLoadConfigSchema }),
+  /** Morceau de texte déjà filtré (`speakableLine`), synthétisé d'un bloc. */
+  z.strictObject({
+    type: z.literal('speak'),
+    requestId: z.int().min(0),
+    text: z.string().min(1).max(MAX_SPEAK_CHARS),
+    speed: z.number().min(VOICE_TTS_RATE_MIN).max(VOICE_TTS_RATE_MAX),
+  }),
   z.strictObject({ type: z.literal('shutdown') }),
 ]);
 export type MainToWorkerMessage = z.input<typeof mainToWorkerSchema>;
@@ -125,6 +157,26 @@ export const workerToMainSchema = z.discriminatedUnion('type', [
   }),
   /** Message reçu invalide : seul le chemin du champ fautif est rendu, jamais sa valeur. */
   z.strictObject({ type: z.literal('rejected'), issue: z.string().max(200) }),
+  z.strictObject({
+    type: z.literal('tts-loaded'),
+    loadMs: z.number().min(0),
+    sampleRate: z.int().min(8_000).max(96_000),
+  }),
+  /** Audio d'un morceau (`speak`), PCM mono : jamais écrit sur le disque. */
+  z.strictObject({
+    type: z.literal('speech'),
+    requestId: z.int().min(0),
+    sampleRate: z.int().min(8_000).max(96_000),
+    pcm: z
+      .custom<Float32Array>((v) => v instanceof Float32Array, 'Float32Array attendu')
+      .refine((pcm) => pcm.length <= MAX_SPEECH_SAMPLES, 'audio trop long'),
+  }),
+  /** Échec de la synthèse : du chargement (sans `requestId`) ou d'un morceau. */
+  z.strictObject({
+    type: z.literal('tts-error'),
+    requestId: z.int().min(0).optional(),
+    error: serializedErrorSchema,
+  }),
 ]);
 export type WorkerToMainMessage = z.infer<typeof workerToMainSchema>;
 

@@ -5,17 +5,27 @@
  * Le point d'entrée du `utilityProcess` (L3, `apps/desktop`) se réduit à :
  *
  * ```ts
- * runVoiceWorker({ port: parentPortAdapter, createEngine: createSherpaEngine, exit: () => process.exit(0) });
+ * runVoiceWorker({
+ *   port: parentPortAdapter,
+ *   createEngine: createSherpaEngine,
+ *   createSynthesizer: createSherpaSynthesizer,
+ *   exit: () => process.exit(0),
+ * });
  * ```
+ *
+ * La synthèse (phase 2, L7) est chargée à la demande (`tts-load`), dans ce même
+ * process. Ses messages ont leur propre file : une phrase en cours de synthèse
+ * ne retarde ni les trames du micro ni l'arrêt d'une dictée.
  *
  * Le worker ne fait aucun appel réseau et n'écrit aucun fichier (§7, D9).
  */
 import { AtelierError, type SerializedAtelierError } from '@atelier/shared';
 import { DictationSession } from './dictation.js';
-import type { SpeechEngine } from './engine.js';
+import type { SpeechEngine, SpeechSynthesizer } from './engine.js';
 import {
   parseMainToWorker,
   type EngineLoadConfig,
+  type TtsLoadConfig,
   type ParsedMainToWorkerMessage,
   type WorkerToMainMessage,
 } from './protocol.js';
@@ -30,6 +40,8 @@ export interface VoiceWorkerOptions {
   port: WorkerPort;
   /** Charge les modèles ; l'adaptateur sherpa-onnx en production, un faux moteur en test. */
   createEngine: (config: EngineLoadConfig) => Promise<SpeechEngine>;
+  /** Charge la voix de synthèse ; absent : `tts-load` échoue (`voice/engine_failed`). */
+  createSynthesizer?: (config: TtsLoadConfig) => Promise<SpeechSynthesizer>;
   /** Fin du process, après `shutdown`. */
   exit: () => void;
   /** Horloge, pour mesurer le chargement. */
@@ -49,8 +61,12 @@ export function runVoiceWorker(options: VoiceWorkerOptions): { dispose: () => vo
   let engine: SpeechEngine | undefined;
   let engineKey = '';
   let session: DictationSession | undefined;
+  let synthesizer: SpeechSynthesizer | undefined;
+  let synthesizerKey = '';
   /** Messages traités un par un, dans l'ordre d'arrivée. */
   let chain: Promise<void> = Promise.resolve();
+  /** File de la synthèse, indépendante de celle de la dictée. */
+  let ttsChain: Promise<void> = Promise.resolve();
   let disposed = false;
 
   const post = (message: WorkerToMainMessage): void => {
@@ -158,11 +174,78 @@ export function runVoiceWorker(options: VoiceWorkerOptions): { dispose: () => vo
     current.cancel();
   }
 
+  async function ttsLoad(config: TtsLoadConfig): Promise<void> {
+    const key = JSON.stringify(config);
+    if (synthesizer !== undefined && key === synthesizerKey) {
+      post({ type: 'tts-loaded', loadMs: 0, sampleRate: synthesizer.sampleRate });
+      return;
+    }
+    synthesizer?.dispose();
+    synthesizer = undefined;
+    const t0 = now();
+    try {
+      if (options.createSynthesizer === undefined) {
+        throw new AtelierError('voice/engine_failed', 'La synthèse vocale n’est pas disponible.');
+      }
+      synthesizer = await options.createSynthesizer(config);
+      synthesizerKey = key;
+      post({
+        type: 'tts-loaded',
+        loadMs: Math.round(now() - t0),
+        sampleRate: synthesizer.sampleRate,
+      });
+    } catch (error) {
+      post({
+        type: 'tts-error',
+        error: toSerialized(
+          error,
+          new AtelierError(
+            'voice/engine_failed',
+            'Le moteur de synthèse vocale n’a pas pu charger la voix.',
+            { retryable: true },
+          ),
+        ),
+      });
+    }
+  }
+
+  async function speak(requestId: number, text: string, speed: number): Promise<void> {
+    const current = synthesizer;
+    if (current === undefined) {
+      post({
+        type: 'tts-error',
+        requestId,
+        error: new AtelierError('voice/engine_failed', 'La voix de synthèse n’est pas chargée.', {
+          retryable: true,
+        }).toJSON(),
+      });
+      return;
+    }
+    try {
+      const pcm = await current.synthesize(text, { speed });
+      post({ type: 'speech', requestId, sampleRate: current.sampleRate, pcm });
+    } catch (error) {
+      // Le message d'une erreur native n'est pas recopié : il pourrait citer le texte.
+      post({
+        type: 'tts-error',
+        requestId,
+        error: toSerialized(
+          error,
+          new AtelierError('voice/engine_failed', 'La synthèse vocale a échoué.', {
+            retryable: true,
+          }),
+        ),
+      });
+    }
+  }
+
   function shutdown(): void {
     session?.cancel();
     session = undefined;
     engine?.dispose();
     engine = undefined;
+    synthesizer?.dispose();
+    synthesizer = undefined;
     disposed = true;
     exit();
   }
@@ -185,6 +268,12 @@ export function runVoiceWorker(options: VoiceWorkerOptions): { dispose: () => vo
       case 'cancel':
         cancel(message.voiceSessionId);
         return;
+      case 'tts-load':
+        await ttsLoad(message.config);
+        return;
+      case 'speak':
+        await speak(message.requestId, message.text, message.speed);
+        return;
       case 'shutdown':
         shutdown();
         return;
@@ -205,6 +294,10 @@ export function runVoiceWorker(options: VoiceWorkerOptions): { dispose: () => vo
       void handle(message);
       return;
     }
+    if (message.type === 'tts-load' || message.type === 'speak') {
+      ttsChain = ttsChain.then(() => handle(message));
+      return;
+    }
     chain = chain.then(() => handle(message));
   });
 
@@ -214,6 +307,7 @@ export function runVoiceWorker(options: VoiceWorkerOptions): { dispose: () => vo
     dispose: () => {
       session?.cancel();
       engine?.dispose();
+      synthesizer?.dispose();
       disposed = true;
     },
   };

@@ -164,6 +164,16 @@ _Dernière mise à jour : 2026-10-29, Lead._
   - Relances de l'app pendant un tour vocal (pas vide, annonce sans action, montants) : complétées d'un rappel vocal (`VOICE_RETRY_REMINDER`).
   - Suggestion de Core pour L9 : dire « Il me faut votre accord à l'écran. » sur l'événement `permission_request` d'un tour vocal.
 
+- **L7 (#35, `feat/voice-tts`) : synthèse vocale et filtre « prononçable »** (détails : `packages/voice/README.md`, section « Synthèse vocale »).
+  - Catalogue : `supertonic-3-tts-int8` (`role: 'tts'`, OpenRAIL-M, attribution avec la révision HF `3cadd1ee…` et la mention « voix synthétique »), archive `sherpa-onnx-supertonic-3-tts-int8-2026-05-11.tar.bz2`, 128 774 318 octets, SHA-256 `82fa96f9…c427` recalculé sur l'archive du spike S2 (identique à l'ADR), 9 fichiers. Même `VoiceModelManager` que Parakeet. Voix `supertonic-3-m4` (`TTS_VOICES`, style 8, `fr`, 8 étapes) ; repli à 5 étapes en constante interne (`SUPERTONIC_FALLBACK_NUM_STEPS`). Aucun phonémiseur, aucun module GPL.
+  - Le modèle apparaît désormais dans Réglages › Voix › Modèles (téléchargeable, licence OpenRAIL-M affichée), avant que L10 ne l'utilise.
+  - Moteur : `createSherpaSynthesizer` (CPU, 2 threads, une phrase par génération), chargé à la demande dans le même `utilityProcess` (`tts-load`, `speak` → `tts-loaded`, `speech`, `tts-error`, validés par Zod ; file séparée de la dictée). Le point d'entrée `voice-worker.ts` passe `createSynthesizer`. `VoiceWorkerSupervisor.synthesize` implémente `SpeechSynthesisPort` ; pas de déchargement pendant une synthèse.
+  - Texte : `SpeechChunker` (phrases au fil du flux, première phrase coupée à la première virgule ou au premier deux-points, premier morceau et reste d'au moins 12 caractères) et `speakableLine` / `speakableFrench` (markdown, tableaux, blocs de code, URL, emoji retirés ; chemin → nom du fichier ; nombres, montants, dates, heures, ordinaux, unités en lettres). Code maison, sans dépendance.
+  - Sortie : `AgentSpeech` produit les `VoiceAudioOut` (`seq` sur la session, `final` sur le dernier morceau, morceau final vide si besoin, rien après `interrupt()`), applique `ttsRate` (borné). **Pour L9** : `onAudio` → `voice:audio-out`, `begin` / `push` / `end` sur le flux du tour, `interrupt()` sur `voice:interrupt` ; `ttsLoadConfig` dans le superviseur. Aucun câblage IPC dans L7.
+  - Confidentialité : aucun audio écrit ; ni le texte ni l'audio dans les journaux ou les erreurs (erreurs natives remplacées).
+  - **Mesure (10/11, MacBook Pro M4 Max, charge 3,1 à 3,5 sur 16 cœurs)** : premier son médian **0,53 s**, max 0,70 s, sur les 10 réponses types de S2 écrites avec chiffres et markdown (D7 : 0,55 s) ; RTF 0,19 ; RSS 0,58 Gio ; chargement 0,25 s à chaud. Test `sherpa-tts.it.test.ts` (skippé sans `ATELIER_VOICE_IT=1`), relu par Parakeet.
+  - Constat hors L7 : le test réel de la dictée (`sherpa.it.test.ts`, Parakeet sur les WAV fr/en/de) échoue aussi sur `main` (aucun segment) ; à reprendre dans un ticket à part.
+
 ## Demandes d'évolution de `packages/shared`
 
 _Format : date, agent, type proposé, raison, packages impactés._

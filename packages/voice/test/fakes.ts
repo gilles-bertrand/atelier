@@ -9,6 +9,8 @@ import type {
   SpeechAudioSegment,
   SpeechEngine,
   SpeechSegmenter,
+  SpeechSynthesizer,
+  SynthesisOptions,
 } from '../src/engine.js';
 
 export function speechFrame(value = 0.5, length = VOICE_FRAME_SAMPLES): Float32Array {
@@ -118,4 +120,34 @@ export function deferred(): { promise: Promise<void>; resolve: () => void } {
 /** Laisse passer les microtâches en attente. */
 export async function flushMicrotasks(times = 10): Promise<void> {
   for (let i = 0; i < times; i += 1) await Promise.resolve();
+}
+
+export interface FakeSynthesizerOptions {
+  sampleRate?: number;
+  /** Attente avant chaque synthèse (promesse contrôlée par le test). */
+  gate?: () => Promise<void>;
+  /** Échoue sur ce texte, avec un message qui le cite (il ne doit jamais ressortir). */
+  failOn?: string;
+}
+
+/** Synthèse simulée : 10 échantillons par caractère, valeur = longueur du texte. */
+export class FakeSynthesizer implements SpeechSynthesizer {
+  readonly sampleRate: number;
+  readonly calls: { text: string; options: SynthesisOptions }[] = [];
+  disposed = false;
+
+  constructor(private readonly options: FakeSynthesizerOptions = {}) {
+    this.sampleRate = options.sampleRate ?? 44_100;
+  }
+
+  async synthesize(text: string, options: SynthesisOptions): Promise<Float32Array> {
+    this.calls.push({ text, options });
+    if (this.options.gate) await this.options.gate();
+    if (this.options.failOn === text) throw new Error(`échec natif sur « ${text} »`);
+    return new Float32Array(text.length * 10).fill(text.length);
+  }
+
+  dispose(): void {
+    this.disposed = true;
+  }
 }
